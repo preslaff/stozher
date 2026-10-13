@@ -43,10 +43,16 @@ flagged `sim`.
 
 ## Hotspots
 
-Adverse events (jamming, spoofing) are grouped per kind: spatial DBSCAN on great-circle
-distance (eps 5 km, min 1 event), then split where consecutive events are more than 1 h
-apart. (The specification names HDBSCAN; DBSCAN is the deterministic first version and can
-be swapped without changing the API.)
+Adverse events (jamming, spoofing) are grouped per kind. Strong reports (confidence >= 22, a
+calibration parameter tuned on the coastal scenario) define hotspots: spatial DBSCAN on
+great-circle distance (eps 5 km, min 1 event), then a split where consecutive events are more
+than 1 h apart. Weak reports come from witnesses far from a source: each attaches to the nearest
+strong group within 7.5 km and a 1 h window but never links two groups, and weak reports with no
+strong group nearby form their own hotspots. Without this rule a node that hears two sources
+faintly chains them into one hotspot (the simulator caught exactly that). (The specification
+names HDBSCAN; DBSCAN is the deterministic first version and can be swapped without changing the
+API.) Known limit: sources close in space *and* time cannot be told apart from witness reports
+alone, and a moving source is one elongated hotspot until road-segment tracks exist.
 
 - **Source estimate:** centroid weighted by `event weight · (1 + C/N0 drop / 10)` in a local
   azimuthal-equidistant projection. The ellipse is 2σ of the weighted spread, never smaller

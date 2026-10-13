@@ -18,7 +18,7 @@ migrate:
 lint:
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy packages/stozher_core/src services/api/src services/worker/src
+	uv run mypy packages/stozher_core/src services/api/src services/worker/src services/simulator/src
 	@if [ -f web/dashboard/package.json ]; then cd web/dashboard && pnpm lint; fi
 
 test: lint

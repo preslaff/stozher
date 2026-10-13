@@ -18,3 +18,4 @@ Every library, tool, model and dataset used, with licence. Add a row when you ad
 | scikit-learn, numpy | libraries | BSD-3 | worker | DBSCAN, weighted statistics |
 | pytest-asyncio, httpx | libraries | Apache-2.0 / BSD-3 | tests | |
 | PostgreSQL 16 + PostGIS (local server) | tool | PostgreSQL / GPL-2 | database | pgvector to follow |
+| PyYAML | library | MIT | services/simulator | scenario files |

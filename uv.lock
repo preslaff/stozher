@@ -11,6 +11,7 @@ members = [
     "stozher",
     "stozher-api",
     "stozher-core",
+    "stozher-simulator",
     "stozher-worker",
 ]
 
@@ -1754,6 +1755,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "stozher-api" },
     { name = "stozher-core" },
+    { name = "stozher-simulator" },
     { name = "stozher-worker" },
 ]
 
@@ -1771,6 +1773,7 @@ dev = [
 requires-dist = [
     { name = "stozher-api", editable = "services/api" },
     { name = "stozher-core", editable = "packages/stozher_core" },
+    { name = "stozher-simulator", editable = "services/simulator" },
     { name = "stozher-worker", editable = "services/worker" },
 ]
 
@@ -1838,6 +1841,29 @@ dependencies = [
 requires-dist = [
     { name = "cryptography" },
     { name = "pydantic", specifier = ">=2" },
+]
+
+[[package]]
+name = "stozher-simulator"
+version = "0.0.0"
+source = { editable = "services/simulator" }
+dependencies = [
+    { name = "httpx" },
+    { name = "numpy" },
+    { name = "pydantic" },
+    { name = "pyproj" },
+    { name = "pyyaml" },
+    { name = "stozher-core" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx" },
+    { name = "numpy" },
+    { name = "pydantic", specifier = ">=2" },
+    { name = "pyproj" },
+    { name = "pyyaml" },
+    { name = "stozher-core", editable = "packages/stozher_core" },
 ]
 
 [[package]]

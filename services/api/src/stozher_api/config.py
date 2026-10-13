@@ -1,10 +1,15 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+ENV_FILE = Path(__file__).parents[4] / "infra" / ".env"  # git-ignored; see infra/.env.example
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=None, extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE if ENV_FILE.exists() else None, extra="ignore"
+    )
 
     database_url: str = "postgresql+asyncpg://preslaff@/stozher?host=/var/run/postgresql"
     # 32 random bytes as hex; encrypts node master keys at rest. Required to register nodes.

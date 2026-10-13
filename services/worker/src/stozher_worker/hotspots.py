@@ -32,6 +32,7 @@ class HotspotParams:
     eps_m: float = 5000.0  # events closer than this belong together
     gap_s: float = 3600.0  # a quiet gap longer than this starts a new hotspot
     active_s: float = 1800.0  # active while the last event is younger than this
+    core_confidence: int = 22  # reports at or above this define hotspots; weaker ones attach
 
 
 @dataclass(frozen=True)
@@ -59,35 +60,65 @@ def _kind(e: EventPoint) -> str | None:
     return KIND_BY_STATE.get(state) if state else None
 
 
+def _spatial_time_groups(pts: list[EventPoint], p: HotspotParams) -> list[list[EventPoint]]:
+    """DBSCAN on great-circle distance (min 1 event), then split each group at quiet gaps."""
+    coords = np.radians([[e.lat, e.lon] for e in pts])
+    labels = (
+        DBSCAN(eps=p.eps_m / EARTH_RADIUS_M, min_samples=1, metric="haversine").fit(coords).labels_
+    )
+    spatial: dict[int, list[EventPoint]] = defaultdict(list)
+    for e, lab in zip(pts, labels, strict=True):
+        spatial[int(lab)].append(e)
+    groups: list[list[EventPoint]] = []
+    for members in spatial.values():
+        members.sort(key=lambda e: (e.observed_at, str(e.id)))
+        current = [members[0]]
+        for e in members[1:]:
+            if (e.observed_at - current[-1].observed_at).total_seconds() > p.gap_s:
+                groups.append(current)
+                current = []
+            current.append(e)
+        groups.append(current)
+    return groups
+
+
 def cluster(events: list[EventPoint], p: HotspotParams) -> list[list[EventPoint]]:
-    """Group adverse events of the same kind by space, then split each group at time gaps."""
+    """Group adverse events of one kind into hotspots.
+
+    Strong reports (confidence >= core_confidence) define the hotspots. Weak reports, which
+    come from witnesses far from a source, join the nearest strong group but never link two
+    groups together; weak reports with no strong group nearby form their own hotspots. This
+    keeps two sources apart when one witness hears both faintly.
+    """
     by_kind: dict[str, list[EventPoint]] = defaultdict(list)
     for e in events:
         k = _kind(e)
         if k:
             by_kind[k].append(e)
-    groups: list[list[EventPoint]] = []
+    out: list[list[EventPoint]] = []
     for k in sorted(by_kind):
-        pts = by_kind[k]
-        coords = np.radians([[e.lat, e.lon] for e in pts])
-        labels = (
-            DBSCAN(eps=p.eps_m / EARTH_RADIUS_M, min_samples=1, metric="haversine")
-            .fit(coords)
-            .labels_
-        )
-        spatial: dict[int, list[EventPoint]] = defaultdict(list)
-        for e, lab in zip(pts, labels, strict=True):
-            spatial[int(lab)].append(e)
-        for members in spatial.values():
-            members.sort(key=lambda e: (e.observed_at, str(e.id)))
-            current = [members[0]]
-            for e in members[1:]:
-                if (e.observed_at - current[-1].observed_at).total_seconds() > p.gap_s:
-                    groups.append(current)
-                    current = []
-                current.append(e)
-            groups.append(current)
-    return groups
+        strong = [e for e in by_kind[k] if e.confidence >= p.core_confidence]
+        weak = [e for e in by_kind[k] if e.confidence < p.core_confidence]
+        groups = _spatial_time_groups(strong, p) if strong else []
+        leftovers: list[EventPoint] = []
+        for e in weak:
+            best, best_d = None, p.eps_m * 1.5
+            for g in groups:
+                if (e.observed_at - g[-1].observed_at).total_seconds() > p.gap_s or (
+                    g[0].observed_at - e.observed_at
+                ).total_seconds() > p.gap_s:
+                    continue
+                d = min(GEOD.inv(e.lon, e.lat, x.lon, x.lat)[2] for x in g)
+                if d < best_d:
+                    best, best_d = g, d
+            if best is None:
+                leftovers.append(e)
+            else:
+                best.append(e)
+        if leftovers:
+            groups += _spatial_time_groups(leftovers, p)
+        out += groups
+    return out
 
 
 def _weights(group: list[EventPoint], now: datetime) -> np.ndarray:

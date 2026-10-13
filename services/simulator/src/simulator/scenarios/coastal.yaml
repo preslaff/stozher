@@ -1,0 +1,53 @@
+name: coastal
+description: >
+  One hour on the Varna coast. A static jammer near the port, a vehicle-borne jammer driving
+  north along the coast road, a spoofing zone near the western harbour, a benign
+  scintillation episode, and forged and replayed records that must be rejected.
+seed: 7
+duration_s: 3600
+nodes:
+  # port
+  - {name: port-1, lat: 43.1895, lon: 27.9035, kind: expert, link: kineis, extended: true}
+  - {name: port-2, lat: 43.1905, lon: 27.9120, kind: tbeam, link: mesh}
+  - {name: port-3, lat: 43.1840, lon: 27.9060, kind: tbeam, link: mesh}
+  - {name: port-4, lat: 43.1870, lon: 27.9190, kind: expert, link: kineis}
+  # city
+  - {name: city-1, lat: 43.2141, lon: 27.9147, kind: expert, link: kineis}
+  - {name: city-2, lat: 43.2050, lon: 27.9400, kind: tbeam, link: mesh}
+  - {name: city-3, lat: 43.2250, lon: 27.9300, kind: phone, link: direct}
+  - {name: city-4, lat: 43.1980, lon: 27.8900, kind: tbeam, link: mesh}
+  # airport
+  - {name: airport-1, lat: 43.2320, lon: 27.8250, kind: expert, link: kineis, extended: true}
+  - {name: airport-2, lat: 43.2400, lon: 27.8300, kind: tbeam, link: mesh}
+  # south coast
+  - {name: south-1, lat: 43.1700, lon: 27.9350, kind: expert, link: kineis}
+  - {name: south-2, lat: 43.1400, lon: 27.9200, kind: tbeam, link: mesh}
+  # coast road and resorts
+  - {name: road-1, lat: 43.2400, lon: 27.9700, kind: expert, link: kineis}
+  - {name: road-2, lat: 43.2560, lon: 28.0000, kind: tbeam, link: mesh}
+  - {name: road-3, lat: 43.2700, lon: 28.0250, kind: phone, link: direct}
+  - {name: resort-1, lat: 43.2830, lon: 28.0400, kind: expert, link: kineis, extended: true}
+  - {name: resort-2, lat: 43.3000, lon: 28.0700, kind: tbeam, link: mesh}
+  # far quiet nodes
+  - {name: inland-1, lat: 43.3400, lon: 27.7800, kind: expert, link: kineis}
+  - {name: inland-2, lat: 43.1000, lon: 27.7500, kind: expert, link: kineis}
+jammers:
+  - {id: jam-port, start: 600, end: 1800, lat: 43.1880, lon: 27.9100, eirp_dbm: 30, kind: wideband}
+  - id: jam-vehicle
+    start: 2000
+    end: 3200
+    eirp_dbm: 27
+    kind: chirp
+    track:   # driving north along the coast road
+      - [2000, 43.2300, 27.9600]
+      - [2600, 43.2700, 28.0250]
+      - [3200, 43.3050, 28.0750]
+spoofers:
+  - {id: spoof-harbour, start: 2400, end: 3000, lat: 43.2100, lon: 27.9000, radius_m: 3500,
+     push_m: 450, push_bearing_deg: 60, drag_off_s: 120}
+benign:
+  - {id: scint-south, start: 1200, end: 1500, nodes: [south-1, south-2, road-2], drop_db: 7}
+forged:
+  - {at: 1500, node: city-1, mode: wrong_key, count: 3}
+  - {at: 1510, node: port-4, mode: bit_flip, count: 2}
+  - {at: 1700, node: port-1, mode: resend, count: 2}

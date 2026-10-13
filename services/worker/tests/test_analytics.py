@@ -115,3 +115,17 @@ def test_contested_cell_is_degraded_and_old_evidence_fades() -> None:
 def test_tamper_and_sim_handling() -> None:
     assert build_cells([pt(1, cls=TAMPER)], NOW) == []
     assert all(c.sim for c in build_cells([pt(1, cls=NORMAL, sim=True, kind="sim")], NOW))
+
+
+def test_a_weak_report_cannot_bridge_two_strong_groups() -> None:
+    # two strong groups 8 km apart, one weak witness 4 km from each
+    a = [pt(1, 0.0, 0.0, conf=30), pt(2, 0.005, 0.0, conf=30)]
+    b = [pt(3, 0.0, 0.1, conf=30), pt(4, 0.005, 0.1, conf=30)]
+    bridge = pt(5, 0.0, 0.05, conf=5)
+    hs = build_hotspots([*a, *b, bridge], NOW)
+    assert sorted(len(h.event_ids) for h in hs) == [2, 3]  # the weak report joined one group only
+
+
+def test_weak_reports_alone_still_raise_a_hotspot() -> None:
+    hs = build_hotspots([pt(1, conf=5), pt(2, 0.002, conf=6)], NOW)
+    assert len(hs) == 1 and hs[0].node_count == 2

@@ -148,6 +148,7 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | Control | `GET /v1/acks?node_id` | Latest signed acknowledgement per node | system |
 | Assistant | `POST /v1/assistant/query` | Question in, answer with tool calls and sources | responder |
 | Simulator | `POST /v1/sim/scenarios`, `POST /v1/sim/scenarios/{id}/run`, `GET /v1/sim/runs/{id}` | Define, run, read ground truth and metrics | operator |
+| Simulator | `POST /v1/sim/reset` | Delete all simulated nodes and their events, raw messages and keys; live data is never touched. Returns `{deleted_nodes, deleted_events}` | operator |
 | Admin | `/v1/admin/api-keys…`, `GET /v1/admin/audit-log` | Key management (section 3) | admin |
 
 ### Situational list responses

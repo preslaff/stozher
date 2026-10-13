@@ -3,15 +3,16 @@ name = "stozher"
 version = "0.0.0"
 description = "STOZHER workspace root"
 requires-python = ">=3.12"
-dependencies = ["stozher-core", "stozher-api", "stozher-worker"]
+dependencies = ["stozher-core", "stozher-api", "stozher-worker", "stozher-simulator"]
 
 [tool.uv.sources]
 stozher-core = { workspace = true }
 stozher-api = { workspace = true }
 stozher-worker = { workspace = true }
+stozher-simulator = { workspace = true }
 
 [tool.uv.workspace]
-members = ["packages/stozher_core", "services/api", "services/worker"]
+members = ["packages/stozher_core", "services/api", "services/worker", "services/simulator"]
 
 [dependency-groups]
 dev = ["pytest", "pytest-asyncio", "hypothesis", "httpx", "ruff", "mypy"]
@@ -32,5 +33,5 @@ asyncio_mode = "auto"
 "tests/vectors/make_vectors.py" = ["E501"]
 
 [[tool.mypy.overrides]]
-module = ["h3", "shapely", "shapely.*", "sklearn", "sklearn.*", "pyproj"]
+module = ["h3", "shapely", "shapely.*", "sklearn", "sklearn.*", "pyproj", "yaml"]
 ignore_missing_imports = true

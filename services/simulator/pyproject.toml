@@ -1,0 +1,16 @@
+[project]
+name = "stozher-simulator"
+version = "0.0.0"
+description = "STOZHER network simulator: virtual witness nodes, attacker models (data only), scenarios"
+requires-python = ">=3.12"
+dependencies = ["stozher-core", "httpx", "numpy", "pyproj", "pydantic>=2", "pyyaml"]
+
+[tool.uv.sources]
+stozher-core = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/simulator"]
