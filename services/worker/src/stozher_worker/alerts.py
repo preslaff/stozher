@@ -4,6 +4,7 @@ Rules (no assistant, no randomness):
   hotspot_new        a hotspot appears while active              info/warning/critical by severity
   hotspot_escalated  severity crosses 0.7 upwards                critical
   hotspot_cleared    a previously active hotspot is now closed   info
+  hotspot_resumed    a closed hotspot becomes active again        by severity
 Each (kind, hotspot id) fires once; the database enforces it with a unique dedupe key.
 """
 
@@ -64,7 +65,9 @@ def derive_alerts(previous: dict[uuid.UUID, Previous], hotspots: list[Hotspot]) 
             if h.state == "active":
                 make("hotspot_new", _level(h.severity), "detected")
         else:
-            if before.state == "active" and h.state == "closed":
+            if before.state == "closed" and h.state == "active":
+                make("hotspot_resumed", _level(h.severity), "has resumed")
+            elif before.state == "active" and h.state == "closed":
                 make("hotspot_cleared", "info", "has ended")
             elif h.state == "active" and before.severity < CRITICAL_SEVERITY <= h.severity:
                 make("hotspot_escalated", "critical", "has intensified")

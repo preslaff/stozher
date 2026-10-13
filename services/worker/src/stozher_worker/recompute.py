@@ -1,5 +1,7 @@
 """Recompute the derived tables (hotspots, trust cells) from stored events."""
 
+import uuid
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -10,7 +12,7 @@ from stozher_api.models import Alert, Event, Hotspot, HotspotEvent, Node, TrustC
 
 from .alerts import Previous, derive_alerts
 from .cells import build_cells
-from .hotspots import HotspotParams, build_hotspots
+from .hotspots import HotspotParams, build_hotspots, reuse_ids
 from .points import EventPoint
 
 HOTSPOT_LOOKBACK = timedelta(hours=6)
@@ -67,7 +69,16 @@ async def recompute(
     session: AsyncSession, now: datetime, params: HotspotParams | None = None
 ) -> Summary:
     points = await load_points(session, now - HOTSPOT_LOOKBACK)
-    hotspots = build_hotspots(points, now, params)
+    old_events: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
+    for hid, eid in (
+        await session.execute(select(HotspotEvent.hotspot_id, HotspotEvent.event_id))
+    ).all():
+        old_events[hid].add(eid)
+    old_kind = dict((await session.execute(select(Hotspot.id, Hotspot.kind))).all())
+    hotspots = reuse_ids(
+        build_hotspots(points, now, params),
+        {hid: (old_kind[hid], frozenset(ev)) for hid, ev in old_events.items() if hid in old_kind},
+    )
     cells = build_cells([p for p in points if now - p.observed_at <= TRUST_LOOKBACK], now)
 
     previous = {

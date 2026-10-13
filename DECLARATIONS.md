@@ -20,3 +20,7 @@ Every library, tool, model and dataset used, with licence. Add a row when you ad
 | PostgreSQL 16 + PostGIS (local server) | tool | PostgreSQL / GPL-2 | database | pgvector to follow |
 | PyYAML | library | MIT | services/simulator | scenario files |
 | sse-starlette | library | BSD-3 | services/api | server-sent events |
+| React, React DOM | libraries | MIT | web/dashboard | |
+| MapLibre GL JS | library | BSD-3 | web/dashboard | map rendering |
+| Vite, Vitest, TypeScript, ESLint (typescript-eslint, react-hooks), Prettier | tooling | MIT / Apache-2.0 | web/dashboard | |
+| OpenStreetMap raster tiles | dataset | ODbL (© OpenStreetMap contributors) | web/dashboard | dev default only, subject to the OSM tile usage policy; the field kit uses a local PMTiles extract |

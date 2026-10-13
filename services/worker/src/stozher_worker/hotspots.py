@@ -6,6 +6,7 @@ ellipse expresses uncertainty, not detection range. Moving sources are reported 
 window; road-segment tracks come later.
 """
 
+import dataclasses
 import math
 import uuid
 from collections import defaultdict
@@ -33,6 +34,7 @@ class HotspotParams:
     gap_s: float = 3600.0  # a quiet gap longer than this starts a new hotspot
     active_s: float = 1800.0  # active while the last event is younger than this
     core_confidence: int = 22  # reports at or above this define hotspots; weaker ones attach
+    attach_s: float = 600.0  # a weak report attaches only within this of a group's time span
 
 
 @dataclass(frozen=True)
@@ -104,9 +106,11 @@ def cluster(events: list[EventPoint], p: HotspotParams) -> list[list[EventPoint]
         for e in weak:
             best, best_d = None, p.eps_m * 1.5
             for g in groups:
-                if (e.observed_at - g[-1].observed_at).total_seconds() > p.gap_s or (
-                    g[0].observed_at - e.observed_at
-                ).total_seconds() > p.gap_s:
+                lo = min(x.observed_at for x in g)
+                hi = max(x.observed_at for x in g)
+                if e.observed_at < lo - timedelta(
+                    seconds=p.attach_s
+                ) or e.observed_at > hi + timedelta(seconds=p.attach_s):
                     continue
                 d = min(GEOD.inv(e.lon, e.lat, x.lon, x.lat)[2] for x in g)
                 if d < best_d:
@@ -216,3 +220,30 @@ def build_hotspots(
             )
         )
     return sorted(out, key=lambda h: (h.first_seen, str(h.id)))
+
+
+def reuse_ids(
+    hotspots: list[Hotspot], previous: dict[uuid.UUID, tuple[str, frozenset[uuid.UUID]]]
+) -> list[Hotspot]:
+    """Keep a hotspot's id when its evidence mostly overlaps a previous hotspot of the same kind.
+
+    A deterministic id from the earliest event breaks when a delayed (satellite) report arrives
+    late and becomes the new earliest. Matching by overlap keeps alerts and links stable while a
+    hotspot grows, merges or splits: each previous hotspot is claimed once, best overlap first.
+    """
+    pairs: list[tuple[float, int, uuid.UUID]] = []
+    for i, h in enumerate(hotspots):
+        new = set(h.event_ids)
+        for pid, (kind, old) in previous.items():
+            if kind != h.kind or not old:
+                continue
+            overlap = len(new & old) / min(len(new), len(old))
+            if overlap >= 0.5:
+                pairs.append((overlap + len(new & old) / 1e6, i, pid))
+    chosen: dict[int, uuid.UUID] = {}
+    taken: set[uuid.UUID] = set()
+    for _, i, pid in sorted(pairs, reverse=True):
+        if i not in chosen and pid not in taken:
+            chosen[i] = pid
+            taken.add(pid)
+    return [dataclasses.replace(h, id=chosen.get(i, h.id)) for i, h in enumerate(hotspots)]

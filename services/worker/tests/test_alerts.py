@@ -58,3 +58,9 @@ def test_escalation_and_clearing() -> None:
 
 def test_sim_flag_is_carried() -> None:
     assert derive_alerts({}, [hs(sim=True)])[0].sim is True
+
+
+def test_a_closed_hotspot_that_resumes_alerts() -> None:
+    h = hs(severity=0.5)
+    (a,) = derive_alerts({h.id: Previous("closed", 0.5)}, [h])
+    assert a.kind == "hotspot_resumed" and a.level == "warning"

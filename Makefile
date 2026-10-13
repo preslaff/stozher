@@ -23,7 +23,7 @@ lint:
 
 test: lint
 	uv run pytest
-	@if [ -f web/dashboard/package.json ]; then cd web/dashboard && pnpm test --if-present; fi
+	@if [ -f web/dashboard/package.json ]; then cd web/dashboard && pnpm test; fi
 
 api:
 	uv run uvicorn --factory stozher_api.main:app_factory --reload

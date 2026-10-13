@@ -4,12 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # STOZHER (СТОЖЕР)
 
-> **Current state:** the repo is still pre-code. Only reference material exists at the
-> root (`STOZHER — Technical Specification.md`/`.pdf`, CASSINI rules/playbook PDFs, KIM1
-> product sheet). Nothing under §4 (layout), the `Makefile` (§9) or `docs/` has been
-> created yet, and it is not yet a git repository (`git init` first — commit history is
-> evidence for the fresh-code rule). The commands in §9 are targets to create, not
-> existing ones. Read the Technical Specification `.md` for detail beyond this file.
+> **Current state (Oct 2026):** built and tested: `stozher_core` (codec, crypto, trust model, golden
+> vectors), API (ingest, nodes, events, hotspots, trust, alerts + SSE, sim reset), worker (job queue,
+> hotspots, source localization, H3 trust grid, alert rules), network simulator (coastal scenario),
+> and the React dashboard. Not built yet: key-management endpoints (use
+> `python -m stozher_api.cli create-key`), rate limits, watched routes, `trust/route`, `situation`,
+> webhooks, mesh bridge, Kinéis adapter, assistant, firmware, field-kit sync. Run it: `make migrate`,
+> `make api`, `make worker`, `make sim S=coastal`, `pnpm dev` in `web/dashboard` (see `docs/scenario.md`).
+> Dev database is the user's local PostgreSQL 16 (not a container). Read the Technical Specification
+> `.md` for detail beyond this file.
 
 Guide for the Claude Code agent building STOZHER, a **Situational Awareness Platform
 for Degraded Environments**, at the 12th CASSINI Hackathon (Challenge #1, 27–29

@@ -6,7 +6,7 @@ import pytest
 from shapely import wkt
 from stozher_core.trust import TrustState
 from stozher_worker.cells import DISK_K, build_cells
-from stozher_worker.hotspots import HotspotParams, build_hotspots, localize
+from stozher_worker.hotspots import HotspotParams, build_hotspots, localize, reuse_ids
 from stozher_worker.points import EventPoint
 
 NOW = datetime(2026, 11, 28, 10, 0, tzinfo=UTC)
@@ -138,3 +138,27 @@ def test_hotspot_id_is_stable_for_events_in_the_same_second() -> None:
     b = dataclasses.replace(pt(1, 0.001, age_s=60), seq=2)  # same node, same second, later seq
     ids = {build_hotspots(order, NOW)[0].id for order in ([a, b], [b, a])}
     assert len(ids) == 1
+
+
+def test_weak_report_far_in_time_does_not_attach() -> None:
+    strong = [pt(1, cls=JAM, conf=30, age_s=600), pt(2, 0.003, cls=JAM, conf=30, age_s=540)]
+    early_weak = pt(3, 0.004, cls=JAM, conf=5, age_s=3000)  # 40 min before: not this event
+    hs = build_hotspots([*strong, early_weak], NOW)
+    assert sorted(len(h.event_ids) for h in hs) == [1, 2]
+
+
+def test_ids_survive_a_late_arriving_earlier_report() -> None:
+    first = [pt(1, age_s=300), pt(2, 0.003, age_s=240)]
+    before = build_hotspots(first, NOW)[0]
+    late = pt(3, 0.002, age_s=900)  # a delayed satellite report from earlier
+    grown = build_hotspots([*first, late], NOW)[0]
+    assert grown.id != before.id  # the earliest event changed, so a bare event-derived id would too
+    kept = reuse_ids([grown], {before.id: (before.kind, frozenset(before.event_ids))})[0]
+    assert kept.id == before.id and set(kept.event_ids) >= set(before.event_ids)
+
+
+def test_reuse_claims_each_previous_hotspot_once_and_respects_kind() -> None:
+    a, b = build_hotspots([pt(1, 0.0), pt(2, 0.5, cls=SPOOF)], NOW)
+    prev = {uuid.uuid4(): (a.kind, frozenset(a.event_ids))}
+    out = reuse_ids([a, b], prev)
+    assert out[0].id in prev and out[1].id == b.id
