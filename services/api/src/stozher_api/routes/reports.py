@@ -17,6 +17,7 @@ from pyproj import Geod
 from sqlalchemy import func, select
 
 from ..auth import Principal, require_role
+from ..jobs import enqueue
 from ..models import HazardReport, RoadHazard
 from ..problems import ApiError
 
@@ -149,6 +150,7 @@ async def submit(
             status="accepted",
         )
         session.add(report)
+        await enqueue(session, "hazards", now, commit=False)  # the worker merges it into a hazard
         await session.commit()
     return {"id": str(report.id), "hazard_id": None, "tier": "unverified", "status": "accepted"}
 
@@ -163,6 +165,7 @@ async def withdraw(
         if r is None or r.reporter_prefix != p.prefix:
             raise ApiError(404, "not-found", "Report not found")
         r.status = "withdrawn"
+        await enqueue(session, "hazards", datetime.now(UTC), commit=False)
         await session.commit()
     return {"id": str(report_id), "status": "withdrawn"}
 

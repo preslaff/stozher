@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from stozher_api.config import get_settings
+from stozher_api.hazard_service import reconcile
 
 from .queue import Handler, enqueue, run_pending
 from .recompute import recompute
@@ -22,7 +23,14 @@ async def _handle_recompute(session: AsyncSession, now: datetime) -> object:
     return summary
 
 
-HANDLERS: dict[str, Handler] = {"recompute": _handle_recompute}
+async def _handle_hazards(session: AsyncSession, now: datetime) -> object:
+    summary = await reconcile(session, now)
+    if summary.created or summary.changed or summary.purged:
+        log.info("hazards: %s", summary)
+    return summary
+
+
+HANDLERS: dict[str, Handler] = {"recompute": _handle_recompute, "hazards": _handle_hazards}
 
 
 async def run() -> None:
@@ -34,6 +42,7 @@ async def run() -> None:
         if loop.time() - last_periodic >= PERIOD_S:
             async with maker() as session:
                 await enqueue(session, "recompute", datetime.now(UTC))
+                await enqueue(session, "hazards", datetime.now(UTC))
             last_periodic = loop.time()
         await run_pending(maker, HANDLERS)
         await asyncio.sleep(POLL_S)

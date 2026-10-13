@@ -305,3 +305,28 @@ class RoadHazard(Base):
     evidence: Mapped[Any] = mapped_column(
         JSONB, nullable=True
     )  # counts and scene dates, never reporter text
+    decision: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )  # confirmed, closed, dismissed (human)
+    decided_by: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )  # operator key prefix; never returned
+    decision_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(
+        TS, nullable=True
+    )  # when it stopped being active
+    updated_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+
+
+class HazardHistory(Base):
+    """Tier and status changes of a hazard, for its timeline. Holds no reporter identity."""
+
+    __tablename__ = "hazard_history"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    hazard_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    event: Mapped[str] = mapped_column(String(16))  # created, tier, status, passability, decision
+    value: Mapped[str] = mapped_column(String(24))
+    source: Mapped[str] = mapped_column(String(16))  # community, operator, system

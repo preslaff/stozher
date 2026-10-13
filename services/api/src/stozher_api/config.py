@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     # Community hazard reports (docs/hazards.md): limits per reporter key, counted in the database.
     report_limit_per_hour: int = 20
     report_limit_per_day: int = 120
-    report_max_age_h: int = 48  # a report must describe something that happened recently
+    report_max_age_h: int = 48
+    hazard_retention_days: int = 30  # ended hazards and their reports are deleted after this  # a report must describe something that happened recently
     # Accept records whose node clock is within this window of server time.
     replay_window_s: int = 2 * 86400
     env_name: str = "live"

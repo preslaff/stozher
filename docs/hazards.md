@@ -1,7 +1,8 @@
 # Road hazards and community reports (specification)
 
-**Status: specification. Build step 1 of section 13 is implemented** (the `reporter` role, `POST /v1/reports`,
-withdraw, `GET /v1/reports?mine=true`, limits and validation); everything else here is not. It extends the platform with a second
+**Status: specification. Build steps 1 and 2 of section 13 are implemented** (the `reporter` role, reports,
+merging into hazards, tiers, operator decisions, expiry, retention, and read access for responders and
+above); the rest is not. See "Implementation notes" at the end for where the build refines this text. It extends the platform with a second
 module beside GNSS Trust: physical hazards that block or endanger movement on roads, reported by
 people in the field and by other sources, shown with their source and verification level, and checked
 against routes. It follows the `docs/api.md` conventions; where an API shape here becomes real, copy it
@@ -250,14 +251,46 @@ Done when:
 ## 13. Build order
 
 1. **Done:** migration, models and the report endpoint with validation, rate limits and the `reporter` role.
-2. Merging and tiers in the worker; operator decisions; expiry.
+2. **Done:** merging and tiers (worker job and operator decisions), expiry, retention.
 3. Hazards read API with role views; `along-route`; watched-route alerts.
 4. Simulator scenario and tests for every acceptance line above.
 5. Dashboard: report tool, hazard layer, route panel.
 6. EO findings and OSM closures as sources.
 7. Mesh report contract with golden vectors.
 
-## 14. References
+## 14. Implementation notes (steps 1-2)
+
+Where the build is more specific than, or refines, the text above:
+
+- **Independence is by team label.** Reporter keys carry a `label` naming the issuing team. Two keys with
+  the same label count as one team; only distinct labels corroborate. Issue each independent team its own
+  label, and give several people of one team keys with the same label.
+- **A confirmed hazard is closed only by a human.** Two independent clear reports close an *unconfirmed*
+  hazard (and only clears newer than the hazard's latest report count); a hazard an operator confirmed
+  needs an operator to close it. This is stricter than the table in section 7.
+- **Merging** is single-linkage: a report joins the active hazard of the same kind whose nearest report is
+  within 300 m and whose latest support is within 6 h (exactly 6 h still merges). Two existing hazards are
+  never merged afterwards, so hazard ids stay stable. A clear report joins the nearest active hazard of its
+  kind within 300 m at any later time; a clear that matches nothing stays unattached and is purged later.
+- **Closed, expired and dismissed hazards take no new reports**; a new report starts a new hazard.
+- **Hazard geometry** is the convex hull of its reports (a point, a line or a polygon).
+- **Withdrawing** a report removes its support. A hazard with no supporting report left is dismissed (a
+  confirmed one stays until a human removes it).
+- **Decisions** use a closed list of reason codes (confirm: `verified_on_site`, `official_source`,
+  `multiple_sources`; close: `cleared_on_site`, `official_source`, `no_longer_applicable`; dismiss:
+  `false_report`, `mistaken_location`, `duplicate`, `test_data`); no free text. Allowed from `active` and
+  `expired`; a human decision on an expired hazard brings it back to a decided state. The deciding
+  operator's key prefix is stored for the audit log and never returned; the timeline shows only the kind of
+  source (`community`, `operator`).
+- **Runs.** The worker job `hazards` runs when a report is submitted or withdrawn and every 60 s; an operator
+  decision runs it immediately. A database advisory lock serialises runs.
+- **Retention** is `HAZARD_RETENTION_DAYS` (default 30) after a hazard ended; its reports and history go
+  with it, and unattached reports older than that are deleted.
+- **Not yet built:** public and reporter views (confirmed only, blurred), `along-route`, hazard alerts on
+  watched routes and the stream, reporter weighting from confirmed and dismissed reports, the dashboard
+  tool, the simulator scenario, EO and OSM sources.
+
+## 15. References
 
 Spec sections 1 and 12; CLAUDE.md rule 3; contest Rules of Contest Section 8.8; `docs/spikes/eo-flood.md`;
 `docs/api.md` (key management, watched routes). For responsible-data practice, worth reading before any

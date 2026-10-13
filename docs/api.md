@@ -174,8 +174,10 @@ bbox-too-large`). `GET /health` reports `ack_signing` as `present` when a signin
 
 ### Hazards and reports
 
-Specified in `docs/hazards.md`, which is the contract. **Implemented so far (build step 1):** the
-`reporter` role, `POST /v1/reports`, `POST /v1/reports/{id}/withdraw` and `GET /v1/reports?mine=true`.
+Specified in `docs/hazards.md`, which is the contract. **Implemented so far (build steps 1-2):** the
+`reporter` role, `POST /v1/reports`, `POST /v1/reports/{id}/withdraw`, `GET /v1/reports?mine=true`,
+`GET /v1/hazards` and `GET /v1/hazards/{id}` (responder and above, all tiers, exact geometry), and the
+operator decisions `POST /v1/hazards/{id}/confirm|close|dismiss`.
 
 `POST /v1/reports` (reporter and above) takes exactly `kind`, `passability`, `geometry` (a Point, or a
 LineString of at most 50 positions and 500 m, `[lon, lat]` only) and `observed_at` (with a time zone,
@@ -185,8 +187,13 @@ Coordinates are rounded to 5 decimals. It returns `202 {id, hazard_id, tier, sta
 merged into hazards (the next build step) `hazard_id` is `null` and `tier` is `unverified`. Limits per key,
 counted in the database and including withdrawn reports: 20 per hour and 120 per day (`429
 report-rate-limited` with `Retry-After`). No response ever contains a reporter's key prefix, and
-`GET /v1/reports` works only with `mine=true`: there is no way to list anyone else's reports. Not yet
-implemented: `GET /v1/hazards`, `along-route`, operator decisions, hazard alerts.
+`GET /v1/reports` works only with `mine=true`: there is no way to list anyone else's reports. `GET /v1/hazards` takes `bbox`, `kind`, `min_tier`, `status` (`active` by default, or `closed`, `expired`,
+`dismissed`, `all`) and `limit`; a hazard carries `tier` (`unverified`, `corroborated`, `confirmed`), `status`,
+`passability`, `sources`, `evidence` (counts only), `first_seen`, `last_confirmed`, `valid_until`, `data_age_s`
+and, in the detail view, a `timeline` of tier and status changes. Decisions take `{"reason": <code>}` from a
+closed list (docs/hazards.md, implementation notes), are operator-only and audited, and answer `409
+not-open` once a hazard is closed or dismissed. No hazard response contains a reporter prefix or team label.
+Not yet implemented: the `public` and `reporter` views, `along-route`, hazard alerts.
 
 ### Trust response (shape)
 
