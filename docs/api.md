@@ -134,7 +134,7 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | Hotspots | `GET /v1/hotspots/{id}/playbook?asset_type=` | Recommended actions and fallbacks | responder |
 | Trust | `GET /v1/trust?lat&lon` | Trust score for a point | public |
 | Trust | `GET /v1/trust/grid?bbox` | H3 (res 8) trust cells as GeoJSON | public |
-| Trust | `POST /v1/trust/route` | LineString in, segments with trust scores out | public |
+| Trust | `POST /v1/trust/route?buffer_m=` | LineString in (2-500 positions, optional corridor 0-2000 m), segments with trust out: per-segment `state`, `score`, `confidence`, `data_age_s`, `independent_sources`, and the worst segment as `overall` (UNKNOWN ranks above TRUSTED, SPOOFED above JAMMED). Samples every 150 m. See docs/trust.md | public |
 | POI | `GET /v1/poi?bbox&type&min_verification` | Points of interest; restricted ones need responder | public / responder |
 | POI | `POST /v1/poi`, `PATCH /v1/poi/{id}` | Create and update points and status | operator |
 | POI | `GET /v1/poi/{id}/access?from=lat,lon` | Route with per-segment trust and nearby damage | responder |

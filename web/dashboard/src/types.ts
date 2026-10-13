@@ -1,4 +1,4 @@
-import type { Point, Polygon } from 'geojson'
+import type { LineString, Point, Polygon } from 'geojson'
 
 export type TrustState = 'TRUSTED' | 'DEGRADED' | 'JAMMED' | 'SPOOFED' | 'UNKNOWN'
 export type AlertLevel = 'info' | 'warning' | 'critical'
@@ -28,9 +28,10 @@ export interface Alert {
   id: number
   level: AlertLevel
   kind: string
-  area: Polygon | null
+  area: Polygon | LineString | null
   message: string
   hotspot_id: string | null
+  route_id: string | null
   created_at: string
   sim: boolean
 }
@@ -59,4 +60,45 @@ export interface TrustProps {
   independent_sources: number
   data_age_s: number | null
   sim: boolean
+}
+
+export type MinLevel = 'degraded' | 'jammed' | 'spoofed'
+
+export interface RouteSegment {
+  index: number
+  start_m: number
+  end_m: number
+  geometry: LineString
+  state: TrustState
+  score: number | null
+  confidence: number
+  data_age_s: number | null
+  independent_sources: number
+  sim: boolean
+}
+
+export interface RouteTrust {
+  length_m: number
+  overall: {
+    state: TrustState
+    score: number | null
+    confidence: number
+    data_age_s: number | null
+    independent_sources: number
+    worst_segment: number
+  }
+  segments: RouteSegment[]
+  sim: boolean
+  data_age_s: number | null
+}
+
+export interface WatchedRouteItem {
+  id: string
+  name: string
+  buffer_m: number
+  min_level: MinLevel
+  state: TrustState | null
+  created_at: string
+  expires_at: string
+  geometry: LineString
 }

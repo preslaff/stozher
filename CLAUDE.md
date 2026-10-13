@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > **Current state (Oct 2026):** built and tested: `stozher_core` (codec, crypto, trust model, golden
 > vectors), API (ingest, nodes, events, hotspots, trust, alerts + SSE, sim reset), worker (job queue,
 > hotspots, source localization, H3 trust grid, alert rules), network simulator (coastal scenario),
-> and the React dashboard. Signed acknowledgements (Ed25519, `docs/control.md`) work end to end through the mesh bridge. Route trust (`POST /v1/trust/route`) and watched routes with deterministic `route_affected`/`route_cleared` alerts exist. Not built yet: key-management endpoints (use
+> and the React dashboard (live map, alerts, route planner with watched routes). Signed acknowledgements (Ed25519, `docs/control.md`) work end to end through the mesh bridge. Route trust (`POST /v1/trust/route`) and watched routes with deterministic `route_affected`/`route_cleared` alerts exist. Not built yet: key-management endpoints (use
 > `python -m stozher_api.cli create-key`), rate limits, `situation`,
 > webhooks, mesh bridge, Kinéis adapter, assistant, firmware, field-kit sync. Run it: `make migrate`,
 > `make api`, `make worker`, `make sim S=coastal`, `pnpm dev` in `web/dashboard` (see `docs/scenario.md`).

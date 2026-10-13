@@ -64,3 +64,18 @@ alone, and a moving source is one elongated hotspot until road-segment tracks ex
 - **Severity** `min(1, 0.15·events + 0.2·nodes + 0.3·maxConfidence/31)`; **confidence**
   `min(1, 0.3 + 0.25·(nodes - 1)) · (0.5 + 0.5·maxConfidence/31)`.
 - `track` (moving sources as a road segment and time window) is reserved and `null` for now.
+
+## Route trust
+
+`POST /v1/trust/route` and watched routes (docs/api.md section 7) evaluate a LineString against the
+grid. The route is sampled every 150 m; each sample takes the trust of its H3 res-8 cell, or with a
+corridor of `buffer_m` the worst cell within `round(buffer_m / 920)` rings (cell centres are about
+920 m apart). Consecutive samples with the same state merge into a segment; a segment's score is its
+lowest, its confidence its lowest, its sources its highest, its data age that of its freshest
+evidence. The overall result is the worst segment, ranked TRUSTED < UNKNOWN < DEGRADED < JAMMED <
+SPOOFED: no evidence cannot vouch for a route, and spoofing outranks jamming because a receiver can
+notice jamming but not spoofing. Code: `services/api/src/stozher_api/route_trust.py` (pure).
+
+Watched-route alerts (`services/worker/route_alerts.py`): `route_affected` when the worst state first
+reaches the watch's level (degraded < jammed < spoofed) or worsens while at it; `route_cleared` when it
+falls back below; each transition once. UNKNOWN never alerts.

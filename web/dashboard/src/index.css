@@ -366,3 +366,139 @@ button {
     left: 12px;
   }
 }
+
+/* route planner */
+.routepanel {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 300px;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1;
+}
+.rp-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.rp-head h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.rp-actions {
+  display: flex;
+  gap: 4px;
+}
+.routepanel button,
+.routepanel select,
+.routepanel input {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.routepanel button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.routepanel button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.routepanel button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.rp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.rp-row select {
+  flex: 1;
+}
+.verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-left: 4px solid;
+  padding: 4px 0 4px 10px;
+}
+.segments {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+}
+.segments li {
+  display: grid;
+  grid-template-columns: 10px auto 1fr;
+  gap: 8px;
+  align-items: center;
+}
+.segments i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.watchform {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.watchform button[type='submit'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.chip.route {
+  background: var(--panel);
+  margin: 0 6px 0 0;
+}
+li.withdel {
+  display: flex;
+  gap: 4px;
+}
+li.withdel .item {
+  flex: 1;
+  min-width: 0;
+}
+.del {
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  width: 30px;
+  color: var(--muted);
+  font-size: 18px;
+}
+.del:hover {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+@media (max-width: 760px) {
+  .routepanel {
+    width: auto;
+    right: 12px;
+    max-height: 45%;
+  }
+}

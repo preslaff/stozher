@@ -3,7 +3,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { API_URL, ApiError, makeApi, type Bbox } from './api'
 import { connectStream, type SseEvent, type StreamState } from './sse'
 import { MIN_GRID_ZOOM } from './style'
-import type { Alert, Health, Hotspot, HotspotDetail, NodeInfo, TrustProps } from './types'
+import type {
+  Alert,
+  Health,
+  Hotspot,
+  HotspotDetail,
+  NodeInfo,
+  TrustProps,
+  WatchedRouteItem,
+} from './types'
 
 type Grid = FeatureCollection<Polygon, TrustProps> & { sim: boolean }
 export interface View {
@@ -19,6 +27,7 @@ export function useDashboard(key: string | null) {
   const [hotspots, setHotspots] = useState<Hotspot[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [nodes, setNodes] = useState<NodeInfo[]>([])
+  const [watched, setWatched] = useState<WatchedRouteItem[]>([])
   const [grid, setGrid] = useState<Grid | null>(null)
   const [gridError, setGridError] = useState<string | null>(null)
   const [stream, setStream] = useState<StreamState>('connecting')
@@ -31,17 +40,19 @@ export function useDashboard(key: string | null) {
 
   const loadState = useCallback(async () => {
     if (!api) return
-    const [h, hs, al, ns] = await Promise.allSettled([
+    const [h, hs, al, ns, wr] = await Promise.allSettled([
       api.health(),
       api.hotspots(),
       api.alerts(),
       api.nodes(),
+      api.watchedRoutes(),
     ])
     if (h.status === 'fulfilled') setHealth(h.value)
     if (hs.status === 'fulfilled') setHotspots(hs.value.items)
     else setError(hs.reason instanceof Error ? hs.reason.message : 'cannot load hotspots')
     if (al.status === 'fulfilled') setAlerts(al.value.items)
     setNodes(ns.status === 'fulfilled' ? ns.value : []) // operators only; absent otherwise
+    setWatched(wr.status === 'fulfilled' ? wr.value.items : []) // responders and above
     if (hs.status === 'fulfilled') {
       setError(null)
       setLastLoad(Date.now())
@@ -117,7 +128,29 @@ export function useDashboard(key: string | null) {
     }
   }, [api, selectedId, gridVersion])
 
+  const createWatch = useCallback(
+    async (w: Parameters<NonNullable<typeof api>['createWatch']>[0]) => {
+      if (!api) return
+      await api.createWatch(w)
+      await loadState()
+    },
+    [api, loadState],
+  )
+  const deleteWatch = useCallback(
+    async (id: string) => {
+      if (!api) return
+      await api.deleteWatch(id)
+      await loadState()
+    },
+    [api, loadState],
+  )
+
   return {
+    api,
+    gridVersion,
+    watched,
+    createWatch,
+    deleteWatch,
     role,
     health,
     hotspots,

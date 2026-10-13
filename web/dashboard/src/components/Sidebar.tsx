@@ -1,16 +1,29 @@
 import { LEVEL_COLOR, sinceText, TRUST_COLOR } from '../style'
-import type { Alert, Hotspot } from '../types'
+import type { Alert, Hotspot, WatchedRouteItem } from '../types'
 
 interface Props {
   alerts: Alert[]
   hotspots: Hotspot[]
+  watched: WatchedRouteItem[]
   selectedId: string | null
   now: number
   onPickAlert: (a: Alert) => void
   onPickHotspot: (h: Hotspot) => void
+  onPickRoute: (w: WatchedRouteItem) => void
+  onDeleteRoute: (w: WatchedRouteItem) => void
 }
 
-export function Sidebar({ alerts, hotspots, selectedId, now, onPickAlert, onPickHotspot }: Props) {
+export function Sidebar({
+  alerts,
+  hotspots,
+  watched,
+  selectedId,
+  now,
+  onPickAlert,
+  onPickHotspot,
+  onPickRoute,
+  onDeleteRoute,
+}: Props) {
   const active = hotspots.filter((h) => h.state === 'active')
   const closed = hotspots.filter((h) => h.state === 'closed')
   return (
@@ -30,7 +43,10 @@ export function Sidebar({ alerts, hotspots, selectedId, now, onPickAlert, onPick
                   aria-label={a.level}
                 />
                 <span className="body">
-                  <span className="msg">{a.message}</span>
+                  <span className="msg">
+                    {a.route_id && <span className="chip route">route</span>}
+                    {a.message}
+                  </span>
                   <span className="meta">
                     {a.level} · {sinceText(a.created_at, now)}
                     {a.sim && <span className="chip sim">SIM</span>}
@@ -69,6 +85,41 @@ export function Sidebar({ alerts, hotspots, selectedId, now, onPickAlert, onPick
                     {h.sim && <span className="chip sim">SIM</span>}
                   </span>
                 </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section>
+        <h2>
+          Watched routes <span className="count">{watched.length}</span>
+        </h2>
+        {watched.length === 0 && (
+          <p className="empty">Draw a route on the map, then watch it to get alerts.</p>
+        )}
+        <ul className="list">
+          {watched.map((w) => (
+            <li key={w.id} className="withdel">
+              <button className="item" onClick={() => onPickRoute(w)}>
+                <span
+                  className="dot"
+                  style={{ background: TRUST_COLOR[w.state ?? 'UNKNOWN'] }}
+                  aria-label={w.state ?? 'UNKNOWN'}
+                />
+                <span className="body">
+                  <span className="msg">{w.name}</span>
+                  <span className="meta">
+                    {(w.state ?? 'UNKNOWN').toLowerCase()} · alerts from {w.min_level} · until{' '}
+                    {new Date(w.expires_at).toLocaleString()}
+                  </span>
+                </span>
+              </button>
+              <button
+                className="del"
+                onClick={() => onDeleteRoute(w)}
+                aria-label={`Stop watching ${w.name}`}
+              >
+                ×
               </button>
             </li>
           ))}

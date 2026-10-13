@@ -7,7 +7,8 @@ import type { View } from '../useDashboard'
 import { TRUST_COLOR } from '../style'
 import { bboxOf, unionBbox } from '../geo'
 import type { Hotspot, NodeInfo, TrustProps } from '../types'
-import type { FeatureCollection, Polygon } from 'geojson'
+import type { Waypoint } from '../route'
+import type { FeatureCollection, LineString, Polygon } from 'geojson'
 
 const TILE_URL: string =
   import.meta.env.VITE_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -60,18 +61,38 @@ interface Props {
   nodes: NodeInfo[]
   grid: FeatureCollection<Polygon, TrustProps> | null
   selectedId: string | null
+  routeFc: FeatureCollection<LineString>
+  watchedFc: FeatureCollection<LineString>
+  waypoints: Waypoint[]
+  drawing: boolean
+  onAddWaypoint: (p: Waypoint) => void
   focus: { bbox: Bbox; n: number } | null
   onSelect: (id: string | null) => void
   onView: (v: View) => void
 }
 
-export function MapView({ hotspots, nodes, grid, selectedId, focus, onSelect, onView }: Props) {
+export function MapView({
+  hotspots,
+  nodes,
+  grid,
+  selectedId,
+  routeFc,
+  watchedFc,
+  waypoints,
+  drawing,
+  onAddWaypoint,
+  focus,
+  onSelect,
+  onView,
+}: Props) {
   const box = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [ready, setReady] = useState(false)
-  const cb = useRef({ onSelect, onView })
+  const cb = useRef({ onSelect, onView, onAddWaypoint })
+  const drawingRef = useRef(drawing)
   useEffect(() => {
-    cb.current = { onSelect, onView }
+    cb.current = { onSelect, onView, onAddWaypoint }
+    drawingRef.current = drawing
   })
   const fitted = useRef(false)
 
@@ -98,6 +119,9 @@ export function MapView({ hotspots, nodes, grid, selectedId, focus, onSelect, on
       map.addSource('trust', { type: 'geojson', data: EMPTY })
       map.addSource('hotspots', { type: 'geojson', data: EMPTY })
       map.addSource('nodes', { type: 'geojson', data: EMPTY })
+      map.addSource('watched', { type: 'geojson', data: EMPTY })
+      map.addSource('route', { type: 'geojson', data: EMPTY })
+      map.addSource('draft', { type: 'geojson', data: EMPTY })
       map.addLayer({
         id: 'trust-fill',
         type: 'fill',
@@ -150,6 +174,51 @@ export function MapView({ hotspots, nodes, grid, selectedId, focus, onSelect, on
         paint: { 'line-color': '#ffffff', 'line-width': 3.5 },
       })
       map.addLayer({
+        id: 'watched-line',
+        type: 'line',
+        source: 'watched',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': stateColor,
+          'line-width': 3,
+          'line-opacity': 0.9,
+          'line-dasharray': [2, 1],
+        },
+      })
+      map.addLayer({
+        id: 'route-casing',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#0f151b', 'line-width': 9 },
+      })
+      map.addLayer({
+        id: 'route-trust',
+        type: 'line',
+        source: 'route',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': stateColor, 'line-width': 5.5 },
+      })
+      map.addLayer({
+        id: 'draft-line',
+        type: 'line',
+        source: 'draft',
+        filter: ['==', ['geometry-type'], 'LineString'],
+        paint: { 'line-color': '#ffffff', 'line-width': 2, 'line-dasharray': [2, 2] },
+      })
+      map.addLayer({
+        id: 'draft-points',
+        type: 'circle',
+        source: 'draft',
+        filter: ['==', ['geometry-type'], 'Point'],
+        paint: {
+          'circle-radius': 5,
+          'circle-color': '#ffffff',
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#0f151b',
+        },
+      })
+      map.addLayer({
         id: 'nodes',
         type: 'circle',
         source: 'nodes',
@@ -160,7 +229,11 @@ export function MapView({ hotspots, nodes, grid, selectedId, focus, onSelect, on
           'circle-stroke-color': ['case', ['get', 'sim'], '#5b8def', '#0f151b'],
         },
       })
+      map.on('click', (e) => {
+        if (drawingRef.current) cb.current.onAddWaypoint([e.lngLat.lng, e.lngLat.lat])
+      })
       map.on('click', 'hotspot-fill', (e) => {
+        if (drawingRef.current) return
         const id = e.features?.[0]?.properties?.id as string | undefined
         if (id) cb.current.onSelect(id)
       })
@@ -224,6 +297,48 @@ export function MapView({ hotspots, nodes, grid, selectedId, focus, onSelect, on
     }
     ;(map.getSource('nodes') as GeoJSONSource).setData(fc)
   }, [nodes, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    ;(map.getSource('route') as GeoJSONSource).setData(routeFc)
+  }, [routeFc, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    ;(map.getSource('watched') as GeoJSONSource).setData(watchedFc)
+  }, [watchedFc, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    const fc: FeatureCollection = {
+      type: 'FeatureCollection',
+      features: [
+        ...(waypoints.length > 1 && !routeFc.features.length
+          ? [
+              {
+                type: 'Feature' as const,
+                geometry: { type: 'LineString' as const, coordinates: waypoints },
+                properties: {},
+              },
+            ]
+          : []),
+        ...waypoints.map((w) => ({
+          type: 'Feature' as const,
+          geometry: { type: 'Point' as const, coordinates: w },
+          properties: {},
+        })),
+      ],
+    }
+    ;(map.getSource('draft') as GeoJSONSource).setData(fc)
+  }, [waypoints, routeFc, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (map) map.getCanvas().style.cursor = drawing ? 'crosshair' : ''
+  }, [drawing])
 
   useEffect(() => {
     const map = mapRef.current
