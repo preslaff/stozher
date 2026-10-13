@@ -129,3 +129,12 @@ def test_a_weak_report_cannot_bridge_two_strong_groups() -> None:
 def test_weak_reports_alone_still_raise_a_hotspot() -> None:
     hs = build_hotspots([pt(1, conf=5), pt(2, 0.002, conf=6)], NOW)
     assert len(hs) == 1 and hs[0].node_count == 2
+
+
+def test_hotspot_id_is_stable_for_events_in_the_same_second() -> None:
+    import dataclasses
+
+    a = dataclasses.replace(pt(1, age_s=60), seq=1)
+    b = dataclasses.replace(pt(1, 0.001, age_s=60), seq=2)  # same node, same second, later seq
+    ids = {build_hotspots(order, NOW)[0].id for order in ([a, b], [b, a])}
+    assert len(ids) == 1

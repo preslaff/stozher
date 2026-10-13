@@ -17,3 +17,4 @@ class EventPoint:
     confidence: int
     cn0_drop: int
     sim: bool
+    seq: int = 0  # tie-break for events in the same second: (node, seq) is stable, uuids are not

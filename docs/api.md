@@ -142,6 +142,7 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | Roads | `POST /v1/road-closures`, `GET /v1/road-closures` | Closures used by routing | operator |
 | Routes | `POST /v1/watched-routes`, `GET /v1/watched-routes`, `GET/PATCH/DELETE /v1/watched-routes/{id}` **(new)** | Watch a route: current trust per segment, alerts when it is affected (section 7) | responder |
 | Live | `GET /v1/stream/alerts` | SSE: alerts, hotspot and trust changes, new events | responder |
+| Live | `GET /v1/alerts?limit&after` **(new)** | Recent alerts, newest first (or after a cursor, oldest first) | responder |
 | Webhooks | `POST/GET/DELETE /v1/webhooks` **(new)** | Register, list, remove push subscriptions (section 6) | operator |
 | Sync | `GET /v1/sync/events?since=<cursor>` | Field kit catch-up | system |
 | Sync | `POST /v1/sync/upload` | Field kit uploads local events and operator changes | system |
@@ -188,8 +189,12 @@ node identities.
 
 Two ways, both deterministic and independent of the assistant:
 
-- **SSE**: `GET /v1/stream/alerts` (responder and above). Supports `Last-Event-ID` to
-  resume; events carry an increasing `id`.
+- **SSE**: `GET /v1/stream/alerts` (responder and above). Event `hello` (server time, last alert
+  id), `alert` (the alert JSON; `id` is the cursor, resume with `Last-Event-ID` or `?after=`) and
+  `refresh` (analytics finished a run: reload hotspots, trust and events). Browsers' `EventSource`
+  cannot send `X-API-Key`; use `fetch` streaming. Alerts are raised by deterministic rules in
+  `services/worker/alerts.py`: `hotspot_new`, `hotspot_escalated` (severity crosses 0.7) and
+  `hotspot_cleared`, each once per hotspot.
 - **Webhooks**: `POST /v1/webhooks` with `url` (https), `events` (list of `alert`,
   `hotspot`, `trust_change`, `route`), optional `bbox`, and `min_level`. The response returns a
   `secret` once. Deliveries are JSON `POST`s with headers `X-Stozher-Event`,

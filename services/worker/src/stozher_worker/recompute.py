@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from stozher_api.models import Event, Hotspot, HotspotEvent, Node, TrustCell
+from stozher_api.models import Alert, Event, Hotspot, HotspotEvent, Node, TrustCell
 
+from .alerts import Previous, derive_alerts
 from .cells import build_cells
 from .hotspots import HotspotParams, build_hotspots
 from .points import EventPoint
@@ -21,6 +23,7 @@ class Summary:
     events: int
     hotspots: int
     cells: int
+    alerts: int = 0
 
 
 async def load_points(session: AsyncSession, since: datetime) -> list[EventPoint]:
@@ -36,6 +39,7 @@ async def load_points(session: AsyncSession, since: datetime) -> list[EventPoint
             Event.confidence,
             Event.features["cn0_drop"].astext,
             Event.sim,
+            Event.seq,
         )
         .join(Node, Node.id == Event.node_id)
         .where(Event.observed_at >= since, Event.msg_type.in_(ANALYSED_TYPES))
@@ -53,6 +57,7 @@ async def load_points(session: AsyncSession, since: datetime) -> list[EventPoint
             confidence=r[7],
             cn0_drop=int(r[8] or 0),
             sim=r[9],
+            seq=r[10],
         )
         for r in rows
     ]
@@ -65,6 +70,10 @@ async def recompute(
     hotspots = build_hotspots(points, now, params)
     cells = build_cells([p for p in points if now - p.observed_at <= TRUST_LOOKBACK], now)
 
+    previous = {
+        r.id: Previous(r.state, r.severity)
+        for r in (await session.execute(select(Hotspot.id, Hotspot.state, Hotspot.severity))).all()
+    }
     await session.execute(delete(HotspotEvent))
     await session.execute(delete(Hotspot))
     await session.execute(delete(TrustCell))
@@ -107,5 +116,21 @@ async def recompute(
                 sim=c.sim,
             )
         )
+    new_alerts = derive_alerts(previous, hotspots)
+    for a in new_alerts:  # unique dedupe key: each (kind, hotspot) alerts once
+        await session.execute(
+            pg_insert(Alert)
+            .values(
+                level=a.level,
+                kind=a.kind,
+                message=a.message,
+                hotspot_id=a.hotspot_id,
+                area=a.area,
+                sim=a.sim,
+                dedupe_key=a.dedupe_key,
+                delivered={"stream": True},
+            )
+            .on_conflict_do_nothing(index_elements=["dedupe_key"])
+        )
     await session.commit()
-    return Summary(len(points), len(hotspots), len(cells))
+    return Summary(len(points), len(hotspots), len(cells), len(new_alerts))

@@ -148,3 +148,38 @@ async def test_stale_evidence_leaves_the_grid(client):  # type: ignore[no-untype
     assert (await client.get("/v1/hotspots", headers=hdr(client, "responder"))).json()["items"][0][
         "state"
     ] == "closed"
+
+
+async def test_alerts_are_raised_once_listed_and_streamed(client):  # type: ignore[no-untyped-def]
+    from stozher_api.jobs import enqueue
+    from stozher_api.routes.alerts import StreamState, poll
+
+    a = await _node(client, "a")
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        state = StreamState(last_id=0, last_refresh=None)
+        assert await poll(s, state) == []  # nothing yet; first look records the baseline
+    first = rec(seq=1, confidence=30, lat_e7=VARNA[0], lon_e7=VARNA[1])
+    await post(client, packet(first, a), ext="a")
+    await _run_worker(client)
+    await post(
+        client, packet(rec(seq=2, confidence=30, lat_e7=VARNA[0], lon_e7=VARNA[1]), a), ext="a"
+    )
+    await _run_worker(client)  # a second report lifts severity over 0.7: escalation
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        from datetime import UTC, datetime
+
+        await enqueue(s, "recompute", datetime.now(UTC))
+    await _run_worker(client)  # nothing changed: no repeat alerts
+
+    items = (await client.get("/v1/alerts", headers=hdr(client, "responder"))).json()["items"]
+    assert [i["kind"] for i in items] == ["hotspot_escalated", "hotspot_new"]  # newest first
+    assert len({i["hotspot_id"] for i in items}) == 1 and items[1]["area"]["type"] == "Polygon"
+    assert "interference detected" in items[1]["message"]
+
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        events = await poll(s, state)
+    assert [e["event"] for e in events] == ["alert", "alert", "refresh"]
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        assert await poll(s, state) == []  # nothing new on the next poll
+    assert (await client.get("/v1/stream/alerts", headers=hdr(client, "public"))).status_code == 403
+    assert (await client.get("/v1/alerts", headers=hdr(client, "public"))).status_code == 403

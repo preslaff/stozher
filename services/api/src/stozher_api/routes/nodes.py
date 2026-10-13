@@ -1,7 +1,8 @@
 """Node registration and listing (operator)."""
 
+import json
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field, field_validator
@@ -56,6 +57,7 @@ class NodeOut(BaseModel):
     status: str
     last_seen: datetime | None
     sim: bool
+    position: dict[str, Any] | None
     transport_ids: list[TransportIn]
 
 
@@ -65,6 +67,11 @@ async def _out(session, node: Node) -> NodeOut:  # type: ignore[no-untyped-def]
         .scalars()
         .all()
     )
+    pos = (
+        await session.execute(
+            select(func.ST_AsGeoJSON(Node.surveyed_position)).where(Node.id == node.id)
+        )
+    ).scalar_one()
     return NodeOut(
         id=node.id,
         name=node.name,
@@ -73,6 +80,7 @@ async def _out(session, node: Node) -> NodeOut:  # type: ignore[no-untyped-def]
         status=node.status,
         last_seen=node.last_seen,
         sim=node.kind == "sim",
+        position=json.loads(pos) if pos else None,
         transport_ids=[TransportIn(transport=t.transport, external_id=t.external_id) for t in tids],
     )  # type: ignore[arg-type]
 

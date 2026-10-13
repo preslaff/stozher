@@ -173,7 +173,7 @@ def ellipse_polygon(
 
 def hotspot_id(group: list[EventPoint]) -> uuid.UUID:
     """Stable across recomputes while the earliest event stays in the window."""
-    first = min(group, key=lambda e: (e.observed_at, str(e.id)))
+    first = min(group, key=lambda e: (e.observed_at, e.node_id, e.seq, str(e.id)))
     return uuid.uuid5(HOTSPOT_NS, str(first.id))
 
 

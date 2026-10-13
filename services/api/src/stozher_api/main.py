@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 
 from . import problems
@@ -10,7 +11,7 @@ from .auth import hash_key, parse_prefix
 from .config import Settings, get_settings
 from .db import make_engine, make_sessionmaker
 from .models import ApiKey
-from .routes import events, health, hotspots, ingest, me, nodes, sim, trust
+from .routes import alerts, events, health, hotspots, ingest, me, nodes, sim, trust
 
 log = logging.getLogger("stozher.api")
 
@@ -53,6 +54,13 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     app.state.engine = make_engine(settings.database_url, **engine_kw)
     app.state.sessionmaker = make_sessionmaker(app.state.engine)
     problems.install(app)
+    origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_headers=["X-API-Key", "Content-Type", "Last-Event-ID"],
+    )
     app.include_router(health.router)
     app.include_router(me.router)
     app.include_router(ingest.router)
@@ -61,6 +69,7 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     app.include_router(hotspots.router)
     app.include_router(trust.router)
     app.include_router(sim.router)
+    app.include_router(alerts.router)
     return app
 
 

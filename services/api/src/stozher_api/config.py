@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     # Accept records whose node clock is within this window of server time.
     replay_window_s: int = 2 * 86400
     env_name: str = "live"
+    # Browser origins allowed to call the API (the dashboard); comma separated.
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
 
 @lru_cache
