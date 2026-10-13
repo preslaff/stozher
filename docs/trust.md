@@ -26,7 +26,7 @@ event and summary (test records are ignored) and rebuilds the derived tables
 
 ## Trust score (per H3 res-8 cell)
 
-Each event adds its weight to every cell within 4 rings of its own cell (about 3 km).
+Each event adds its weight to every cell within 4 rings of its own cell (about 4 km).
 For one cell, with `adv` the adverse weight, `sup` the supporting weight and `ratio = adv/(adv+sup)`:
 
 - no evidence: `UNKNOWN`, score `null`, confidence 0 (no honest number exists);

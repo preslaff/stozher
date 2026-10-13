@@ -1,15 +1,17 @@
 """GET /v1/trust, /v1/trust/grid (public). Coarse data only: no node identities."""
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import h3
 from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 
 from ..auth import Principal, require_role
 from ..models import TrustCell
 from ..problems import ApiError
+from ..route_service import evaluate, route_json
 from .geo import age_s, parse_bbox
 
 router = APIRouter(prefix="/v1/trust")
@@ -96,3 +98,31 @@ async def trust_grid(
         "data_age_s": age_s(newest, datetime.now(UTC)),
         "sim": any(c.sim for c in cells),
     }
+
+
+class LineStringIn(BaseModel):
+    """A GeoJSON LineString: [lon, lat] positions, at most 500."""
+
+    type: Literal["LineString"]
+    coordinates: list[list[float]] = Field(min_length=2, max_length=500)
+
+    @field_validator("coordinates")
+    @classmethod
+    def _positions(cls, v: list[list[float]]) -> list[list[float]]:
+        for p in v:
+            if len(p) < 2 or not (-180 <= p[0] <= 180 and -90 <= p[1] <= 90):
+                raise ValueError("each position must be [lon, lat] within -180..180 and -90..90")
+        return [p[:2] for p in v]
+
+
+@router.post("/route")
+async def trust_route(
+    body: LineStringIn,
+    request: Request,
+    buffer_m: float = Query(default=0, ge=0, le=2000, description="corridor half-width in metres"),
+    _: Principal = Depends(public),
+) -> dict[str, Any]:
+    """Trust along a route: segments with their own trust, and the worst segment as the overall result."""
+    async with request.app.state.sessionmaker() as session:
+        rt = await evaluate(session, body.coordinates, buffer_m)
+    return route_json(rt)
