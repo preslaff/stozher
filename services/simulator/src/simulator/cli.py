@@ -63,6 +63,45 @@ async def _reset(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_packet(args: argparse.Namespace) -> int:
+    """Print a signed witness record as mesh text (STZ1:<hex>) for a radio or ingest test.
+
+    Test data only: the node must be registered with the same master key (the default is the
+    well-known test key, never a real one).
+    """
+    import time
+
+    from stozher_core.codec import encode_hex
+    from stozher_core.crypto import derive_keys
+    from stozher_core.record import EventClass, MsgType, Osnma, WitnessRecord
+
+    cls = EventClass[args.cls.upper()]
+    rec = WitnessRecord(
+        type=MsgType.HEARTBEAT if cls is EventClass.NORMAL else MsgType.EVENT,
+        seq=args.seq,
+        key_id=0,
+        event_class=cls,
+        confidence=0 if cls is EventClass.NORMAL else args.confidence,
+        osnma=Osnma.UNKNOWN,
+        stationary=True,
+        rx_jamming=cls is EventClass.JAMMING,
+        rx_spoofing=cls is EventClass.SPOOFING,
+        tamper=False,
+        mesh=True,
+        lat_e7=round(args.lat * 1e7),
+        lon_e7=round(args.lon * 1e7),
+        timestamp=int(time.time()),
+        duration_s=30,
+        cn0_mean=30,
+        cn0_drop=14 if cls is not EventClass.NORMAL else 0,
+        cn0_spread=5,
+        agc=180 if cls is EventClass.JAMMING else 100,
+    )
+    keys = derive_keys(bytes.fromhex(args.master_key), args.node_id, 0)
+    print("STZ1:" + encode_hex(rec, args.node_id, keys))
+    return 0
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         prog="simulator", description="STOZHER network simulator (data only)"
@@ -80,5 +119,21 @@ def main() -> None:
     r.add_argument("--keep", action="store_true", help="do not reset earlier simulated data first")
     r.add_argument("--out", help="write the report as JSON")
     sub.add_parser("reset", help="delete all simulated data")
+    k = sub.add_parser("packet", help="print one signed record as STZ1:<hex> mesh text (test data)")
+    k.add_argument("--node-id", type=int, required=True, help="the node's uint32 id from the API")
+    k.add_argument(
+        "--seq", type=int, required=True, help="sequence number; never reuse one per node"
+    )
+    k.add_argument(
+        "--master-key",
+        default="000102030405060708090a0b0c0d0e0f",
+        help="32 hex chars (test key by default)",
+    )
+    k.add_argument("--cls", default="jamming", choices=["normal", "jamming", "spoofing"])
+    k.add_argument("--confidence", type=int, default=24)
+    k.add_argument("--lat", type=float, default=43.1989)
+    k.add_argument("--lon", type=float, default=27.9166)
     args = ap.parse_args()
+    if args.cmd == "packet":
+        sys.exit(cmd_packet(args))
     sys.exit(asyncio.run(_run(args) if args.cmd == "run" else _reset(args)))

@@ -24,3 +24,5 @@ Every library, tool, model and dataset used, with licence. Add a row when you ad
 | MapLibre GL JS | library | BSD-3 | web/dashboard | map rendering |
 | Vite, Vitest, TypeScript, ESLint (typescript-eslint, react-hooks), Prettier | tooling | MIT / Apache-2.0 | web/dashboard | |
 | OpenStreetMap raster tiles | dataset | ODbL (© OpenStreetMap contributors) | web/dashboard | dev default only, subject to the OSM tile usage policy; the field kit uses a local PMTiles extract |
+| Meshtastic Python library (+ pypubsub) | library | GPL-3.0 | services/mesh_bridge (optional `radio` extra) | bridge is GPL-3.0-or-later and isolated, HTTP only |
+| httpx | library | BSD-3 | simulator, mesh_bridge, tests | |

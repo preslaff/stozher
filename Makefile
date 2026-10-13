@@ -1,4 +1,4 @@
-.PHONY: up down field migrate test lint sim fw fw-upload worker api
+.PHONY: up down field migrate test lint sim fw fw-upload worker api bridge
 
 COMPOSE := docker compose -f infra/compose.yml
 S ?= coastal
@@ -18,7 +18,7 @@ migrate:
 lint:
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy packages/stozher_core/src services/api/src services/worker/src services/simulator/src
+	uv run mypy packages/stozher_core/src services/api/src services/worker/src services/simulator/src services/mesh_bridge/src
 	@if [ -f web/dashboard/package.json ]; then cd web/dashboard && pnpm lint; fi
 
 test: lint
@@ -30,6 +30,9 @@ api:
 
 worker:
 	uv run python -m stozher_worker
+
+bridge:  # needs STOZHER_SYSTEM_KEY; MESH_PORT=fake runs with no radio
+	uv run --package stozher-mesh-bridge --extra radio python -m mesh_bridge run
 
 sim:
 	uv run python -m simulator run $(S)
