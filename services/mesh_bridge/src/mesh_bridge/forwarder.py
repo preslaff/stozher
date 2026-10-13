@@ -34,11 +34,13 @@ class Forwarder:
         retry_max_s: float = 60.0,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        on_handled: Callable[[str, str], None] | None = None,
     ) -> None:
         self.http, self.key, self.spool = http, system_key, spool
         self.max_queue, self.dedupe_s = max_queue, dedupe_s
         self.retry_base_s, self.retry_max_s = retry_base_s, retry_max_s
         self.clock, self.sleep = clock, sleep
+        self.on_handled = on_handled  # (mesh node id, status) once the backend has answered
         self.queue: deque[dict[str, Any]] = deque()
         self.stats: dict[str, int] = {
             "seen": 0,
@@ -136,6 +138,8 @@ class Forwarder:
                 if self.rejections[reason] in (1, 10, 100):
                     log.warning("backend rejected a record from %s: %s", item["from_id"], reason)
             self.last_ok_at, self.last_error = self.clock(), None
+            if self.on_handled is not None and res["status"] in ("accepted", "duplicate"):
+                self.on_handled(item["from_id"], res["status"])
             return True
         if r.status_code in (401, 403):
             self.last_error = f"api key refused ({r.status_code}); check STOZHER_SYSTEM_KEY"

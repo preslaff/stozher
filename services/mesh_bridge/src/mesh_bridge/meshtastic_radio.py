@@ -51,8 +51,8 @@ class MeshtasticRadio:
                 log.warning("radio connection lost")
             self._alive = False
 
-    def send_text(self, text: str, channel: int = 0) -> None:
-        self._iface.sendText(text, channelIndex=channel)
+    def send_text(self, text: str, channel: int = 0, dest: str | None = None) -> None:
+        self._iface.sendText(text, destinationId=dest or "^all", channelIndex=channel)
 
     def known_nodes(self) -> list[dict[str, object]]:
         out: list[dict[str, object]] = []

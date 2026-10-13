@@ -278,3 +278,119 @@ async def test_stats_do_not_shadow_the_queue_length() -> None:
     f = Forwarder(client(lambda r: httpx.Response(503)), "K")
     f.submit(msg("STZ1:" + HEX28))
     assert "queued" not in f.stats and f.stats["enqueued"] == 1 and len(f.queue) == 1
+
+
+# ---- acknowledgement pusher ------------------------------------------------------------------
+
+from mesh_bridge.acks import AckPusher  # noqa: E402
+
+ACK_ITEM = {"text": "STZA1:" + "ab" * 79, "key_id": 0}
+
+
+def pusher(handler, radio: FakeRadio | None = None, now=None, **kw):  # type: ignore[no-untyped-def]
+    radio = radio or FakeRadio()
+    if not radio.alive:
+        radio.start(lambda m: None)
+    clock = (lambda: now[0]) if now is not None else (lambda: 0.0)
+    return AckPusher(client(handler), "K", radio, clock=clock, sleep=no_sleep, **kw), radio
+
+
+async def test_ack_is_sent_directly_to_the_node_after_a_delay() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        return httpx.Response(200, json={"items": [ACK_ITEM]})
+
+    now = [0.0]
+    p, radio = pusher(handler, now=now, delay_s=15)
+    p.note("!a1b2c3d4")
+    assert await p.tick() == 0 and not radio.sent  # not due yet: records are coalesced first
+    now[0] = 16
+    assert await p.tick() == 1
+    assert radio.sent == [(ACK_ITEM["text"], 0)] and radio.sent_to == [
+        "!a1b2c3d4"
+    ]  # a direct message
+    assert (
+        seen[0].url.params["transport"] == "mesh"
+        and seen[0].url.params["external_id"] == "!a1b2c3d4"
+    )
+    assert seen[0].headers["x-api-key"] == "K"
+
+
+async def test_many_records_make_one_ack_and_the_rate_limit_holds() -> None:
+    calls = 0
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(200, json={"items": [ACK_ITEM]})
+
+    now = [0.0]
+    p, radio = pusher(handler, now=now, delay_s=10, min_interval_s=120)
+    for _ in range(5):
+        p.note("!a1b2c3d4")  # five records, or repeats from a node that missed the last ack
+    now[0] = 10
+    await p.tick()
+    assert calls == 1 and len(radio.sent) == 1
+    p.note("!a1b2c3d4")  # more traffic right after: must wait for the per-node interval
+    now[0] = 30
+    assert await p.tick() == 0
+    now[0] = 130
+    assert await p.tick() == 1 and calls == 2
+    p.note("!ffffffff")  # other nodes are limited independently
+    now[0] = 145
+    assert await p.tick() == 1
+
+
+async def test_unregistered_node_signing_off_and_errors() -> None:
+    now = [0.0]
+    codes = iter([404, 503])
+    p, radio = pusher(lambda r: httpx.Response(next(codes)), now=now, delay_s=0)
+    p.note("!00000001")
+    assert (
+        await p.tick() == 1 and not radio.sent and p.disabled_reason is None
+    )  # nothing to acknowledge
+    p.note("!00000002")
+    assert await p.tick() == 1 and p.disabled_reason and "STOZHER_ED25519_SEED" in p.disabled_reason
+    p.note("!00000003")
+    assert p.due == {}  # with signing off the pusher stops scheduling at all
+
+
+async def test_outage_or_a_down_radio_retries_later_and_loses_nothing() -> None:
+    state = {"fail": True}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if state["fail"]:
+            raise httpx.ConnectError("down")
+        return httpx.Response(200, json={"items": [ACK_ITEM]})
+
+    now = [0.0]
+    p, radio = pusher(handler, now=now, delay_s=0, retry_s=30)
+    p.note("!a1b2c3d4")
+    assert await p.tick() == 0 and p.fetch_errors == 1 and "!a1b2c3d4" in p.due
+    state["fail"] = False
+    radio.close()  # the radio dropped as well
+    now[0] = 31
+    assert await p.tick() == 0 and not radio.sent and "!a1b2c3d4" in p.due
+    radio.start(lambda m: None)
+    now[0] = 62
+    assert await p.tick() == 1 and len(radio.sent) == 1
+
+
+async def test_forwarder_notifies_only_for_handled_records() -> None:
+    answers = iter(["accepted", "duplicate", "rejected"])
+    noted: list[tuple[str, str]] = []
+    f = Forwarder(
+        client(lambda r: httpx.Response(202, json={"status": next(answers), "reason": "bad_tag"})),
+        "K",
+        sleep=no_sleep,
+        on_handled=lambda n, s: noted.append((n, s)),
+    )
+    for i in range(3):
+        f.submit(msg("STZ1:" + f"{i + 1:02x}" * 28, from_id=f"!0000000{i}"))
+    await drain(f)
+    assert noted == [
+        ("!00000000", "accepted"),
+        ("!00000001", "duplicate"),
+    ]  # a rejection earns no ack

@@ -214,3 +214,19 @@ class Alert(Base):
     delivered: Mapped[Any] = mapped_column(JSONB, default=dict)
     sim: Mapped[bool] = mapped_column(Boolean, default=False)
     dedupe_key: Mapped[str] = mapped_column(String(80), unique=True)
+
+
+class AckRecord(Base):
+    """A cloud-signed acknowledgement (docs/control.md). Reused while the node's state is unchanged."""
+
+    __tablename__ = "acks"
+    __table_args__ = (UniqueConstraint("node_id", "key_id", "cloud_key_id", "max_seq", "mask"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    node_id: Mapped[int] = mapped_column(ForeignKey("nodes.id"))
+    key_id: Mapped[int] = mapped_column(SmallInteger)
+    cloud_key_id: Mapped[int] = mapped_column(SmallInteger)
+    max_seq: Mapped[int] = mapped_column(Integer)
+    mask: Mapped[int] = mapped_column(Integer)
+    signed_at: Mapped[datetime] = mapped_column(TS)
+    signature: Mapped[bytes] = mapped_column(LargeBinary)

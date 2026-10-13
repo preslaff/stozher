@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from .acks import AckPusher
 from .forwarder import Forwarder
 from .health import serve_health
 from .protocol import MeshText
@@ -42,10 +43,10 @@ class RadioSupervisor:
     def alive(self) -> bool:
         return self.radio is not None and self.radio.alive
 
-    def send_text(self, text: str, channel: int = 0) -> None:
+    def send_text(self, text: str, channel: int = 0, dest: str | None = None) -> None:
         if self.radio is None or not self.radio.alive:
             raise RuntimeError("radio not connected")
-        self.radio.send_text(text, channel)
+        self.radio.send_text(text, channel, dest)
 
     def known_nodes(self) -> list[dict[str, object]]:
         return self.radio.known_nodes() if self.radio else []
@@ -80,13 +81,20 @@ async def run_bridge(
     responder_key: str | None = None,
     relay_sim: bool = False,
     relay_interval_s: float = 60.0,
+    send_acks: bool = True,
     health_port: int | None = None,
     http: httpx.AsyncClient | None = None,
 ) -> None:
     own_http = http is None
     http = http or httpx.AsyncClient(base_url=api_url, timeout=15)
     loop = asyncio.get_running_loop()
-    forwarder = Forwarder(http, system_key, spool=spool)
+    pusher_ref: list[AckPusher] = []
+
+    def handled(from_id: str, status: str) -> None:
+        if pusher_ref:
+            pusher_ref[0].note(from_id, status)
+
+    forwarder = Forwarder(http, system_key, spool=spool, on_handled=handled)
 
     def on_text(msg: MeshText) -> None:  # called from the radio library's thread
         loop.call_soon_threadsafe(forwarder.submit, msg)
@@ -99,6 +107,9 @@ async def run_bridge(
         if responder_key
         else None
     )
+    acks = AckPusher(http, system_key, supervisor) if send_acks else None
+    if acks:
+        pusher_ref.append(acks)
     started = time.monotonic()
 
     def snapshot() -> dict[str, Any]:
@@ -118,6 +129,14 @@ async def run_bridge(
             "alert_relay": None
             if relay is None
             else {"sent": relay.sent, "skipped": relay.skipped, "throttled": relay.throttled},
+            "acks": None
+            if acks is None
+            else {
+                "sent": acks.sent,
+                "waiting": len(acks.due),
+                "fetch_errors": acks.fetch_errors,
+                "disabled": acks.disabled_reason,
+            },
             "uptime_s": round(time.monotonic() - started),
         }
 
@@ -125,6 +144,8 @@ async def run_bridge(
     tasks = [asyncio.create_task(forwarder.run()), asyncio.create_task(supervisor.run())]
     if relay:
         tasks.append(asyncio.create_task(relay.run()))
+    if acks:
+        tasks.append(asyncio.create_task(acks.run()))
     try:
         await asyncio.gather(*tasks)
     finally:

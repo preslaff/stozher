@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     stozher_kek: str = ""
     # Creates the first admin key on startup if no admin key exists.
     stozher_bootstrap_admin_key: str = ""
+    # Ed25519 private seed (32 bytes as 64 hex) that signs acknowledgements; absent = acks disabled.
+    stozher_ed25519_seed: str = ""
+    cloud_key_id: int = 1
     # Accept records whose node clock is within this window of server time.
     replay_window_s: int = 2 * 86400
     env_name: str = "live"

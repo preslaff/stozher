@@ -66,6 +66,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 responder_key=os.environ.get("STOZHER_RESPONDER_KEY") or None,
                 relay_sim=args.relay_sim,
                 relay_interval_s=args.relay_interval,
+                send_acks=not args.no_acks,
                 health_port=args.health_port,
             )
         )
@@ -121,6 +122,11 @@ def main() -> None:
         "--spool", default="~/.local/state/stozher/mesh-spool.jsonl", help="store-and-forward file"
     )
     r.add_argument("--no-spool", action="store_true")
+    r.add_argument(
+        "--no-acks",
+        action="store_true",
+        help="do not send cloud-signed acknowledgements back to nodes",
+    )
     r.add_argument(
         "--relay-sim",
         action="store_true",

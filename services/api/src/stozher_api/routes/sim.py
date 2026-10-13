@@ -8,7 +8,17 @@ from sqlalchemy import delete, select
 
 from ..auth import Principal, require_role
 from ..jobs import enqueue
-from ..models import Alert, AuditLog, Event, HotspotEvent, Node, NodeKey, RawMessage, TransportId
+from ..models import (
+    AckRecord,
+    Alert,
+    AuditLog,
+    Event,
+    HotspotEvent,
+    Node,
+    NodeKey,
+    RawMessage,
+    TransportId,
+)
 
 router = APIRouter(prefix="/v1/sim")
 operator = require_role(minimum="operator")
@@ -24,6 +34,7 @@ async def reset(request: Request, p: Principal = Depends(operator)) -> dict[str,
             await session.execute(delete(Event).where(Event.node_id.in_(sim_nodes)))
         ).rowcount
         await session.execute(delete(Alert).where(Alert.sim.is_(True)))
+        await session.execute(delete(AckRecord).where(AckRecord.node_id.in_(sim_nodes)))
         await session.execute(delete(RawMessage).where(RawMessage.transport == "sim"))
         await session.execute(delete(NodeKey).where(NodeKey.node_id.in_(sim_nodes)))
         await session.execute(delete(TransportId).where(TransportId.node_id.in_(sim_nodes)))

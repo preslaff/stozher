@@ -8,7 +8,14 @@ from ..models import Job
 router = APIRouter()
 
 # Optional modules report present/absent; none of them are wired yet.
-OPTIONAL_MODULES = ("mesh_bridge", "kineis_adapter", "worker", "assistant", "copernicus")
+OPTIONAL_MODULES = (
+    "ack_signing",
+    "mesh_bridge",
+    "kineis_adapter",
+    "worker",
+    "assistant",
+    "copernicus",
+)
 
 
 @router.get("/health")
@@ -20,6 +27,8 @@ async def health(request: Request) -> dict[str, object]:
     except Exception:
         db = "down"
     modules = {m: "absent" for m in OPTIONAL_MODULES}
+    if request.app.state.signer is not None:
+        modules["ack_signing"] = "present"
     try:
         async with request.app.state.sessionmaker() as session:
             last = (

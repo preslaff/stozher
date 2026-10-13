@@ -1,0 +1,143 @@
+{
+  "description": "Golden vectors for docs/control.md (Ed25519 via openssl). Test seed only.",
+  "cloud_key_id": 1,
+  "seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "public_key_hex": "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
+  "valid": [
+    {
+      "name": "ack_basic",
+      "cloud": 1,
+      "node": 1,
+      "key": 0,
+      "max_seq": 5,
+      "mask": 0,
+      "at": 1795860000,
+      "message_hex": "a1010000000100000500006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302",
+      "text": "STZA1:a1010000000100000500006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302"
+    },
+    {
+      "name": "ack_with_selective_mask",
+      "cloud": 1,
+      "node": 115,
+      "key": 2,
+      "max_seq": 10,
+      "mask": 32773,
+      "at": 1795860123,
+      "message_hex": "a1010000007302000a80056b0aa69b8d5b38ecb776580ad5c9bd172c81dc4fffc04c364c0ac6c69955b8226c3860cf5af4df8b04e4c5299c85953cf43ca0ceec64050073580f55bd0fb35927091e0b",
+      "text": "STZA1:a1010000007302000a80056b0aa69b8d5b38ecb776580ad5c9bd172c81dc4fffc04c364c0ac6c69955b8226c3860cf5af4df8b04e4c5299c85953cf43ca0ceec64050073580f55bd0fb35927091e0b"
+    },
+    {
+      "name": "ack_nothing_received_yet",
+      "cloud": 1,
+      "node": 7,
+      "key": 0,
+      "max_seq": 0,
+      "mask": 0,
+      "at": 1795860001,
+      "message_hex": "a1010000000700000000006b0aa6218f4ef3ab9335c851d2198a26360425c480b92a9f784f0145c27694d937fa9605884f882b4919baa1cc3655cbb451dd3959d00a9c6c83f9e35af24f53f331bf0b",
+      "text": "STZA1:a1010000000700000000006b0aa6218f4ef3ab9335c851d2198a26360425c480b92a9f784f0145c27694d937fa9605884f882b4919baa1cc3655cbb451dd3959d00a9c6c83f9e35af24f53f331bf0b"
+    },
+    {
+      "name": "ack_max_values",
+      "cloud": 1,
+      "node": 4294967295,
+      "key": 15,
+      "max_seq": 65535,
+      "mask": 65535,
+      "at": 4294967295,
+      "message_hex": "a101ffffffff0fffffffffffffffff791f20141996a621c624e78218ba86ccb4ebf408523556eea43d48286995b9776d7c4ec54d49fd88f55b1b35d85082043827481de3aea94cb4307e5fc0693500",
+      "text": "STZA1:a101ffffffff0fffffffffffffffff791f20141996a621c624e78218ba86ccb4ebf408523556eea43d48286995b9776d7c4ec54d49fd88f55b1b35d85082043827481de3aea94cb4307e5fc0693500"
+    },
+    {
+      "name": "ack_min_values",
+      "cloud": 1,
+      "node": 1,
+      "key": 0,
+      "max_seq": 0,
+      "mask": 0,
+      "at": 0,
+      "message_hex": "a101000000010000000000000000003e3e11bba4d46874e9796b622d0b6579303da2a398fa3e496043f4c5b5a42a7a4b89180a72812492fe24eac92454eea59255c1b55fe445d3afd34452bbadab0c",
+      "text": "STZA1:a101000000010000000000000000003e3e11bba4d46874e9796b622d0b6579303da2a398fa3e496043f4c5b5a42a7a4b89180a72812492fe24eac92454eea59255c1b55fe445d3afd34452bbadab0c"
+    }
+  ],
+  "invalid": [
+    {
+      "name": "bad_signature_flipped_signature_bit",
+      "reason": "bad_signature",
+      "message_hex": "a1010000000100000500006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa12397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302",
+      "text": null
+    },
+    {
+      "name": "bad_signature_flipped_node_id",
+      "reason": "bad_signature",
+      "message_hex": "a1010000000000000500006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302",
+      "text": null
+    },
+    {
+      "name": "bad_signature_flipped_max_seq",
+      "reason": "bad_signature",
+      "message_hex": "a1010000000100000400006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302",
+      "text": null
+    },
+    {
+      "name": "bad_signature_flipped_mask",
+      "reason": "bad_signature",
+      "message_hex": "a1010000000100000500016b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302",
+      "text": null
+    },
+    {
+      "name": "bad_signature_flipped_signed_at",
+      "reason": "bad_signature",
+      "message_hex": "a1010000000100000500006b0aa6213a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302",
+      "text": null
+    },
+    {
+      "name": "bad_signature_missing_context_string",
+      "reason": "bad_signature",
+      "message_hex": "a1010000000100000500006b0aa6201dad5ea21e68e1c4f90b0febe3535883f65df57bbadbb0263e9a69b7eb05ad53b22b4b23bb89af5832ca66364948b9da771a4fa315eeaca6d5166269e0b3e604",
+      "text": null
+    },
+    {
+      "name": "unknown_cloud_key",
+      "reason": "unknown_cloud_key",
+      "message_hex": "a1090000000100000500006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302",
+      "text": null
+    },
+    {
+      "name": "bad_type_wrong_version",
+      "reason": "bad_type",
+      "message_hex": "a2010000000100000500006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302",
+      "text": null
+    },
+    {
+      "name": "bad_length_truncated",
+      "reason": "bad_length",
+      "message_hex": "a1010000000100000500006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b0653",
+      "text": null
+    },
+    {
+      "name": "bad_length_extended",
+      "reason": "bad_length",
+      "message_hex": "a1010000000100000500006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b06530200",
+      "text": null
+    },
+    {
+      "name": "bad_length_empty",
+      "reason": "bad_length",
+      "message_hex": "",
+      "text": null
+    },
+    {
+      "name": "bad_text_wrong_prefix",
+      "reason": "bad_text",
+      "message_hex": null,
+      "text": "STZ1:a1010000000100000500006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302"
+    },
+    {
+      "name": "bad_hex_in_text",
+      "reason": "bad_hex",
+      "message_hex": null,
+      "text": "STZA1:zz010000000100000500006b0aa6203a8018171967050321174c5c51f3a31358927d73a6727e54aa13397e73daaa6852dc78fc09db4a2cfb48b3237e9bb6975e9fa8114a2451b11aca5f767b065302"
+    }
+  ]
+}

@@ -27,13 +27,31 @@ async def create_key(role: str, label: str) -> str:
     return full
 
 
+def gen_signing_key() -> str:
+    """A new Ed25519 seed for STOZHER_ED25519_SEED, and the public key to provision on nodes."""
+    import os
+
+    from .signing import load_signer
+
+    seed = os.urandom(32).hex()
+    signer = load_signer(seed, 1)
+    assert signer is not None
+    return f"STOZHER_ED25519_SEED={seed}\npublic_key_hex={signer.public_key_hex}  (flash this on nodes, with cloud_key_id 1)"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(prog="stozher_api.cli")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser(
+        "gen-signing-key", help="print a new acknowledgement signing seed and its public key"
+    )
     c = sub.add_parser("create-key")
     c.add_argument("--role", required=True, choices=sorted(ROLES))
     c.add_argument("--label", required=True)
     args = ap.parse_args()
+    if args.cmd == "gen-signing-key":
+        print(gen_signing_key())
+        return
     print(asyncio.run(create_key(args.role, args.label)))
 
 

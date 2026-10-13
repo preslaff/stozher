@@ -11,7 +11,8 @@ from .auth import hash_key, parse_prefix
 from .config import Settings, get_settings
 from .db import make_engine, make_sessionmaker
 from .models import ApiKey
-from .routes import alerts, events, health, hotspots, ingest, me, nodes, sim, trust
+from .routes import alerts, control, events, health, hotspots, ingest, me, nodes, sim, trust
+from .signing import load_signer
 
 log = logging.getLogger("stozher.api")
 
@@ -51,6 +52,7 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
 
     app = FastAPI(title="STOZHER API", version="1.0.0", lifespan=lifespan)
     app.state.settings = settings
+    app.state.signer = load_signer(settings.stozher_ed25519_seed, settings.cloud_key_id)
     app.state.engine = make_engine(settings.database_url, **engine_kw)
     app.state.sessionmaker = make_sessionmaker(app.state.engine)
     problems.install(app)
@@ -70,6 +72,7 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     app.include_router(trust.router)
     app.include_router(sim.router)
     app.include_router(alerts.router)
+    app.include_router(control.router)
     return app
 
 

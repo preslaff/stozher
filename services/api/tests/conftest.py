@@ -45,15 +45,19 @@ def database() -> Iterator[str]:
     yield TEST_URL
 
 
-@pytest_asyncio.fixture
-async def client(database: str) -> AsyncIterator[httpx.AsyncClient]:
-    settings = Settings(database_url=database, stozher_kek=KEK)
+TEST_SEED = bytes(range(32)).hex()  # the public test seed of tests/vectors/ack_messages.json
+
+
+async def _client(database: str, seed: str) -> AsyncIterator[httpx.AsyncClient]:
+    settings = Settings(
+        database_url=database, stozher_kek=KEK, stozher_ed25519_seed=seed, cloud_key_id=1
+    )
     app = create_app(settings, poolclass=NullPool)
     async with app.router.lifespan_context(app):
         async with app.state.sessionmaker() as s:
             await s.execute(
                 text(
-                    "TRUNCATE alerts, jobs, trust_cells, hotspot_events, hotspots, audit_log, api_keys, events, raw_messages, transport_ids, node_keys, nodes RESTART IDENTITY CASCADE"
+                    "TRUNCATE acks, alerts, jobs, trust_cells, hotspot_events, hotspots, audit_log, api_keys, events, raw_messages, transport_ids, node_keys, nodes RESTART IDENTITY CASCADE"
                 )
             )
             keys = {}
@@ -67,6 +71,19 @@ async def client(database: str) -> AsyncIterator[httpx.AsyncClient]:
             c.keys = keys  # type: ignore[attr-defined]
             c.app = app  # type: ignore[attr-defined]
             yield c
+
+
+@pytest_asyncio.fixture
+async def client(database: str) -> AsyncIterator[httpx.AsyncClient]:
+    """No signing key configured: acknowledgements are disabled (the optional module is absent)."""
+    async for c in _client(database, ""):
+        yield c
+
+
+@pytest_asyncio.fixture
+async def signed_client(database: str) -> AsyncIterator[httpx.AsyncClient]:
+    async for c in _client(database, TEST_SEED):
+        yield c
 
 
 def now_ts() -> int:
