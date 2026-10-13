@@ -52,7 +52,11 @@ class MeshtasticRadio:
             self._alive = False
 
     def send_text(self, text: str, channel: int = 0, dest: str | None = None) -> None:
-        self._iface.sendText(text, destinationId=dest or "^all", channelIndex=channel)
+        # A direct message asks for a link-layer ack, so the radio retransmits until the node confirms:
+        # the shared LoRa channel loses a large share of single-shot packets (measured on the bench).
+        self._iface.sendText(
+            text, destinationId=dest or "^all", wantAck=dest is not None, channelIndex=channel
+        )
 
     def known_nodes(self) -> list[dict[str, object]]:
         out: list[dict[str, object]] = []

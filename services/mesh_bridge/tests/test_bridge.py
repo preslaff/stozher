@@ -394,3 +394,19 @@ async def test_forwarder_notifies_only_for_handled_records() -> None:
         ("!00000000", "accepted"),
         ("!00000001", "duplicate"),
     ]  # a rejection earns no ack
+
+
+def test_direct_messages_ask_for_a_link_layer_ack_but_broadcasts_do_not() -> None:
+    """The shared LoRa channel drops many single-shot packets (measured on the bench), so a message
+    for one node uses Meshtastic's own retransmit-until-acknowledged mode. Alerts are broadcasts."""
+    from unittest.mock import MagicMock
+
+    from mesh_bridge.meshtastic_radio import MeshtasticRadio
+
+    radio = MeshtasticRadio("/dev/null")
+    radio._iface = MagicMock()
+    radio.send_text("STZA1:00", 0, "!bdf0a4b0")
+    radio.send_text("STOZHER CRITICAL: x", 0)
+    direct, broadcast = radio._iface.sendText.call_args_list
+    assert direct.kwargs == {"destinationId": "!bdf0a4b0", "wantAck": True, "channelIndex": 0}
+    assert broadcast.kwargs == {"destinationId": "^all", "wantAck": False, "channelIndex": 0}

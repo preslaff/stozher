@@ -53,7 +53,9 @@ Setting `STOZHER_RESPONDER_KEY` also relays alerts to the mesh (below).
   bridge fetches that node's latest cloud-signed ack (`GET /v1/acks`, system key) and sends it back as a
   direct `STZA1:` message (docs/control.md). Records are coalesced (15 s) and each node gets at most one
   ack per 120 s. A duplicate arrival means the node missed the last ack, so it earns another within the
-  same limit. The bridge only relays: it cannot sign, and nodes verify with the cloud public key. Without
+  same limit. Acks are sent as direct messages with Meshtastic's link-layer ack on, so the radio retransmits
+  until the node confirms: on the bench, single-shot direct messages were lost about half the time on the
+  shared LoRa channel, and with the link-layer ack 4 of 4 arrived. The bridge only relays: it cannot sign, and nodes verify with the cloud public key. Without
   `STOZHER_ED25519_SEED` on the API the pusher turns itself off with one warning; `--no-acks` disables it.
 
 ## Health
