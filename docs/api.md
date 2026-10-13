@@ -140,6 +140,7 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | POI | `GET /v1/poi/{id}/access?from=lat,lon` | Route with per-segment trust and nearby damage | responder |
 | POI | `GET /v1/poi/nearest?type&from&avoid=spoofed,jammed` | Nearest reachable point avoiding interference zones | responder |
 | Roads | `POST /v1/road-closures`, `GET /v1/road-closures` | Closures used by routing | operator |
+| Routes | `POST /v1/watched-routes`, `GET /v1/watched-routes`, `GET/PATCH/DELETE /v1/watched-routes/{id}` **(new)** | Watch a route: current trust per segment, alerts when it is affected (section 7) | responder |
 | Live | `GET /v1/stream/alerts` | SSE: alerts, hotspot and trust changes, new events | responder |
 | Webhooks | `POST/GET/DELETE /v1/webhooks` **(new)** | Register, list, remove push subscriptions (section 6) | operator |
 | Sync | `GET /v1/sync/events?since=<cursor>` | Field kit catch-up | system |
@@ -175,7 +176,7 @@ Two ways, both deterministic and independent of the assistant:
 - **SSE**: `GET /v1/stream/alerts` (responder and above). Supports `Last-Event-ID` to
   resume; events carry an increasing `id`.
 - **Webhooks**: `POST /v1/webhooks` with `url` (https), `events` (list of `alert`,
-  `hotspot`, `trust_change`), optional `bbox`, and `min_level`. The response returns a
+  `hotspot`, `trust_change`, `route`), optional `bbox`, and `min_level`. The response returns a
   `secret` once. Deliveries are JSON `POST`s with headers `X-Stozher-Event`,
   `X-Stozher-Delivery` (unique id) and `X-Stozher-Signature` (HMAC-SHA256 of the raw body
   with the secret, hex). Consumers verify the signature and deduplicate by delivery id.
@@ -186,9 +187,120 @@ Two ways, both deterministic and independent of the assistant:
 Webhook payloads for `public`-visible changes (`trust_change`) contain the same coarse
 fields as the trust endpoints.
 
-## 7. Open points
+## 7. Watched routes **(new)**
+
+A watched route turns "is my route trustworthy?" into a standing question. The user (or a
+consuming system) submits a route; STOZHER reports its trust per segment now and raises an
+alert when a hotspot or trust change affects it. STOZHER does **not** navigate, and it
+never receives or stores a live position: matching a vehicle to the route is done on the
+client's device.
+
+### Create
+
+`POST /v1/watched-routes` (responder and above)
+
+```json
+{
+  "name": "Port to ring road",
+  "geometry": {"type": "LineString", "coordinates": [[27.91, 43.20], [27.95, 43.22]]},
+  "buffer_m": 300,
+  "min_level": "degraded",
+  "notify": {"sse": true, "webhook_ids": ["..."], "mesh": false},
+  "expires_at": "2026-11-29T18:00:00Z",
+  "asset_type": "road_vehicle"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `geometry` | GeoJSON LineString, EPSG:4326, at most 500 vertices |
+| `buffer_m` | Corridor half-width, default 200, range 50–2000. Distances use geodesics |
+| `min_level` | Lowest trust state that alerts: `degraded` (default), `jammed`, `spoofed` |
+| `notify` | Channels. `sse` is on by default; `webhook_ids` must belong to the caller's key; `mesh` sends a short text alert via the mesh bridge when present, otherwise it is skipped and logged once |
+| `expires_at` | Default now + 24 h, maximum now + 7 days. Expired watches are deleted, not archived |
+| `asset_type` | Optional; selects playbook text for alerts |
+
+`201` returns the watch `id` plus the same body as the status view below.
+
+### Status
+
+`GET /v1/watched-routes/{id}` returns the current evaluation:
+
+```json
+{
+  "id": "...",
+  "overall": {"state": "DEGRADED", "score": 41, "confidence": 0.74,
+              "data_age_s": 120, "independent_sources": 2},
+  "segments": [
+    {"index": 0, "geometry": {"type": "LineString", "coordinates": []},
+     "state": "TRUSTED", "score": 91, "confidence": 0.8},
+    {"index": 1, "geometry": {"type": "LineString", "coordinates": []},
+     "state": "JAMMED", "score": 9, "confidence": 0.7, "hotspot_ids": ["..."]}
+  ],
+  "alternatives": [],
+  "sources": ["node:expert", "node:mesh"],
+  "sim": false,
+  "evaluated_at": "2026-11-28T10:00:00Z"
+}
+```
+
+Segments are the route cut at H3 (res 8) cell boundaries and merged where the state is
+equal; the corridor is the buffered geometry. `overall` is the worst segment state, with
+`score` and `confidence` computed by `stozher_core.trust`. `alternatives` lists up to 3
+routes that avoid affected cells, each with its own per-segment trust; it is empty when no
+routing engine is configured (optional module, degrades silently).
+
+### Alerts
+
+When the worker recomputes hotspots or trust cells and a watched corridor crosses an
+affected cell, it creates an alert (`kind = route_affected`) through the normal alert
+pipeline. Evaluation is deterministic, with no assistant in the path. An alert is sent when:
+the worst state on the route first reaches `min_level`; the worst state gets worse; or
+the route returns below `min_level` (`kind = route_cleared`). Repeated recomputes with no
+change do not repeat alerts. Alert payload:
+
+```json
+{
+  "kind": "route_affected",
+  "route_id": "...",
+  "level": "warning",
+  "segments": [1],
+  "state": "JAMMED",
+  "hotspot_ids": ["..."],
+  "message": "Route 'Port to ring road': segment 1 likely JAMMED (3 sources, data 2 min old).",
+  "evidence": "/v1/hotspots/...",
+  "sim": false
+}
+```
+
+The stream accepts `GET /v1/stream/alerts?route_id=<id>` to receive only that route's
+alerts. Mesh text alerts use the compact `STZ1:` convention and carry route name, state and
+segment index only.
+
+### Other operations
+
+| Method and path | Purpose |
+|---|---|
+| `GET /v1/watched-routes` | Caller's watches (operator and above: all, `?owner=` filter) |
+| `PATCH /v1/watched-routes/{id}` | Change `name`, `buffer_m`, `min_level`, `notify`, `expires_at`; changing `geometry` creates a new evaluation |
+| `DELETE /v1/watched-routes/{id}` | Stop watching |
+
+### Rules
+
+- Watches belong to the API key that created them; other keys get `404`, not `403`.
+- Limits: at most 20 active watches per key; the status endpoint counts against the
+  normal rate limit.
+- Privacy: the stored data is the geometry the caller sent, a name, and settings. No
+  position, device or person identifier is stored, and the audit log records
+  create/delete with the key prefix only. Do not use watches to follow moving individuals.
+- Watched routes evaluated against simulated data carry `"sim": true`.
+
+## 8. Open points
 
 - Whether PDF evidence packs ship this weekend (spec: optional).
 - Final rate-limit defaults; tune after a load run.
 - Whether `public` keys should be optional (anonymous access to `trust` with an IP-based
   limit) or always required. Default here: always required.
+- Which routing engine (if any) supplies `alternatives`: OSRM or Valhalla with an offline
+  OSM extract for the field kit.
+- Whether `mesh` alerts need a per-route throttle on top of the change-only rule.

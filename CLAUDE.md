@@ -166,9 +166,10 @@ includes `sources`, `data_age_s` and `confidence` where derived. Ingest endpoint
 return `202` with `accepted | duplicate | rejected` and a reason. Key groups: ingest
 (`kineis`, `mesh`, `direct`, `sim`), nodes, events (+ evidence pack), situation,
 hotspots (+ eo-changes, playbook), trust (point, grid, route), poi (+ access, nearest),
-road-closures, stream/alerts (SSE), webhooks, sync, acks, assistant/query, sim, me, admin
+road-closures, stream/alerts (SSE), webhooks, sync, acks, assistant/query, sim, me, watched-routes, admin
 (`api-keys` create/list/patch/rotate/revoke, `audit-log`). Key management, rate limits
-and webhook signing are specified in `docs/api.md` §3–6.
+and webhook signing are specified in `docs/api.md` §3–6, watched routes in §7. Watched
+routes store only caller-supplied geometry; STOZHER never receives live positions.
 
 **The API is a product surface for other systems**, not only the dashboard's backend:
 the dashboard, assistant and field kit are just clients of the same public `/v1` API
