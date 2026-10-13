@@ -171,6 +171,12 @@ GeoJSON FeatureCollection of H3 res-8 cells (at most 5000; larger boxes get `422
 bbox-too-large`). `GET /health` reports `ack_signing` as `present` when a signing key is configured, and `worker` as `present` when a job finished in the last
 3 minutes.
 
+### Planned: hazards and reports
+
+`POST /v1/reports`, `GET /v1/hazards`, `POST /v1/hazards/along-route`, operator decisions and the
+`reporter` role are specified in `docs/hazards.md` and are not implemented. That document is the contract;
+these endpoints move into this file when they are built.
+
 ### Trust response (shape)
 
 ```json
