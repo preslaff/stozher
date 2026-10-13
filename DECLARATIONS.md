@@ -27,3 +27,7 @@ Every library, tool, model and dataset used, with licence. Add a row when you ad
 | Meshtastic Python library (+ pypubsub) | library | GPL-3.0 | services/mesh_bridge (optional `radio` extra) | bridge is GPL-3.0-or-later and isolated, HTTP only |
 | httpx | library | BSD-3 | simulator, mesh_bridge, tests | |
 | Ed25519 via `cryptography` | library feature | Apache-2.0 / BSD | stozher_core.control, services/api | acknowledgement signatures; golden vectors cross-checked with the OpenSSL CLI |
+| Sentinel-1 GRD (processed on CDSE through openEO), Copernicus DEM GLO-30 | datasets | Copernicus Sentinel data terms (free, attribution required) | spikes/eo_flood | flood-detection spike; attribution in docs/spikes/eo-flood.md |
+| Copernicus EMS rapid-mapping products (EMSR692 AOI 05) | dataset | Copernicus EMS terms (free, attribution) | spikes/eo_flood | validation reference only, not redistributed |
+| OpenStreetMap roads via the Overpass API | dataset | ODbL | spikes/eo_flood | road overlay |
+| openeo (Python client), rasterio, scipy, shapely, pyproj, geopandas, pyogrio, matplotlib, pillow | libraries | Apache-2.0 / BSD / MIT | spikes/eo_flood (isolated script environments) | |

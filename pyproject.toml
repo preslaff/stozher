@@ -32,6 +32,7 @@ asyncio_mode = "auto"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/vectors/make_vectors.py" = ["E501"]
+"spikes/**" = ["E731", "E402"]  # throwaway analysis scripts: lambdas and sys.path imports are fine
 
 [[tool.mypy.overrides]]
 module = ["h3", "shapely", "shapely.*", "sklearn", "sklearn.*", "pyproj", "yaml", "meshtastic", "meshtastic.*", "pubsub", "pubsub.*"]
