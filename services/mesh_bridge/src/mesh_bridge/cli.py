@@ -19,6 +19,23 @@ def _radio_factory(args: argparse.Namespace):  # type: ignore[no-untyped-def]
     return lambda: MeshtasticRadio(args.port)
 
 
+def _open(args: argparse.Namespace) -> Radio:
+    """Connect for the one-shot commands, with a readable message when the port is unusable."""
+    radio: Radio = _radio_factory(args)()
+    try:
+        radio.start(lambda m: None)
+    except PermissionError:
+        sys.exit(
+            f"No permission to open {args.port}. Add yourself to the dialout group, or for this session: "
+            f"sudo setfacl -m u:$USER:rw {args.port}"
+        )
+    except OSError as exc:
+        sys.exit(
+            f"Cannot open {args.port}: {exc}. Is the T-Beam plugged in, and is nothing else (a serial monitor, the Meshtastic app) using it?"
+        )
+    return radio
+
+
 def _need_radio_extra() -> None:
     try:
         import meshtastic  # noqa: F401
@@ -60,8 +77,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_info(args: argparse.Namespace) -> int:
     """Print this radio's node ID and the nodes it has heard. Node IDs are the mesh transport IDs."""
     _need_radio_extra()
-    radio: Radio = _radio_factory(args)()
-    radio.start(lambda m: None)
+    radio = _open(args)
     try:
         print(f"this radio: {radio.node_id}")
         for n in radio.known_nodes():
@@ -77,8 +93,7 @@ def cmd_info(args: argparse.Namespace) -> int:
 def cmd_send(args: argparse.Namespace) -> int:
     """Send one text over the radio (for tests, e.g. a STZ1:<hex> record from a second T-Beam)."""
     _need_radio_extra()
-    radio: Radio = _radio_factory(args)()
-    radio.start(lambda m: None)
+    radio = _open(args)
     try:
         radio.send_text(args.text, args.channel)
         print(f"sent {len(args.text)} characters on channel {args.channel} from {radio.node_id}")
