@@ -1,4 +1,4 @@
-.PHONY: up down field migrate test lint sim fw fw-upload
+.PHONY: up down field migrate test lint sim fw fw-upload worker api
 
 COMPOSE := docker compose -f infra/compose.yml
 S ?= coastal
@@ -18,12 +18,18 @@ migrate:
 lint:
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy packages/stozher_core/src services/api/src
+	uv run mypy packages/stozher_core/src services/api/src services/worker/src
 	@if [ -f web/dashboard/package.json ]; then cd web/dashboard && pnpm lint; fi
 
 test: lint
 	uv run pytest
 	@if [ -f web/dashboard/package.json ]; then cd web/dashboard && pnpm test --if-present; fi
+
+api:
+	uv run uvicorn --factory stozher_api.main:app_factory --reload
+
+worker:
+	uv run python -m stozher_worker
 
 sim:
 	uv run python -m simulator run $(S)

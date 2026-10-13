@@ -1,5 +1,9 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Request
-from sqlalchemy import text
+from sqlalchemy import func, select, text
+
+from ..models import Job
 
 router = APIRouter()
 
@@ -15,8 +19,18 @@ async def health(request: Request) -> dict[str, object]:
         db = "ok"
     except Exception:
         db = "down"
+    modules = {m: "absent" for m in OPTIONAL_MODULES}
+    try:
+        async with request.app.state.sessionmaker() as session:
+            last = (
+                await session.execute(select(func.max(Job.finished_at)).where(Job.state == "done"))
+            ).scalar_one()
+        if last is not None and datetime.now(UTC) - last < timedelta(minutes=3):
+            modules["worker"] = "present"
+    except Exception:
+        pass
     return {
         "status": "ok" if db == "ok" else "degraded",
         "db": db,
-        "modules": {m: "absent" for m in OPTIONAL_MODULES},
+        "modules": modules,
     }

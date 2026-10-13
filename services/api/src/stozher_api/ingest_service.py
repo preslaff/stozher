@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from stozher_core.codec import CORE_LEN, EXT_LEN, decode
 from stozher_core.crypto import derive_keys
 from stozher_core.errors import PacketError
-from stozher_core.record import WitnessRecord
+from stozher_core.record import MsgType, WitnessRecord
 
+from .jobs import enqueue
 from .models import Event, Node, NodeKey, RawMessage, TransportId
 from .secrets_box import unseal
 
@@ -154,6 +155,8 @@ async def ingest(
     ).scalar_one_or_none()
     if inserted is not None:
         await session.execute(update(Node).where(Node.id == node.id).values(last_seen=now))
+        if rec.type != MsgType.TEST:
+            await enqueue(session, "recompute", now, commit=False)
         return await finish("accepted", None, node.id, inserted)
 
     existing = (

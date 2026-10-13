@@ -150,6 +150,18 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | Simulator | `POST /v1/sim/scenarios`, `POST /v1/sim/scenarios/{id}/run`, `GET /v1/sim/runs/{id}` | Define, run, read ground truth and metrics | operator |
 | Admin | `/v1/admin/api-keys…`, `GET /v1/admin/audit-log` | Key management (section 3) | admin |
 
+### Situational list responses
+
+`GET /v1/events` (filters `bbox`, `from`, `to`, `class`, `min_confidence`, `limit`) and
+`GET /v1/hotspots` (filters `state`, `bbox`, `limit`) return
+`{"items": [...], "count": n, "sources": [...], "data_age_s": s}`. Geometry is GeoJSON. A
+hotspot has `centroid`, `source_ellipse` (Polygon), `ellipse` (`semi_major_m`, `semi_minor_m`,
+`bearing_deg`), `severity`, `confidence`, `independent_sources`, `state` (`active|closed`) and
+`sim`; `GET /v1/hotspots/{id}` adds the event `timeline`. `GET /v1/trust/grid?bbox=` returns a
+GeoJSON FeatureCollection of H3 res-8 cells (at most 5000; larger boxes get `422
+bbox-too-large`). `GET /health` reports `worker` as `present` when a job finished in the last
+3 minutes.
+
 ### Trust response (shape)
 
 ```json
@@ -165,7 +177,9 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 }
 ```
 
-`state` is one of `TRUSTED`, `DEGRADED`, `JAMMED`, `SPOOFED`, `UNKNOWN`. Definition lives in
+`state` is one of `TRUSTED`, `DEGRADED`, `JAMMED`, `SPOOFED`, `UNKNOWN`. With no recent
+evidence the response is `UNKNOWN` with `score: null`, `confidence: 0` and `data_age_s: null`.
+The model and constants are in `docs/trust.md`. Definition lives in
 `stozher_core.trust`. For the `public` role, `sources` lists transport classes only, not
 node identities.
 

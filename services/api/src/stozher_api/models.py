@@ -133,3 +133,67 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(48))
     target: Mapped[str] = mapped_column(String(64))
     at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+
+
+class Hotspot(Base):
+    """Derived: recomputed by the worker, never synced."""
+
+    __tablename__ = "hotspots"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16))  # jamming, spoofing
+    state: Mapped[str] = mapped_column(String(16))  # active, closed
+    centroid: Mapped[Any] = mapped_column(Geometry("POINT", srid=4326))
+    source_ellipse: Mapped[Any] = mapped_column(Geometry("POLYGON", srid=4326))
+    ellipse: Mapped[Any] = mapped_column(JSONB)  # semi_major_m, semi_minor_m, bearing_deg
+    severity: Mapped[float] = mapped_column()
+    confidence: Mapped[float] = mapped_column()
+    first_seen: Mapped[datetime] = mapped_column(TS)
+    last_seen: Mapped[datetime] = mapped_column(TS)
+    event_count: Mapped[int] = mapped_column(Integer)
+    node_count: Mapped[int] = mapped_column(Integer)
+    sim: Mapped[bool] = mapped_column(Boolean, default=False)
+    track: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+
+
+class HotspotEvent(Base):
+    __tablename__ = "hotspot_events"
+
+    hotspot_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("hotspots.id", ondelete="CASCADE"), primary_key=True
+    )
+    event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id"), primary_key=True)
+
+
+class TrustCell(Base):
+    """Derived H3 (res 8) trust cell. Absent cell means UNKNOWN."""
+
+    __tablename__ = "trust_cells"
+
+    h3_index: Mapped[str] = mapped_column(String(16), primary_key=True)
+    center: Mapped[Any] = mapped_column(Geometry("POINT", srid=4326))
+    state: Mapped[str] = mapped_column(String(16))
+    score: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+    confidence: Mapped[float] = mapped_column()
+    independent_sources: Mapped[int] = mapped_column(Integer)
+    source_kinds: Mapped[Any] = mapped_column(JSONB)  # coarse node kinds, never identities
+    newest_observed_at: Mapped[datetime] = mapped_column(TS)
+    sim: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+
+
+class Job(Base):
+    """Postgres job queue (SELECT ... FOR UPDATE SKIP LOCKED)."""
+
+    __tablename__ = "jobs"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    payload: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    state: Mapped[str] = mapped_column(String(16))  # pending, running, done, failed
+    run_after: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
