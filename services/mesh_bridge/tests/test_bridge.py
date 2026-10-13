@@ -272,3 +272,9 @@ async def test_supervisor_survives_a_missing_radio_and_reconnects() -> None:
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+async def test_stats_do_not_shadow_the_queue_length() -> None:
+    f = Forwarder(client(lambda r: httpx.Response(503)), "K")
+    f.submit(msg("STZ1:" + HEX28))
+    assert "queued" not in f.stats and f.stats["enqueued"] == 1 and len(f.queue) == 1

@@ -44,7 +44,7 @@ class Forwarder:
             "seen": 0,
             "ignored": 0,
             "deduped": 0,
-            "queued": 0,
+            "enqueued": 0,
             "dropped_full": 0,
             "retries": 0,
             "accepted": 0,
@@ -86,7 +86,7 @@ class Forwarder:
             log.warning("queue full: dropped the oldest record")
         self.queue.append(item)
         self._append_spool(item)
-        self.stats["queued"] += 1
+        self.stats["enqueued"] += 1
         self._wake.set()
         return True
 

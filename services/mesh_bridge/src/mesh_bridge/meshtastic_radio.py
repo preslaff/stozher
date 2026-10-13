@@ -47,7 +47,8 @@ class MeshtasticRadio:
 
     def _on_lost(self, interface: Any = None) -> None:
         if interface is self._iface:
-            log.warning("radio connection lost")
+            if self._alive:  # not when we closed the port ourselves
+                log.warning("radio connection lost")
             self._alive = False
 
     def send_text(self, text: str, channel: int = 0) -> None:
