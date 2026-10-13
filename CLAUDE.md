@@ -82,6 +82,12 @@ In UI text, docs and code comments use civil terms: "situational awareness",
    unverified; nothing is "clear" by default or by absence; only a human confirms, closes or dismisses.
    Demo data is synthetic or public only. Do not extend the taxonomy or add real conflict-zone data
    without updating `docs/hazards.md` and getting the team's decision (open decisions D1-D3 there).
+10. **Access is restricted and accountable.** (`docs/access.md`.) No anonymous access and no self-registration;
+    every credential belongs to an organisation, has a purpose and expires. Platform staff (admin, operator)
+    act through **named accounts**; field teams and machines use keys labelled by organisation, team or
+    system and purpose, never by a person. No shared staff credentials. Give every new endpoint an explicit
+    role and update the generated access matrix (`uv run python -m stozher_api.access_matrix --write`); a
+    test fails otherwise. Open decisions D4-D10 are listed there.
 
 ## 3. Architecture in one screen
 

@@ -32,6 +32,9 @@ same endpoints as third-party systems; there are no private endpoints.
 | `admin` | Platform owners | Operator + API key management, audit log |
 | `system` | Machine components (adapters, simulator, field kit) | Ingest, sync, acks only |
 
+Who may call each endpoint is in the generated access matrix of `docs/access.md` (checked by a test), together
+with the access model: organisations, named staff accounts, credential kinds and the issuing policy.
+
 The hierarchy is `public < reporter < responder < operator < admin`. Roles are not strictly hierarchical for `system`: it cannot read situational data and
 other roles cannot call ingest or sync. The `public` role never sees raw witness records,
 node IDs or node locations.

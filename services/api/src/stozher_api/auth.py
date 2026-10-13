@@ -138,4 +138,5 @@ def require_role(*allowed: str, minimum: str | None = None) -> Callable[..., Pri
             raise ApiError(403, "insufficient-role", "Insufficient role")
         return principal
 
+    dep.access = (allowed, minimum)  # type: ignore[attr-defined]  # read by access_matrix.py
     return dep
