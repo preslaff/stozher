@@ -1,0 +1,23 @@
+# Secrets and local config
+infra/.env
+.env
+
+# Large or third-party material (not project code)
+data/
+*.pdf
+*.deb
+mcp.log
+
+# Python
+__pycache__/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+
+# Firmware
+.pio/
