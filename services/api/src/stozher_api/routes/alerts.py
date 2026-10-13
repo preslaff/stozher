@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -29,6 +30,7 @@ def alert_json(a: Alert) -> dict[str, Any]:
         "area": a.area,
         "message": a.message,
         "hotspot_id": str(a.hotspot_id) if a.hotspot_id else None,
+        "route_id": str(a.route_id) if a.route_id else None,
         "created_at": a.created_at.isoformat(),
         "sim": a.sim,
         "sources": ["witness_nodes"],
@@ -41,11 +43,14 @@ async def list_alerts(
     request: Request,
     limit: int = Query(default=50, ge=1, le=500),
     after: int | None = None,
+    route_id: uuid.UUID | None = None,
     _: Principal = Depends(responder),
 ) -> dict[str, Any]:
     q = select(Alert).order_by(Alert.id.desc()).limit(limit)
     if after is not None:
         q = select(Alert).where(Alert.id > after).order_by(Alert.id).limit(limit)
+    if route_id is not None:
+        q = q.where(Alert.route_id == route_id)
     async with request.app.state.sessionmaker() as session:
         rows = (await session.execute(q)).scalars().all()
     return {
@@ -60,14 +65,16 @@ class StreamState:
     last_id: int
     last_refresh: datetime | None
     primed: bool = False  # the first poll only records the baseline
+    route_id: uuid.UUID | None = None  # only this route's alerts
 
 
 async def poll(session: AsyncSession, st: StreamState) -> list[dict[str, Any]]:
     """One poll: new alerts after `last_id`, plus a `refresh` when the analytics finished a run."""
     out: list[dict[str, Any]] = []
-    for a in (
-        await session.execute(select(Alert).where(Alert.id > st.last_id).order_by(Alert.id))
-    ).scalars():
+    q = select(Alert).where(Alert.id > st.last_id).order_by(Alert.id)
+    if st.route_id is not None:
+        q = q.where(Alert.route_id == st.route_id)
+    for a in (await session.execute(q)).scalars():
         out.append({"id": str(a.id), "event": "alert", "data": json.dumps(alert_json(a))})
         st.last_id = a.id
     done = (
@@ -84,11 +91,16 @@ async def poll(session: AsyncSession, st: StreamState) -> list[dict[str, Any]]:
 
 
 async def event_stream(
-    request: Request, maker: async_sessionmaker[AsyncSession], last_id: int | None
+    request: Request,
+    maker: async_sessionmaker[AsyncSession],
+    last_id: int | None,
+    route_id: uuid.UUID | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     async with maker() as session:
         latest = (await session.execute(select(func.coalesce(func.max(Alert.id), 0)))).scalar_one()
-    st = StreamState(last_id=latest if last_id is None else last_id, last_refresh=None)
+    st = StreamState(
+        last_id=latest if last_id is None else last_id, last_refresh=None, route_id=route_id
+    )
     yield {
         "event": "hello",
         "data": json.dumps({"server_time": datetime.now(UTC).isoformat(), "last_id": st.last_id}),
@@ -105,7 +117,10 @@ async def stream_alerts(
     request: Request,
     last_event_id: str | None = Header(default=None),
     after: int | None = Query(default=None),
+    route_id: uuid.UUID | None = Query(default=None),
     _: Principal = Depends(responder),
 ) -> EventSourceResponse:
     resume = int(last_event_id) if last_event_id and last_event_id.isdigit() else after
-    return EventSourceResponse(event_stream(request, request.app.state.sessionmaker, resume))
+    return EventSourceResponse(
+        event_stream(request, request.app.state.sessionmaker, resume, route_id)
+    )

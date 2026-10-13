@@ -214,6 +214,7 @@ class Alert(Base):
     delivered: Mapped[Any] = mapped_column(JSONB, default=dict)
     sim: Mapped[bool] = mapped_column(Boolean, default=False)
     dedupe_key: Mapped[str] = mapped_column(String(80), unique=True)
+    route_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
 
 class AckRecord(Base):
@@ -230,3 +231,27 @@ class AckRecord(Base):
     mask: Mapped[int] = mapped_column(Integer)
     signed_at: Mapped[datetime] = mapped_column(TS)
     signature: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class WatchedRoute(Base):
+    """A route someone asked us to watch (docs/api.md section 7). Holds no position of anyone."""
+
+    __tablename__ = "watched_routes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    owner_prefix: Mapped[str] = mapped_column(String(16), index=True)  # the API key that created it
+    name: Mapped[str] = mapped_column(String(120))
+    coordinates: Mapped[Any] = mapped_column(JSONB)  # [[lon, lat], ...] exactly as submitted
+    buffer_m: Mapped[int] = mapped_column(Integer)
+    min_level: Mapped[str] = mapped_column(String(16))  # degraded, jammed, spoofed
+    notify: Mapped[Any] = mapped_column(JSONB)
+    asset_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(TS)
+    last_state: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )  # worst state last evaluated
+    transitions: Mapped[int] = mapped_column(
+        Integer, default=0
+    )  # alerts raised so far (dedupe key)
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)

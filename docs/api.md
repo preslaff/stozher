@@ -226,7 +226,6 @@ client's device.
   "geometry": {"type": "LineString", "coordinates": [[27.91, 43.20], [27.95, 43.22]]},
   "buffer_m": 300,
   "min_level": "degraded",
-  "notify": {"sse": true, "webhook_ids": ["..."], "mesh": false},
   "expires_at": "2026-11-29T18:00:00Z",
   "asset_type": "road_vehicle"
 }
@@ -234,14 +233,15 @@ client's device.
 
 | Field | Rules |
 |---|---|
-| `geometry` | GeoJSON LineString, EPSG:4326, at most 500 vertices |
-| `buffer_m` | Corridor half-width, default 200, range 50–2000. Distances use geodesics |
-| `min_level` | Lowest trust state that alerts: `degraded` (default), `jammed`, `spoofed` |
-| `notify` | Channels. `sse` is on by default; `webhook_ids` must belong to the caller's key; `mesh` sends a short text alert via the mesh bridge when present, otherwise it is skipped and logged once |
-| `expires_at` | Default now + 24 h, maximum now + 7 days. Expired watches are deleted, not archived |
-| `asset_type` | Optional; selects playbook text for alerts |
+| `geometry` | GeoJSON LineString, EPSG:4326, 2 to 500 positions |
+| `buffer_m` | Corridor half-width, 50-2000 (default 200). A corridor of k cells (`round(buffer_m / 920)`) means the worst cell within it counts |
+| `min_level` | Lowest state that alerts: `degraded` (default) < `jammed` < `spoofed`; `UNKNOWN` never alerts |
+| `notify` | Only `{"sse": true}` today (the alert stream). Webhook ids and mesh delivery are refused with 422 until they exist; mesh gateways relay route alerts by the global relay rules |
+| `expires_at` | Needs a time zone; default now + 24 h, at most now + 7 days, must be in the future. Expired watches are deleted by the worker |
+| `asset_type` | Optional, at most 32 characters; reserved for playbook text |
 
-`201` returns the watch `id` plus the same body as the status view below.
+`201` returns the watch `id` plus the status view below. The state at creation is the baseline:
+only changes after it raise alerts. At most 20 active watches per key (`409 limit-reached`).
 
 ### Status
 
@@ -294,8 +294,8 @@ change do not repeat alerts. Alert payload:
 }
 ```
 
-The stream accepts `GET /v1/stream/alerts?route_id=<id>` to receive only that route's
-alerts. Mesh text alerts use the compact `STZ1:` convention and carry route name, state and
+The stream accepts `GET /v1/stream/alerts?route_id=<id>` and the list `GET /v1/alerts?route_id=<id>`
+to receive only that route's alerts; alerts carry `route_id`. Mesh text alerts use the compact `STZ1:` convention and carry route name, state and
 segment index only.
 
 ### Other operations
@@ -303,7 +303,7 @@ segment index only.
 | Method and path | Purpose |
 |---|---|
 | `GET /v1/watched-routes` | Caller's watches (operator and above: all, `?owner=` filter) |
-| `PATCH /v1/watched-routes/{id}` | Change `name`, `buffer_m`, `min_level`, `notify`, `expires_at`; changing `geometry` creates a new evaluation |
+| `PATCH /v1/watched-routes/{id}` | Change `name`, `buffer_m`, `min_level`, `expires_at`. The geometry cannot change (422): create a new watch |
 | `DELETE /v1/watched-routes/{id}` | Stop watching |
 
 ### Rules

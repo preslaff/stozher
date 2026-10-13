@@ -183,3 +183,86 @@ async def test_alerts_are_raised_once_listed_and_streamed(client):  # type: igno
         assert await poll(s, state) == []  # nothing new on the next poll
     assert (await client.get("/v1/stream/alerts", headers=hdr(client, "public"))).status_code == 403
     assert (await client.get("/v1/alerts", headers=hdr(client, "public"))).status_code == 403
+
+
+async def test_a_watched_route_alerts_once_when_trouble_arrives_and_clears_when_it_ages_out(client):  # type: ignore[no-untyped-def]
+    from datetime import UTC, datetime, timedelta
+
+    from stozher_api.models import WatchedRoute
+
+    route = {
+        "name": "Coast road",
+        "buffer_m": 300,
+        "min_level": "degraded",
+        "geometry": {
+            "type": "LineString",
+            "coordinates": [[27.85, 43.1989], [27.9166, 43.1989], [27.98, 43.1989]],
+        },
+    }
+    r = await client.post("/v1/watched-routes", json=route, headers=hdr(client, "responder"))
+    wid = r.json()["id"]
+    assert r.json()["overall"]["state"] == "UNKNOWN"
+    await _run_worker(client)  # nothing has happened yet
+    assert (
+        await client.get("/v1/alerts", params={"route_id": wid}, headers=hdr(client, "responder"))
+    ).json()["count"] == 0
+
+    a = await _node(client, "a")
+    await post(
+        client, packet(rec(seq=1, confidence=30, lat_e7=VARNA[0], lon_e7=VARNA[1]), a), ext="a"
+    )
+    await _run_worker(client)
+    await _run_worker(client)  # the second recompute changes nothing: no repeat alert
+    items = (
+        await client.get("/v1/alerts", params={"route_id": wid}, headers=hdr(client, "responder"))
+    ).json()["items"]
+    assert [i["kind"] for i in items] == ["route_affected"]
+    assert (
+        items[0]["route_id"] == wid
+        and items[0]["level"] == "critical"
+        and items[0]["area"]["type"] == "LineString"
+    )
+    assert "Route 'Coast road'" in items[0]["message"] and "likely JAMMED" in items[0]["message"]
+    status = (
+        await client.get(f"/v1/watched-routes/{wid}", headers=hdr(client, "responder"))
+    ).json()
+    assert status["overall"]["state"] == "JAMMED"
+    # the alerts stream can be narrowed to this route
+    from stozher_api.routes.alerts import StreamState, poll
+
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        import uuid
+
+        mine = await poll(s, StreamState(last_id=0, last_refresh=None, route_id=uuid.UUID(wid)))
+        others = await poll(s, StreamState(last_id=0, last_refresh=None, route_id=uuid.uuid4()))
+    assert [e["event"] for e in mine] == ["alert"] and others == []
+
+    # two hours later the evidence has aged out of the grid: the route clears
+    from stozher_api.jobs import enqueue
+    from stozher_worker.main import HANDLERS as H
+    from stozher_worker.queue import run_pending as rp
+
+    later = datetime.now(UTC) + timedelta(hours=2)
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        await enqueue(s, "recompute", later)
+    await rp(client.app.state.sessionmaker, H, now=later)  # type: ignore[attr-defined]
+    kinds = [
+        i["kind"]
+        for i in (
+            await client.get(
+                "/v1/alerts", params={"route_id": wid}, headers=hdr(client, "responder")
+            )
+        ).json()["items"]
+    ]
+    assert kinds == ["route_cleared", "route_affected"]  # newest first
+
+    # expired watches are removed by the worker
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        w = await s.get(WatchedRoute, uuid.UUID(wid))
+        w.expires_at = datetime.now(UTC) - timedelta(minutes=1)  # type: ignore[union-attr]
+        await s.commit()
+        await enqueue(s, "recompute", datetime.now(UTC))
+    await _run_worker(client)
+    assert (await client.get("/v1/watched-routes", headers=hdr(client, "responder"))).json()[
+        "count"
+    ] == 0

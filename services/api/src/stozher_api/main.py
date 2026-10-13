@@ -11,7 +11,19 @@ from .auth import hash_key, parse_prefix
 from .config import Settings, get_settings
 from .db import make_engine, make_sessionmaker
 from .models import ApiKey
-from .routes import alerts, control, events, health, hotspots, ingest, me, nodes, sim, trust
+from .routes import (
+    alerts,
+    control,
+    events,
+    health,
+    hotspots,
+    ingest,
+    me,
+    nodes,
+    sim,
+    trust,
+    watched,
+)
 from .signing import load_signer
 
 log = logging.getLogger("stozher.api")
@@ -73,6 +85,7 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     app.include_router(sim.router)
     app.include_router(alerts.router)
     app.include_router(control.router)
+    app.include_router(watched.router)
     return app
 
 

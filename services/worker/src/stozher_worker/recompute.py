@@ -8,12 +8,22 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from stozher_api.models import Alert, Event, Hotspot, HotspotEvent, Node, TrustCell
+from stozher_api.models import (
+    Alert,
+    Event,
+    Hotspot,
+    HotspotEvent,
+    Node,
+    TrustCell,
+    WatchedRoute,
+)
+from stozher_api.route_trust import CellInfo, evaluate_route
 
 from .alerts import Previous, derive_alerts
-from .cells import build_cells
+from .cells import Cell, build_cells
 from .hotspots import HotspotParams, build_hotspots, reuse_ids
 from .points import EventPoint
+from .route_alerts import derive
 
 HOTSPOT_LOOKBACK = timedelta(hours=6)
 TRUST_LOOKBACK = timedelta(minutes=90)  # evidence older than this is below 12% weight
@@ -26,6 +36,7 @@ class Summary:
     hotspots: int
     cells: int
     alerts: int = 0
+    route_alerts: int = 0
 
 
 async def load_points(session: AsyncSession, since: datetime) -> list[EventPoint]:
@@ -143,5 +154,42 @@ async def recompute(
             )
             .on_conflict_do_nothing(index_elements=["dedupe_key"])
         )
+    routes = await _watched_routes(session, cells, now)
     await session.commit()
-    return Summary(len(points), len(hotspots), len(cells), len(new_alerts))
+    return Summary(len(points), len(hotspots), len(cells), len(new_alerts), routes)
+
+
+async def _watched_routes(session: AsyncSession, cells: list[Cell], now: datetime) -> int:
+    """Drop expired watches and evaluate the rest against the fresh grid; returns alerts raised."""
+    await session.execute(delete(WatchedRoute).where(WatchedRoute.expires_at <= now))
+    info = {
+        c.h3_index: CellInfo(
+            c.state.value, c.score, c.confidence, c.independent_sources, c.newest_observed_at, c.sim
+        )
+        for c in cells
+    }
+    raised = 0
+    for w in (await session.execute(select(WatchedRoute))).scalars():
+        rt = evaluate_route(w.coordinates, info, float(w.buffer_m))
+        alert = derive(w.id, w.name, w.last_state, w.transitions, w.min_level, rt, now)
+        if alert is not None:
+            inserted = await session.execute(
+                pg_insert(Alert)
+                .values(
+                    level=alert.level,
+                    kind=alert.kind,
+                    message=alert.message,
+                    area=alert.area,
+                    sim=alert.sim,
+                    dedupe_key=alert.dedupe_key,
+                    route_id=w.id,
+                    delivered={"stream": True},
+                )
+                .on_conflict_do_nothing(index_elements=["dedupe_key"])
+                .returning(Alert.id)
+            )
+            if inserted.scalar_one_or_none() is not None:
+                w.transitions += 1
+                raised += 1
+        w.last_state, w.last_evaluated_at = rt.worst.state, now
+    return raised

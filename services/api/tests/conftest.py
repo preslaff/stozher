@@ -57,7 +57,7 @@ async def _client(database: str, seed: str) -> AsyncIterator[httpx.AsyncClient]:
         async with app.state.sessionmaker() as s:
             await s.execute(
                 text(
-                    "TRUNCATE acks, alerts, jobs, trust_cells, hotspot_events, hotspots, audit_log, api_keys, events, raw_messages, transport_ids, node_keys, nodes RESTART IDENTITY CASCADE"
+                    "TRUNCATE watched_routes, acks, alerts, jobs, trust_cells, hotspot_events, hotspots, audit_log, api_keys, events, raw_messages, transport_ids, node_keys, nodes RESTART IDENTITY CASCADE"
                 )
             )
             keys = {}
