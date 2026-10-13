@@ -15,6 +15,7 @@ dependencies = [
     "cryptography",
     "sse-starlette",
     "h3>=4",
+    "pyproj",
 ]
 
 [dependency-groups]

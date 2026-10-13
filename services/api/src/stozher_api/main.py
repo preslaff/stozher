@@ -22,6 +22,7 @@ from .routes import (
     ingest,
     me,
     nodes,
+    reports,
     sim,
     trust,
     watched,
@@ -100,6 +101,7 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     app.include_router(control.router)
     app.include_router(watched.router)
     app.include_router(admin.router)
+    app.include_router(reports.router)
     return app
 
 

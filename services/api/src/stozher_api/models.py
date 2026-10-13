@@ -259,3 +259,49 @@ class WatchedRoute(Base):
         Integer, default=0
     )  # alerts raised so far (dedupe key)
     last_evaluated_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+
+
+class HazardReport(Base):
+    """One community report (docs/hazards.md section 5). Append-only.
+
+    Deliberately holds no identity beyond the issuing key's public prefix: no name, contact, device
+    id, IP address, device location, free text or photo. A test pins this column list.
+    """
+
+    __tablename__ = "hazard_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    reporter_prefix: Mapped[str] = mapped_column(String(16), index=True)
+    kind: Mapped[str] = mapped_column(String(24))
+    passability: Mapped[str] = mapped_column(String(24))
+    geometry: Mapped[Any] = mapped_column(
+        Geometry("GEOMETRY", srid=4326)
+    )  # a point or a short line
+    observed_at: Mapped[datetime] = mapped_column(TS)  # the reporter's claim
+    received_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    sim: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(16), default="accepted")  # accepted, withdrawn
+    hazard_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class RoadHazard(Base):
+    """A merged hazard (derived by the worker; see the build order in docs/hazards.md)."""
+
+    __tablename__ = "road_hazards"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    kind: Mapped[str] = mapped_column(String(24))
+    passability: Mapped[str] = mapped_column(String(24))  # the most severe among current sources
+    geometry: Mapped[Any] = mapped_column(Geometry("GEOMETRY", srid=4326))
+    tier: Mapped[str] = mapped_column(String(16), default="unverified")
+    sources: Mapped[Any] = mapped_column(JSONB)
+    first_seen: Mapped[datetime] = mapped_column(TS)
+    last_confirmed: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    valid_until: Mapped[datetime] = mapped_column(TS)
+    status: Mapped[str] = mapped_column(
+        String(16), default="active"
+    )  # active, closed, expired, dismissed
+    sim: Mapped[bool] = mapped_column(Boolean, default=False)
+    evidence: Mapped[Any] = mapped_column(
+        JSONB, nullable=True
+    )  # counts and scene dates, never reporter text

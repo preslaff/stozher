@@ -1,6 +1,7 @@
 # Road hazards and community reports (specification)
 
-**Status: specification only. Nothing here is implemented.** It extends the platform with a second
+**Status: specification. Build step 1 of section 13 is implemented** (the `reporter` role, `POST /v1/reports`,
+withdraw, `GET /v1/reports?mine=true`, limits and validation); everything else here is not. It extends the platform with a second
 module beside GNSS Trust: physical hazards that block or endanger movement on roads, reported by
 people in the field and by other sources, shown with their source and verification level, and checked
 against routes. It follows the `docs/api.md` conventions; where an API shape here becomes real, copy it
@@ -248,7 +249,7 @@ Done when:
 
 ## 13. Build order
 
-1. Migration, models and the report endpoint with validation, rate limits and the `reporter` role.
+1. **Done:** migration, models and the report endpoint with validation, rate limits and the `reporter` role.
 2. Merging and tiers in the worker; operator decisions; expiry.
 3. Hazards read API with role views; `along-route`; watched-route alerts.
 4. Simulator scenario and tests for every acceptance line above.

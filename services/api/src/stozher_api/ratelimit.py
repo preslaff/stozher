@@ -9,7 +9,14 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-DEFAULT_LIMITS = {"public": 60, "responder": 300, "operator": 600, "admin": 600, "system": 6000}
+DEFAULT_LIMITS = {
+    "public": 60,
+    "reporter": 120,
+    "responder": 300,
+    "operator": 600,
+    "admin": 600,
+    "system": 6000,
+}
 WINDOW_S = 60
 
 

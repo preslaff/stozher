@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # Ed25519 private seed (32 bytes as 64 hex) that signs acknowledgements; absent = acks disabled.
     stozher_ed25519_seed: str = ""
     cloud_key_id: int = 1
+    # Community hazard reports (docs/hazards.md): limits per reporter key, counted in the database.
+    report_limit_per_hour: int = 20
+    report_limit_per_day: int = 120
+    report_max_age_h: int = 48  # a report must describe something that happened recently
     # Accept records whose node clock is within this window of server time.
     replay_window_s: int = 2 * 86400
     env_name: str = "live"

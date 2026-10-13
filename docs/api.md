@@ -26,12 +26,13 @@ same endpoints as third-party systems; there are no private endpoints.
 | Role | Intended for | Access |
 |---|---|---|
 | `public` | Third-party systems, anonymous consumers | Coarse trust data only: `trust`, `trust/grid`, `trust/route`, public POIs, `health` |
+| `reporter` | Field teams issued a key to report road hazards (docs/hazards.md) | Public + `POST /v1/reports`, withdraw and list **their own** reports; nothing else. Cannot read events, hotspots, routes or any other reporter's reports |
 | `responder` | Emergency and operations users | Public + events, situation, hotspots, playbooks, restricted POIs, access/nearest, alert stream, assistant |
 | `operator` | Platform operators | Responder + nodes, evidence packs, EO changes, POI and closure writes, simulator, webhooks |
 | `admin` | Platform owners | Operator + API key management, audit log |
 | `system` | Machine components (adapters, simulator, field kit) | Ingest, sync, acks only |
 
-Roles are not strictly hierarchical for `system`: it cannot read situational data and
+The hierarchy is `public < reporter < responder < operator < admin`. Roles are not strictly hierarchical for `system`: it cannot read situational data and
 other roles cannot call ingest or sync. The `public` role never sees raw witness records,
 node IDs or node locations.
 
@@ -107,7 +108,7 @@ consumers can self-check their access.
 ## 4. Rate limits and response headers **(new)**
 
 Limits are per key, in fixed one-minute windows. Defaults when `rate_limit_per_min` is null:
-`public` 60, `responder` 300, `operator` 600, `admin` 600, `system` 6000. Every response to an
+`public` 60, `reporter` 120, `responder` 300, `operator` 600, `admin` 600, `system` 6000. Every response to an
 authenticated request includes `X-RateLimit-Limit`, `X-RateLimit-Remaining` and
 `X-RateLimit-Reset` (unix seconds when the window ends). Over the limit the answer is `429
 rate-limited` with `Retry-After`; a rejected request still counts. `/health` and the public key
@@ -171,11 +172,21 @@ GeoJSON FeatureCollection of H3 res-8 cells (at most 5000; larger boxes get `422
 bbox-too-large`). `GET /health` reports `ack_signing` as `present` when a signing key is configured, and `worker` as `present` when a job finished in the last
 3 minutes.
 
-### Planned: hazards and reports
+### Hazards and reports
 
-`POST /v1/reports`, `GET /v1/hazards`, `POST /v1/hazards/along-route`, operator decisions and the
-`reporter` role are specified in `docs/hazards.md` and are not implemented. That document is the contract;
-these endpoints move into this file when they are built.
+Specified in `docs/hazards.md`, which is the contract. **Implemented so far (build step 1):** the
+`reporter` role, `POST /v1/reports`, `POST /v1/reports/{id}/withdraw` and `GET /v1/reports?mine=true`.
+
+`POST /v1/reports` (reporter and above) takes exactly `kind`, `passability`, `geometry` (a Point, or a
+LineString of at most 50 positions and 500 m, `[lon, lat]` only) and `observed_at` (with a time zone,
+within the last 48 hours and not in the future). Any other field (note, photo, device location,
+contact, ...) is refused with 422; `closed_by_authority` is refused too (official sources only).
+Coordinates are rounded to 5 decimals. It returns `202 {id, hazard_id, tier, status}`; until reports are
+merged into hazards (the next build step) `hazard_id` is `null` and `tier` is `unverified`. Limits per key,
+counted in the database and including withdrawn reports: 20 per hour and 120 per day (`429
+report-rate-limited` with `Retry-After`). No response ever contains a reporter's key prefix, and
+`GET /v1/reports` works only with `mine=true`: there is no way to list anyone else's reports. Not yet
+implemented: `GET /v1/hazards`, `along-route`, operator decisions, hazard alerts.
 
 ### Trust response (shape)
 

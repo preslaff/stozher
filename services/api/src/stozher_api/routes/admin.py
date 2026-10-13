@@ -21,7 +21,7 @@ from ..ratelimit import DEFAULT_LIMITS
 
 router = APIRouter(prefix="/v1/admin")
 admin = require_role("admin")
-Role = Literal["admin", "operator", "responder", "public", "system"]
+Role = Literal["admin", "operator", "responder", "reporter", "public", "system"]
 MAX_GRACE_S = 86_400
 
 

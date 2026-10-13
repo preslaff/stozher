@@ -17,7 +17,7 @@ from .problems import ApiError
 from .ratelimit import DEFAULT_LIMITS
 
 # Hierarchical roles; `system` is a separate lane (ingest, sync, acks only).
-RANK = {"public": 0, "responder": 1, "operator": 2, "admin": 3}
+RANK = {"public": 0, "reporter": 1, "responder": 2, "operator": 3, "admin": 4}
 ROLES = {*RANK, "system"}
 
 

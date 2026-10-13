@@ -14,7 +14,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > - Network simulator (coastal scenario), mesh bridge (verified on two T-Beams over LoRa, including
 >   signed acks back to the node), and the React dashboard (live map, alerts, route planner, watches).
 >
-> **Specified, not built:** road hazards and community reports (`docs/hazards.md`).
+> **Partly built:** community hazard reports (`docs/hazards.md`): the `reporter` role and `POST /v1/reports` work;
+> merging into hazards, tiers, operator decisions, route hazard checks, the dashboard tool and the simulator
+> scenario are still to do.
 >
 > **Not built yet:** `situation`, webhooks, Kinéis adapter, assistant, firmware (waiting for the KIM1),
 > offline field-kit sync, a dashboard UI for key management (use the admin API or
@@ -72,7 +74,7 @@ In UI text, docs and code comments use civil terms: "situational awareness",
    Never log keys, decrypted payloads at INFO level, or API keys.
 8. **Label simulated data.** Anything from the simulator is stored with `kind = sim`
    and shown with a SIM badge. Never present simulated data as live.
-9. **Hazard reports: places, not people.** (`docs/hazards.md`, specification only for now.) Closed
+9. **Hazard reports: places, not people.** (`docs/hazards.md`; the report endpoint exists, merging and tiers do not yet.) Closed
    taxonomy of physical road conditions only. Never add weapons, explosives, combat damage,
    checkpoints, or anything about people, vehicles or units; no photos or free text in reports; no
    reporter identity, device location or per-reporter queries or exports. Unverified is always shown as
