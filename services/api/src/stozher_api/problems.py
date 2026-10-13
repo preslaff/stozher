@@ -10,8 +10,15 @@ BASE = "https://stozher.example/problems/"
 
 
 class ApiError(HTTPException):
-    def __init__(self, status: int, slug: str, title: str, detail: str = "") -> None:
-        super().__init__(status_code=status, detail=detail or title)
+    def __init__(
+        self,
+        status: int,
+        slug: str,
+        title: str,
+        detail: str = "",
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(status_code=status, detail=detail or title, headers=headers)
         self.slug, self.title = slug, title
 
 

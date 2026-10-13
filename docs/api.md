@@ -61,11 +61,12 @@ without redeploying.
 | `label` | Human name of the consumer, e.g. "Port authority – routing" |
 | `owner_contact` | Optional contact for the consumer |
 | `rate_limit_per_min` | Requests per minute; role default if null |
-| `allowed_origins` | Optional list for browser CORS |
+| `allowed_origins` | Optional list (at most 20) of browser origins. When set, a request that carries an `Origin` header not in the list is refused (`403 origin-not-allowed`); clients that send no `Origin` (servers, scripts) are unaffected. CORS preflights cannot carry the key, so this is a per-key check, not a replacement for the server-wide CORS list |
 | `created_at`, `created_by` | Audit |
 | `expires_at` | Optional; expired keys are rejected |
 | `revoked_at` | Set on revoke; takes effect immediately |
 | `last_used_at` | Updated at most once per minute per key |
+| `prev_hash`, `prev_hash_expires_at` | The previous secret's hash while a rotation's grace period lasts; never returned |
 
 Schema changes go through an Alembic migration.
 
@@ -74,14 +75,14 @@ Schema changes go through an Alembic migration.
 | Method and path | Purpose |
 |---|---|
 | `POST /v1/admin/api-keys` | Create. Body: `label`, `role`, optional `rate_limit_per_min`, `expires_at`, `allowed_origins`, `owner_contact`. Response `201` includes the full `key` once. |
-| `GET /v1/admin/api-keys` | List keys (never the secret): `id`, `prefix`, `label`, `role`, limits, `last_used_at`, `expires_at`, `revoked_at`. |
-| `GET /v1/admin/api-keys/{id}` | One key, plus usage summary (requests last 24 h, last error). |
-| `PATCH /v1/admin/api-keys/{id}` | Change `label`, `rate_limit_per_min`, `expires_at`, `allowed_origins`, `owner_contact`. Role changes require rotate-and-reissue, not patch. |
-| `POST /v1/admin/api-keys/{id}/rotate` | Issue a new secret for the same key record. The old secret stays valid for `grace_s` (default 3600, max 86400) so consumers can switch. Response includes the new `key` once. |
-| `DELETE /v1/admin/api-keys/{id}` | Revoke immediately (soft delete: the record stays for audit). |
+| `GET /v1/admin/api-keys?role=&include_revoked=` | List keys (never the secret or hash): `id`, `prefix`, `label`, `role`, `rate_limit_per_min` and `effective_rate_limit`, `allowed_origins`, `last_used_at`, `expires_at`, `revoked_at`, `active`, `rotating_until`. Revoked keys are hidden unless asked for. |
+| `GET /v1/admin/api-keys/{id}` | One key, plus `usage`: `requests` and `rate_limited` counted by the API process since it started (`since: "process start"`) and `last_used_at`. A durable per-request history is not recorded. |
+| `PATCH /v1/admin/api-keys/{id}` | Change `label`, `rate_limit_per_min`, `expires_at`, `allowed_origins`, `owner_contact`; an explicit `null` clears an optional field (`rate_limit_per_min: null` returns to the role default). A `role` field is rejected (422): create a new key and revoke the old one. |
+| `POST /v1/admin/api-keys/{id}/rotate` | Body `{"grace_s": 3600}` (0-86400). Issues a new secret under the **same prefix**; the old secret stays valid for `grace_s` so consumers can switch (0 = cut over at once). Response includes the new `key` once. A revoked key cannot be rotated (409). |
+| `DELETE /v1/admin/api-keys/{id}` | Revoke immediately (soft delete: the record stays for audit; also ends any rotation grace). Returns the key's view with `revoked_at` (200); repeating it is harmless. |
 | `GET /v1/admin/audit-log?actor&action&from&to` | Audit log, including all key operations. |
 
-An admin cannot revoke or downgrade the last active admin key. `GET /v1/me` (any valid
+The last active admin key cannot be revoked (`409 last-admin`); roles cannot be changed in place, so there is no downgrade. `GET /v1/me` (any valid
 key) returns the caller's own `prefix`, `label`, `role`, rate limit and expiry, so
 consumers can self-check their access.
 
@@ -105,9 +106,14 @@ consumers can self-check their access.
 
 ## 4. Rate limits and response headers **(new)**
 
-Limits are per key. Defaults when `rate_limit_per_min` is null: `public` 60, `responder`
-300, `operator` 600, `admin` 600, `system` 6000. Every response includes
-`X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`. The `stream/alerts`
+Limits are per key, in fixed one-minute windows. Defaults when `rate_limit_per_min` is null:
+`public` 60, `responder` 300, `operator` 600, `admin` 600, `system` 6000. Every response to an
+authenticated request includes `X-RateLimit-Limit`, `X-RateLimit-Remaining` and
+`X-RateLimit-Reset` (unix seconds when the window ends). Over the limit the answer is `429
+rate-limited` with `Retry-After`; a rejected request still counts. `/health` and the public key
+endpoint are not limited. The counters live in the API process: with several processes each counts
+separately, so the effective limit is the configured one times the process count (a shared store
+comes with multi-process deployments). The `stream/alerts`
 connection counts as one request on open. Ingest from `system` keys must not be dropped
 when the limit is hit for normal operation; size the `system` limit above the expected
 traffic.

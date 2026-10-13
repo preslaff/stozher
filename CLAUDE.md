@@ -4,15 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # STOZHER (СТОЖЕР)
 
-> **Current state (Oct 2026):** built and tested: `stozher_core` (codec, crypto, trust model, golden
-> vectors), API (ingest, nodes, events, hotspots, trust, alerts + SSE, sim reset), worker (job queue,
-> hotspots, source localization, H3 trust grid, alert rules), network simulator (coastal scenario),
-> and the React dashboard (live map, alerts, route planner with watched routes). Signed acknowledgements (Ed25519, `docs/control.md`) work end to end through the mesh bridge. Route trust (`POST /v1/trust/route`) and watched routes with deterministic `route_affected`/`route_cleared` alerts exist. Not built yet: key-management endpoints (use
-> `python -m stozher_api.cli create-key`), rate limits, `situation`,
-> webhooks, mesh bridge, Kinéis adapter, assistant, firmware, field-kit sync. Run it: `make migrate`,
-> `make api`, `make worker`, `make sim S=coastal`, `pnpm dev` in `web/dashboard` (see `docs/scenario.md`).
-> Dev database is the user's local PostgreSQL 16 (not a container). Read the Technical Specification
-> `.md` for detail beyond this file.
+> **Current state (Oct 2026), built and tested:**
+> - `stozher_core`: packet codec and crypto with golden vectors, trust model, Ed25519 signed
+>   acknowledgements (`docs/control.md`).
+> - API: ingest (kineis, mesh, direct, sim), nodes, events, hotspots, trust grid and route trust,
+>   alerts + SSE, watched routes, signed acks, sim reset, **API key management** (create, rotate with
+>   grace, revoke, audit log) and per-key rate limits (`docs/api.md` sections 3-4).
+> - Worker: job queue, hotspots, source localization, H3 trust grid, alert rules (hotspots, routes).
+> - Network simulator (coastal scenario), mesh bridge (verified on two T-Beams over LoRa, including
+>   signed acks back to the node), and the React dashboard (live map, alerts, route planner, watches).
+>
+> **Not built yet:** `situation`, webhooks, Kinéis adapter, assistant, firmware (waiting for the KIM1),
+> offline field-kit sync, a dashboard UI for key management (use the admin API or
+> `python -m stozher_api.cli create-key`).
+>
+> Run it: `make migrate`, `make api`, `make worker`, `make sim S=coastal`, `make bridge`, and
+> `pnpm dev` in `web/dashboard` (see `docs/scenario.md`, `docs/mesh.md`). The dev database is the
+> user's local PostgreSQL 16, not a container. Read the Technical Specification `.md` for detail
+> beyond this file.
 
 Guide for the Claude Code agent building STOZHER, a **Situational Awareness Platform
 for Degraded Environments**, at the 12th CASSINI Hackathon (Challenge #1, 27–29

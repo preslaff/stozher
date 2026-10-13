@@ -113,6 +113,10 @@ class ApiKey(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     prefix: Mapped[str] = mapped_column(String(16), unique=True)
     hash: Mapped[str] = mapped_column(String(64))
+    prev_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )  # old secret during a rotation
+    prev_hash_expires_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
     role: Mapped[str] = mapped_column(String(16))
     label: Mapped[str] = mapped_column(String(120))
     owner_contact: Mapped[str | None] = mapped_column(String(200), nullable=True)

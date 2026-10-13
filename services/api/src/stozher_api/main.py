@@ -11,7 +11,9 @@ from .auth import hash_key, parse_prefix
 from .config import Settings, get_settings
 from .db import make_engine, make_sessionmaker
 from .models import ApiKey
+from .ratelimit import RateHeadersMiddleware, RateLimiter
 from .routes import (
+    admin,
     alerts,
     control,
     events,
@@ -64,16 +66,27 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
 
     app = FastAPI(title="STOZHER API", version="1.0.0", lifespan=lifespan)
     app.state.settings = settings
+    app.state.limiter = RateLimiter()
+    app.state.usage = {}  # prefix -> in-memory request counters since start
+    app.state.touched = {}  # prefix -> when last_used_at was last written
     app.state.signer = load_signer(settings.stozher_ed25519_seed, settings.cloud_key_id)
     app.state.engine = make_engine(settings.database_url, **engine_kw)
     app.state.sessionmaker = make_sessionmaker(app.state.engine)
     problems.install(app)
+    app.add_middleware(RateHeadersMiddleware)
     origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["X-API-Key", "Content-Type", "Last-Event-ID"],
+        # browsers hide other response headers from scripts unless they are listed
+        expose_headers=[
+            "X-RateLimit-Limit",
+            "X-RateLimit-Remaining",
+            "X-RateLimit-Reset",
+            "Retry-After",
+        ],
     )
     app.include_router(health.router)
     app.include_router(me.router)
@@ -86,6 +99,7 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     app.include_router(alerts.router)
     app.include_router(control.router)
     app.include_router(watched.router)
+    app.include_router(admin.router)
     return app
 
 
