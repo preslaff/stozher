@@ -48,13 +48,19 @@ Setting `STOZHER_RESPONDER_KEY` also relays alerts to the mesh (below).
   sends `STOZHER <LEVEL>: <message>` (at most 200 bytes) on channel 0, warnings and critical only,
   at most one per `--relay-interval` (default 60 s) because LoRa airtime is shared. Simulated
   alerts stay off the air unless `--relay-sim` is set, and are then prefixed `[SIM]`.
-  Signed acknowledgements and node commands are not implemented yet.
+  Signed node commands are not implemented yet.
+- **Acknowledgements.** After the API has accepted (or recognised as duplicate) records from a node, the
+  bridge fetches that node's latest cloud-signed ack (`GET /v1/acks`, system key) and sends it back as a
+  direct `STZA1:` message (docs/control.md). Records are coalesced (15 s) and each node gets at most one
+  ack per 120 s. A duplicate arrival means the node missed the last ack, so it earns another within the
+  same limit. The bridge only relays: it cannot sign, and nodes verify with the cloud public key. Without
+  `STOZHER_ED25519_SEED` on the API the pusher turns itself off with one warning; `--no-acks` disables it.
 
 ## Health
 
 `GET http://127.0.0.1:<health-port>/`: `status` (`ok` only while the radio is connected), `radio`
 (`connected`, `node_id`, `last_error`), `uplink` (`queued`, counters, `rejections` by reason,
-`last_error`) and `alert_relay`.
+`last_error`) and `alert_relay` and `acks` (`sent`, `waiting`, `fetch_errors`, `disabled`).
 
 ## Test it with two T-Beams
 

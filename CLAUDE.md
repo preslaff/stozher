@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > **Current state (Oct 2026):** built and tested: `stozher_core` (codec, crypto, trust model, golden
 > vectors), API (ingest, nodes, events, hotspots, trust, alerts + SSE, sim reset), worker (job queue,
 > hotspots, source localization, H3 trust grid, alert rules), network simulator (coastal scenario),
-> and the React dashboard. Not built yet: key-management endpoints (use
+> and the React dashboard. Signed acknowledgements (Ed25519, `docs/control.md`) work end to end through the mesh bridge. Not built yet: key-management endpoints (use
 > `python -m stozher_api.cli create-key`), rate limits, watched routes, `trust/route`, `situation`,
 > webhooks, mesh bridge, Kinéis adapter, assistant, firmware, field-kit sync. Run it: `make migrate`,
 > `make api`, `make worker`, `make sim S=coastal`, `pnpm dev` in `web/dashboard` (see `docs/scenario.md`).
@@ -169,7 +169,7 @@ includes `sources`, `data_age_s` and `confidence` where derived. Ingest endpoint
 return `202` with `accepted | duplicate | rejected` and a reason. Key groups: ingest
 (`kineis`, `mesh`, `direct`, `sim`), nodes, events (+ evidence pack), situation,
 hotspots (+ eo-changes, playbook), trust (point, grid, route), poi (+ access, nearest),
-road-closures, stream/alerts (SSE), webhooks, sync, acks, assistant/query, sim, me, watched-routes, admin
+road-closures, stream/alerts (SSE), webhooks, sync, acks, assistant/query, sim, me, watched-routes, control (`public-key`; `acks` is system-only), admin
 (`api-keys` create/list/patch/rotate/revoke, `audit-log`). Key management, rate limits
 and webhook signing are specified in `docs/api.md` §3–6, watched routes in §7. Watched
 routes store only caller-supplied geometry; STOZHER never receives live positions.

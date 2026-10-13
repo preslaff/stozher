@@ -146,7 +146,8 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | Webhooks | `POST/GET/DELETE /v1/webhooks` **(new)** | Register, list, remove push subscriptions (section 6) | operator |
 | Sync | `GET /v1/sync/events?since=<cursor>` | Field kit catch-up | system |
 | Sync | `POST /v1/sync/upload` | Field kit uploads local events and operator changes | system |
-| Control | `GET /v1/acks?node_id` | Latest signed acknowledgement per node | system |
+| Control | `GET /v1/acks?node_id=` or `?transport=&external_id=` (`&key_id=`) | Latest cloud-signed acknowledgement per key id of one node, for gateways to relay (docs/control.md). `503 signing-not-configured` without a signing key | system |
+| Control | `GET /v1/control/public-key` | The cloud's Ed25519 public key and key id, for provisioning nodes (open; nodes must be provisioned with it, not fetch it at runtime) | none |
 | Assistant | `POST /v1/assistant/query` | Question in, answer with tool calls and sources | responder |
 | Simulator | `POST /v1/sim/scenarios`, `POST /v1/sim/scenarios/{id}/run`, `GET /v1/sim/runs/{id}` | Define, run, read ground truth and metrics | operator |
 | Simulator | `POST /v1/sim/reset` | Delete all simulated nodes and their events, raw messages and keys; live data is never touched. Returns `{deleted_nodes, deleted_events}` | operator |
@@ -161,7 +162,7 @@ hotspot has `centroid`, `source_ellipse` (Polygon), `ellipse` (`semi_major_m`, `
 `bearing_deg`), `severity`, `confidence`, `independent_sources`, `state` (`active|closed`) and
 `sim`; `GET /v1/hotspots/{id}` adds the event `timeline`. `GET /v1/trust/grid?bbox=` returns a
 GeoJSON FeatureCollection of H3 res-8 cells (at most 5000; larger boxes get `422
-bbox-too-large`). `GET /health` reports `worker` as `present` when a job finished in the last
+bbox-too-large`). `GET /health` reports `ack_signing` as `present` when a signing key is configured, and `worker` as `present` when a job finished in the last
 3 minutes.
 
 ### Trust response (shape)
