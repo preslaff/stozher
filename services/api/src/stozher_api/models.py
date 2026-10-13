@@ -1,0 +1,135 @@
+"""Database tables. Keep in step with migrations/versions."""
+
+import uuid
+from datetime import datetime
+from typing import Any
+
+from geoalchemy2 import Geometry
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Identity,
+    Integer,
+    LargeBinary,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+TS = DateTime(timezone=True)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Node(Base):
+    """`id` is the uint32 node ID used in the packet crypto (docs/packet.md)."""
+
+    __tablename__ = "nodes"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=False, start=1), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(16))  # expert, tbeam, phone, sim
+    mode: Mapped[str] = mapped_column(String(16), default="fixed")
+    surveyed_position: Mapped[Any] = mapped_column(Geometry("POINT", srid=4326), nullable=True)
+    sky_mask: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    reliability_score: Mapped[float | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    last_seen: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+
+
+class NodeKey(Base):
+    __tablename__ = "node_keys"
+
+    node_id: Mapped[int] = mapped_column(ForeignKey("nodes.id"), primary_key=True)
+    key_id: Mapped[int] = mapped_column(SmallInteger, primary_key=True)
+    master_key_enc: Mapped[bytes] = mapped_column(LargeBinary)  # never returned by the API
+    valid_from: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    valid_to: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+
+
+class TransportId(Base):
+    __tablename__ = "transport_ids"
+    __table_args__ = (UniqueConstraint("transport", "external_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    node_id: Mapped[int] = mapped_column(ForeignKey("nodes.id"))
+    transport: Mapped[str] = mapped_column(String(16))  # kineis, mesh, direct, sim
+    external_id: Mapped[str] = mapped_column(String(64))
+
+
+class RawMessage(Base):
+    """Append-only audit trail of every arrival, including rejected and duplicate ones."""
+
+    __tablename__ = "raw_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    transport: Mapped[str] = mapped_column(String(16))
+    external_id: Mapped[str] = mapped_column(String(64))
+    payload_hex: Mapped[str] = mapped_column(Text)
+    received_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    transport_meta: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    node_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    verify_status: Mapped[str] = mapped_column(String(16))  # accepted, duplicate, rejected
+    reject_reason: Mapped[str | None] = mapped_column(String(48), nullable=True)
+
+
+class Event(Base):
+    __tablename__ = "events"
+    __table_args__ = (UniqueConstraint("node_id", "key_id", "seq"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    node_id: Mapped[int] = mapped_column(ForeignKey("nodes.id"))
+    key_id: Mapped[int] = mapped_column(SmallInteger)
+    seq: Mapped[int] = mapped_column(Integer)
+    msg_type: Mapped[int] = mapped_column(SmallInteger)
+    event_class: Mapped[int] = mapped_column(SmallInteger)
+    confidence: Mapped[int] = mapped_column(SmallInteger)
+    flags: Mapped[Any] = mapped_column(JSONB)
+    position: Mapped[Any] = mapped_column(Geometry("POINT", srid=4326))
+    observed_at: Mapped[datetime] = mapped_column(TS)
+    duration_s: Mapped[int] = mapped_column(Integer)
+    features: Mapped[Any] = mapped_column(JSONB)
+    classifier: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    checks: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    origin: Mapped[str] = mapped_column(String(8), default="cloud")
+    received_via: Mapped[str] = mapped_column(String(16))
+    ingested_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    payload_hex: Mapped[str] = mapped_column(Text)
+    sim: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    prefix: Mapped[str] = mapped_column(String(16), unique=True)
+    hash: Mapped[str] = mapped_column(String(64))
+    role: Mapped[str] = mapped_column(String(16))
+    label: Mapped[str] = mapped_column(String(120))
+    owner_contact: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    rate_limit_per_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    allowed_origins: Mapped[Any] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    created_by: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(), primary_key=True)
+    actor: Mapped[str] = mapped_column(String(32))
+    action: Mapped[str] = mapped_column(String(48))
+    target: Mapped[str] = mapped_column(String(64))
+    at: Mapped[datetime] = mapped_column(TS, server_default=func.now())

@@ -4,7 +4,7 @@ services:
     # TODO: PostGIS + pgvector in one image (custom Dockerfile) before the first migration.
     image: postgis/postgis:16-3.4
     env_file: .env
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5433:5432"]
     volumes: [dbdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]

@@ -69,9 +69,9 @@ constant time. Verify the tag before decrypting or using any field.
 
 ## Node ID
 
-The packet does not carry it. It is a **uint32** assigned at node registration (the
-`nodes` table has a `node_id uint32` unique column next to the row id), resolved by the
-receiver from the transport ID (Kinéis device ID, Meshtastic node number). It is used as
+The packet does not carry it. It is a **uint32**, stored as `nodes.id` (assigned at registration or
+chosen by the provisioning tool), resolved by the receiver from the transport ID (Kinéis device ID,
+Meshtastic node number) through the `transport_ids` table. It is used as
 4 big-endian bytes in the key derivation, the counter block and the tag.
 
 ## Keys
