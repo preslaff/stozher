@@ -1,0 +1,120 @@
+# Witness record (packet format v1)
+
+Contract between the firmware (C++) and the backend (Python). Derived from §5 of the
+Technical Specification; this file pins every detail the spec leaves open so two
+independent implementations produce identical bytes. Changing anything here means
+updating `tests/vectors/` and both codecs in the same change (CLAUDE.md rule 6).
+
+All multi-byte integers are big-endian. Bits are numbered 7 (most significant) to 0.
+The wire form is a lowercase hex string; decoders accept upper or lower case. Mesh text
+is `STZ1:` followed by the hex.
+
+## Sizes
+
+- Core: 28 bytes = header 4 + body 20 + tag 4.
+- Extended: 32 bytes = header 4 + body 24 + tag 4. Only for 7-digit Kinéis IDs.
+
+Any other length is rejected.
+
+## Header (bytes 0–3, clear text, authenticated)
+
+| Byte | Bits | Field |
+|---|---|---|
+| 0 | 7–4 | version, must be `1` |
+| 0 | 3–0 | type: 0 heartbeat, 1 event, 2 summary, 3 test; others rejected |
+| 1–2 | | sequence number, uint16 |
+| 3 | 7–4 | key ID (0–15) |
+| 3 | 3 | extended flag (1 = 32-byte record); must agree with the length |
+| 3 | 2–0 | reserved, must be 0 |
+
+## Body (encrypted)
+
+| Byte | Bits | Field |
+|---|---|---|
+| 4 | 7–5 | event class: 0 normal, 1 jamming, 2 spoofing, 3 benign, 4 tamper, 5 time anomaly, 7 unknown; 6 is invalid |
+| 4 | 4–0 | confidence 0–31 |
+| 5 | 7–6 | OSNMA: 0 n/a, 1 ok, 2 fail, 3 unknown |
+| 5 | 5 | stationary |
+| 5 | 4 | receiver jamming flag |
+| 5 | 3 | receiver spoofing flag |
+| 5 | 2 | tamper |
+| 5 | 1 | mesh present |
+| 5 | 0 | reserved, must be 0 |
+| 6–9 | | latitude, int32, units of 1e-7 degrees, range ±900000000 |
+| 10–13 | | longitude, int32, units of 1e-7 degrees, range ±1800000000 |
+| 14–17 | | timestamp, uint32 Unix seconds, node clock |
+| 18–19 | | duration, uint16 seconds |
+| 20 | | mean C/N0, uint8 dB-Hz |
+| 21 | | C/N0 drop, uint8 dB |
+| 22 | | C/N0 spread, uint8 dB |
+| 23 | | jamming indicator / AGC, uint8, receiver scale |
+| 24 | | extended only: satellites in view, uint8 |
+| 25 | | extended only: position jump code (below) |
+| 26 | | extended only: clock jump code (below) |
+| 27 | | extended only: battery percent 0–100, 255 = unknown |
+
+The codec stores the raw codes. Scaling helpers convert to physical units:
+
+- Position jump code `c`: metres = `2^(c/8) - 1`; encode `c = min(255, round(8·log2(1 + m)))`.
+- Clock jump code `c`: milliseconds, same formula.
+
+Code 0 means below 1 unit. The scaling is lossy and is not part of the golden vectors
+(vectors fix the codes). Floating-point scaling must not be used in the authenticated path.
+
+## Tag (last 4 bytes)
+
+`tag = HMAC-SHA256(k_mac, node_id ‖ header ‖ ciphertext)[0:4]`, where `node_id` is 4 bytes
+(see below), `header` the 4 clear bytes and `ciphertext` the encrypted body. Compare in
+constant time. Verify the tag before decrypting or using any field.
+
+## Node ID
+
+The packet does not carry it. It is a **uint32** assigned at node registration (the
+`nodes` table has a `node_id uint32` unique column next to the row id), resolved by the
+receiver from the transport ID (Kinéis device ID, Meshtastic node number). It is used as
+4 big-endian bytes in the key derivation, the counter block and the tag.
+
+## Keys
+
+Per-node master key: 16 random bytes, provisioned at installation. For key ID `k`:
+
+```
+k_enc = HKDF-SHA256(ikm = master, salt = node_id (4 bytes), info = "stozher/v1/enc" ‖ k, L = 16)
+k_mac = HKDF-SHA256(ikm = master, salt = node_id (4 bytes), info = "stozher/v1/mac" ‖ k, L = 32)
+```
+
+`info` is the ASCII string followed by one byte holding `k`. Rotate to a new key ID before
+the sequence number wraps (65535 → 0 under one key ID is a replay hazard).
+
+## Encryption
+
+AES-128 in counter mode over the body with `k_enc`. Initial counter block (16 bytes):
+
+```
+node_id (4) ‖ sequence number (2) ‖ 0x00 × 6 ‖ block counter (4, big-endian, starts at 0)
+```
+
+The body is at most 24 bytes (two blocks). No nonce is transmitted. The sequence number
+must never repeat under one key ID; the node persists it before use.
+
+## Receive rules
+
+1. Length 28 or 32; hex valid.
+2. Version = 1; type valid; reserved bits 0; extended flag matches the length.
+3. Tag valid (constant-time) → otherwise `rejected: bad tag`. A wrong node ID, wrong key
+   or tampered byte all appear as a bad tag.
+4. Decrypt; check event class ≠ 6, lat/lon in range, reserved flag bit 0.
+5. Replay (outside the codec): the sequence number is new for `(node_id, key_id)`; the
+   timestamp lies within the acceptance window.
+
+Rejection reasons (stable strings for the API): `bad_length`, `bad_hex`, `bad_version`,
+`bad_type`, `bad_reserved`, `length_mismatch`, `bad_tag`, `bad_class`, `bad_coordinates`.
+
+## Golden vectors
+
+`tests/vectors/witness_records.json`. Each vector has the node ID, key ID, master key
+(test keys, not secrets), the field values, and the expected hex; invalid vectors carry
+the expected rejection reason. The vectors are generated by
+`tests/vectors/make_vectors.py`, which uses the `openssl` CLI for HKDF, AES-CTR and
+HMAC and its own bit packing, independent of `stozher_core`. Both codecs must reproduce
+every valid vector bit-for-bit and reject every invalid one with the stated reason.

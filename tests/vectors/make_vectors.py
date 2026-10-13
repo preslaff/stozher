@@ -1,0 +1,275 @@
+"""Generate witness_records.json for docs/packet.md.
+
+Deliberately independent of stozher_core: bit packing is done here and HKDF, AES-CTR and
+HMAC come from the `openssl` CLI, so the vectors cross-check the Python codec.
+Run: python3 tests/vectors/make_vectors.py
+"""
+
+import json
+import struct
+import subprocess
+from pathlib import Path
+
+
+def ossl(args: list[str], data: bytes = b"") -> bytes:
+    return subprocess.run(["openssl", *args], input=data, capture_output=True, check=True).stdout
+
+
+def hkdf(master: bytes, node_id: int, label: bytes, key_id: int, length: int) -> bytes:
+    return ossl(
+        [
+            "kdf",
+            "-keylen",
+            str(length),
+            "-binary",
+            "-kdfopt",
+            "digest:SHA256",
+            "-kdfopt",
+            f"hexkey:{master.hex()}",
+            "-kdfopt",
+            f"hexsalt:{node_id.to_bytes(4, 'big').hex()}",
+            "-kdfopt",
+            f"hexinfo:{(label + bytes([key_id])).hex()}",
+            "HKDF",
+        ]
+    )
+
+
+def ctr(key: bytes, node_id: int, seq: int, data: bytes) -> bytes:
+    iv = node_id.to_bytes(4, "big") + seq.to_bytes(2, "big") + bytes(6) + bytes(4)
+    return ossl(["enc", "-aes-128-ctr", "-K", key.hex(), "-iv", iv.hex(), "-nosalt"], data)
+
+
+def hmac(key: bytes, data: bytes) -> bytes:
+    return ossl(
+        ["dgst", "-sha256", "-mac", "HMAC", "-macopt", f"hexkey:{key.hex()}", "-binary"], data
+    )
+
+
+def build(v: dict) -> bytes:
+    ext = v.get("extended", False)
+    header = bytes(
+        [
+            (1 << 4) | v["type"],
+            *v["seq"].to_bytes(2, "big"),
+            (v["key_id"] << 4) | (0x08 if ext else 0),
+        ]
+    )
+    body = bytes(
+        [
+            (v["event_class"] << 5) | v["confidence"],
+            (v["osnma"] << 6)
+            | (v["stationary"] << 5)
+            | (v["rx_jamming"] << 4)
+            | (v["rx_spoofing"] << 3)
+            | (v["tamper"] << 2)
+            | (v["mesh"] << 1),
+        ]
+    )
+    body += struct.pack(">iiIH", v["lat_e7"], v["lon_e7"], v["timestamp"], v["duration_s"])
+    body += bytes([v["cn0_mean"], v["cn0_drop"], v["cn0_spread"], v["agc"]])
+    if ext:
+        body += bytes([v["satellites"], v["pos_jump_code"], v["clock_jump_code"], v["battery"]])
+    master = bytes.fromhex(v["master_key"])
+    enc = ctr(
+        hkdf(master, v["node_id"], b"stozher/v1/enc", v["key_id"], 16), v["node_id"], v["seq"], body
+    )
+    mac = hkdf(master, v["node_id"], b"stozher/v1/mac", v["key_id"], 32)
+    tag = hmac(mac, v["node_id"].to_bytes(4, "big") + header + enc)[:4]
+    return header + enc + tag
+
+
+BASE = dict(
+    type=1,
+    seq=1,
+    key_id=0,
+    node_id=1,
+    master_key="000102030405060708090a0b0c0d0e0f",
+    event_class=1,
+    confidence=24,
+    osnma=3,
+    stationary=1,
+    rx_jamming=1,
+    rx_spoofing=0,
+    tamper=0,
+    mesh=0,
+    lat_e7=431989000,
+    lon_e7=279166000,
+    timestamp=1795860000,
+    duration_s=45,
+    cn0_mean=32,
+    cn0_drop=14,
+    cn0_spread=6,
+    agc=181,
+)
+
+valid = {
+    "core_event_jamming": dict(),
+    "core_heartbeat_normal": dict(
+        type=0, seq=0, event_class=0, confidence=0, rx_jamming=0, stationary=1
+    ),
+    "core_test_type": dict(type=3, seq=7),
+    "core_summary": dict(type=2, seq=300, event_class=3, confidence=9, duration_s=3600),
+    "core_negative_coordinates": dict(
+        lat_e7=-338688000,
+        lon_e7=-706693000,
+        node_id=0x00ABCDEF,
+        master_key="ffeeddccbbaa99887766554433221100",
+    ),
+    "core_seq_wrap_max": dict(seq=65535, key_id=15, node_id=0xFFFFFFFF),
+    "core_all_flags_max_values": dict(
+        event_class=7,
+        confidence=31,
+        osnma=2,
+        stationary=1,
+        rx_jamming=1,
+        rx_spoofing=1,
+        tamper=1,
+        mesh=1,
+        lat_e7=900000000,
+        lon_e7=1800000000,
+        timestamp=4294967295,
+        duration_s=65535,
+        cn0_mean=255,
+        cn0_drop=255,
+        cn0_spread=255,
+        agc=255,
+    ),
+    "core_all_zero_fields": dict(
+        event_class=0,
+        confidence=0,
+        osnma=0,
+        stationary=0,
+        rx_jamming=0,
+        lat_e7=0,
+        lon_e7=0,
+        timestamp=0,
+        duration_s=0,
+        cn0_mean=0,
+        cn0_drop=0,
+        cn0_spread=0,
+        agc=0,
+        seq=0,
+    ),
+    "extended_event_spoofing": dict(
+        extended=True,
+        event_class=2,
+        confidence=28,
+        key_id=2,
+        seq=1024,
+        rx_spoofing=1,
+        rx_jamming=0,
+        satellites=11,
+        pos_jump_code=97,
+        clock_jump_code=64,
+        battery=76,
+    ),
+    "extended_battery_unknown": dict(
+        extended=True,
+        satellites=0,
+        pos_jump_code=255,
+        clock_jump_code=0,
+        battery=255,
+        tamper=1,
+        event_class=4,
+        seq=65534,
+    ),
+}
+
+out = {
+    "description": "Golden vectors for docs/packet.md (generated by make_vectors.py via openssl).",
+    "valid": [],
+    "invalid": [],
+}
+built = {}
+for name, over in valid.items():
+    v = {**BASE, **over}
+    raw = build(v)
+    built[name] = (v, raw)
+    out["valid"].append({"name": name, **v, "hex": raw.hex()})
+
+
+def bad(name: str, reason: str, raw: bytes, node_id: int | None = None, key_id: int = 0) -> None:
+    base_v = built["core_event_jamming"][0]
+    out["invalid"].append(
+        {
+            "name": name,
+            "reason": reason,
+            "node_id": node_id or base_v["node_id"],
+            "key_id": key_id,
+            "master_key": base_v["master_key"],
+            "hex": raw.hex(),
+        }
+    )
+
+
+good = built["core_event_jamming"][1]
+ext = built["extended_event_spoofing"][1]
+bad("bad_tag_flipped_ciphertext_bit", "bad_tag", good[:10] + bytes([good[10] ^ 1]) + good[11:])
+bad("bad_tag_flipped_tag_bit", "bad_tag", good[:-1] + bytes([good[-1] ^ 1]))
+bad("bad_tag_flipped_header_seq", "bad_tag", good[:2] + bytes([good[2] ^ 1]) + good[3:])
+bad("bad_tag_wrong_node_id", "bad_tag", good, node_id=2)
+bad("bad_length_27", "bad_length", good[:27])
+bad("bad_length_30", "bad_length", good + b"\x00\x00")
+bad("bad_length_empty", "bad_length", b"")
+
+
+def resign(header: bytes, v: dict, body_override: bytes | None = None) -> bytes:
+    """Rebuild a record with a custom header (valid tag) to test parser rules past the tag."""
+    master = bytes.fromhex(v["master_key"])
+    seq = int.from_bytes(header[1:3], "big")
+    key_id = header[3] >> 4
+    plain = body_override if body_override is not None else bytes(20)
+    enc = ctr(hkdf(master, v["node_id"], b"stozher/v1/enc", key_id, 16), v["node_id"], seq, plain)
+    mac = hkdf(master, v["node_id"], b"stozher/v1/mac", key_id, 32)
+    return header + enc + hmac(mac, v["node_id"].to_bytes(4, "big") + header + enc)[:4]
+
+
+bv = built["core_event_jamming"][0]
+bad("bad_version_2", "bad_version", resign(bytes([0x21, 0, 1, 0]), bv))
+bad("bad_type_4", "bad_type", resign(bytes([0x14, 0, 1, 0]), bv))
+bad("bad_reserved_header_bits", "bad_reserved", resign(bytes([0x11, 0, 1, 0x01]), bv))
+bad("length_mismatch_ext_flag_on_core", "length_mismatch", resign(bytes([0x11, 0, 1, 0x08]), bv))
+bad("bad_class_6", "bad_class", resign(bytes([0x11, 0, 1, 0]), bv, bytes([6 << 5]) + bytes(19)))
+bad(
+    "bad_reserved_flag_bit0",
+    "bad_reserved",
+    resign(bytes([0x11, 0, 1, 0]), bv, bytes([0, 1]) + bytes(18)),
+)
+bad(
+    "bad_coordinates_lat_over_90",
+    "bad_coordinates",
+    resign(bytes([0x11, 0, 1, 0]), bv, bytes([0, 0]) + struct.pack(">i", 900000001) + bytes(14)),
+)
+bad(
+    "bad_coordinates_lon_under_minus_180",
+    "bad_coordinates",
+    resign(
+        bytes([0x11, 0, 1, 0]),
+        bv,
+        bytes([0, 0, 0, 0, 0, 0]) + struct.pack(">i", -1800000001) + bytes(10),
+    ),
+)
+out["invalid"].append(
+    {
+        "name": "bad_hex_not_hex",
+        "reason": "bad_hex",
+        "node_id": 1,
+        "key_id": 0,
+        "master_key": bv["master_key"],
+        "hex": "zz" + good.hex()[2:],
+    }
+)
+out["invalid"].append(
+    {
+        "name": "length_mismatch_flag_clear_on_32_bytes",
+        "reason": "length_mismatch",
+        "node_id": 1,
+        "key_id": 2,
+        "master_key": bv["master_key"],
+        "hex": resign(bytes([0x11, 4, 0, 0x20]), bv, bytes(24)).hex(),
+    }
+)
+
+Path(__file__).with_name("witness_records.json").write_text(json.dumps(out, indent=2) + "\n")
+print(len(out["valid"]), "valid,", len(out["invalid"]), "invalid")
