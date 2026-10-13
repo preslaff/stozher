@@ -1,13 +1,14 @@
 """Database tables. Keep in step with migrations/versions."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from geoalchemy2 import Geometry
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Identity,
@@ -127,6 +128,14 @@ class ApiKey(Base):
     expires_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    # docs/access.md: every credential belongs to an organisation, has a purpose and a kind; staff keys
+    # are bound to a named account. Nullable only for keys that predate this (flagged in the inventory).
+    organisation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("organisations.id"), nullable=True
+    )
+    purpose: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    kind: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), nullable=True)
 
 
 class AuditLog(Base):
@@ -137,6 +146,73 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(48))
     target: Mapped[str] = mapped_column(String(64))
     at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    bootstrap: Mapped[bool] = mapped_column(
+        Boolean, default=False
+    )  # done in setup mode, by one administrator
+
+
+class Organisation(Base):
+    """An admitted organisation (docs/access.md section 4). Every credential belongs to one."""
+
+    __tablename__ = "organisations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    type: Mapped[str] = mapped_column(String(24))
+    contact_name: Mapped[str] = mapped_column(
+        String(120)
+    )  # a role or person responsible for its credentials
+    contact_address: Mapped[str] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(
+        String(16), default="proposed"
+    )  # proposed, active, suspended, offboarded
+    max_role: Mapped[str] = mapped_column(String(16), default="responder")
+    agreement_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    agreement_accepted_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    review_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    created_by: Mapped[str] = mapped_column(String(48))
+    onboarded_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+
+
+class StaffUser(Base):
+    """A named platform staff account (admin or operator). The only people the platform names."""
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organisations.id"))
+    display_name: Mapped[str] = mapped_column(String(120))
+    work_email: Mapped[str] = mapped_column(String(200), unique=True)
+    role: Mapped[str] = mapped_column(String(16))  # operator, admin
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active, disabled
+    created_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    created_by: Mapped[str] = mapped_column(String(48))
+    disabled_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+
+
+class AdminRequest(Base):
+    """A sensitive action waiting for a second administrator (two-person rule, docs/access.md section 7)."""
+
+    __tablename__ = "admin_requests"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    action: Mapped[str] = mapped_column(
+        String(32)
+    )  # create_key, activate_organisation, create_user, change_user_role
+    payload: Mapped[Any] = mapped_column(JSONB)  # never contains a secret
+    requested_by: Mapped[str] = mapped_column(String(48))  # "user:<id>" or "key:<prefix>"
+    requested_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(TS)
+    status: Mapped[str] = mapped_column(
+        String(16), default="pending"
+    )  # pending, approved, rejected, cancelled, expired
+    decided_by: Mapped[str | None] = mapped_column(String(48), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    result: Mapped[Any] = mapped_column(
+        JSONB, nullable=True
+    )  # what was created (ids, never a secret)
 
 
 class Hotspot(Base):

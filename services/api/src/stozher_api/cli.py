@@ -21,7 +21,7 @@ async def create_key(role: str, label: str) -> str:
         session.add(
             ApiKey(prefix=prefix, hash=hash_key(full), role=role, label=label, created_by="cli")
         )
-        session.add(AuditLog(actor="cli", action="key.create", target=prefix))
+        session.add(AuditLog(actor="cli", action="key.create", target=prefix, bootstrap=True))
         await session.commit()
     await engine.dispose()
     return full

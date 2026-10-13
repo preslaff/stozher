@@ -9,13 +9,16 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .. import access_service as svc
+from ..access_policy import PolicyError, key_needs_two_admins
+from ..audit import audit
 from ..auth import Principal, hash_key, require_role
-from ..models import ApiKey, AuditLog
+from ..models import ApiKey, AuditLog, StaffUser
 from ..problems import ApiError
 from ..ratelimit import DEFAULT_LIMITS
 
@@ -42,6 +45,10 @@ def _aware(v: datetime | None) -> datetime | None:
 class KeyIn(BaseModel):
     label: str = Field(min_length=1, max_length=120)
     role: Role
+    kind: Literal["field", "service", "integration", "staff", "break_glass"]
+    organisation_id: str
+    purpose: str = Field(min_length=3, max_length=200)
+    user_id: str | None = None
     owner_contact: str | None = Field(default=None, max_length=200)
     rate_limit_per_min: int | None = Field(default=None, ge=1, le=100_000)
     expires_at: datetime | None = None
@@ -75,6 +82,10 @@ def _view(k: ApiKey, now: datetime) -> dict[str, Any]:
         "prefix": k.prefix,
         "label": k.label,
         "role": k.role,
+        "kind": k.kind,
+        "organisation_id": str(k.organisation_id) if k.organisation_id else None,
+        "purpose": k.purpose,
+        "user_id": str(k.user_id) if k.user_id else None,
         "owner_contact": k.owner_contact,
         "rate_limit_per_min": k.rate_limit_per_min,
         "effective_rate_limit": k.rate_limit_per_min or DEFAULT_LIMITS[k.role],
@@ -103,46 +114,49 @@ async def _get(session: AsyncSession, key_id: uuid.UUID) -> ApiKey:
 
 
 def _audit(session: AsyncSession, p: Principal, action: str, k: ApiKey) -> None:
-    session.add(
-        AuditLog(actor=p.prefix, action=action, target=k.prefix)
-    )  # the prefix only, never a secret
+    session.add(audit(p, action, k.prefix))  # the prefix only, never a secret
 
 
 @router.post("/api-keys", status_code=201)
 async def create_key(
-    body: KeyIn, request: Request, p: Principal = Depends(admin)
+    body: KeyIn, request: Request, response: Response, p: Principal = Depends(admin)
 ) -> dict[str, Any]:
+    """Issue a credential. Every key belongs to an organisation, has a purpose and expires.
+
+    Admin, operator, staff and break-glass keys need a second named admin: the answer is then 202 with a
+    pending request, and the secret is shown to the approving admin (docs/access.md section 7).
+    """
     now = datetime.now(UTC)
     if body.expires_at is not None and body.expires_at <= now:
         raise ApiError(
             422, "validation-error", "Invalid expiry", "expires_at must be in the future"
         )
-    env = request.app.state.settings.env_name
-    secret = secrets.token_urlsafe(32)
+    payload = {**body.model_dump(mode="json"), "created_by": p.prefix}
+    env, agreement = (
+        request.app.state.settings.env_name,
+        request.app.state.settings.agreement_version,
+    )
     async with request.app.state.sessionmaker() as session:
-        for _ in range(5):  # a prefix collision is astronomically unlikely, but it is unique
-            prefix = secrets.token_hex(4)
-            if (
-                await session.execute(select(ApiKey.id).where(ApiKey.prefix == prefix))
-            ).first() is None:
-                break
-        k = ApiKey(
-            prefix=prefix,
-            hash=hash_key(_full_key(env, prefix, secret)),
-            role=body.role,
-            label=body.label,
-            owner_contact=body.owner_contact,
-            rate_limit_per_min=body.rate_limit_per_min,
-            allowed_origins=body.allowed_origins,
-            expires_at=body.expires_at,
-            created_by=p.prefix,
-        )
-        session.add(k)
-        await session.flush()
-        _audit(session, p, "key.create", k)
+        try:
+            await svc.check_key_request(
+                session, payload, now
+            )  # fail early, before a request exists
+            if key_needs_two_admins(body.role, body.kind):
+                out = await svc.submit(
+                    session, p, "create_key", payload, now, env=env, agreement=agreement
+                )
+            else:  # field, service and integration credentials of lower roles are issued at once
+                result, secret = await svc.create_key(session, payload, p, now, env, False)
+                out = svc.Outcome("done", None, result, secret)
+        except PolicyError as exc:
+            raise ApiError(422, "policy", "Not allowed by the access rules", str(exc)) from exc
         await session.commit()
-        await session.refresh(k)
-        return {**_view(k, now), "key": _full_key(env, prefix, secret)}  # the only time it is shown
+        if out.status == "pending":
+            response.status_code = 202
+            return {"status": "pending", "request": svc.request_view(out.request)}  # type: ignore[arg-type]
+        k = await session.get(ApiKey, uuid.UUID(out.result["id"]))  # type: ignore[index]
+        assert k is not None
+        return {**_view(k, now), "key": out.secret, "bootstrap": out.request is not None}
 
 
 @router.get("/api-keys")
@@ -280,9 +294,28 @@ async def audit_log(
         q = q.where(AuditLog.at <= to)
     async with request.app.state.sessionmaker() as session:
         rows = (await session.execute(q)).scalars().all()
+        ids = {r.actor_user_id for r in rows if r.actor_user_id}
+        names = (
+            {
+                u.id: u.display_name
+                for u in (
+                    await session.execute(select(StaffUser).where(StaffUser.id.in_(ids)))
+                ).scalars()
+            }
+            if ids
+            else {}
+        )
     return {
         "items": [
-            {"id": r.id, "actor": r.actor, "action": r.action, "target": r.target, "at": r.at}
+            {
+                "id": r.id,
+                "actor": r.actor,
+                "action": r.action,
+                "target": r.target,
+                "at": r.at,
+                "account": names.get(r.actor_user_id) if r.actor_user_id else None,
+                "setup_mode": r.bootstrap,
+            }
             for r in rows
         ],
         "count": len(rows),

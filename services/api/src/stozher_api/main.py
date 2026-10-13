@@ -13,6 +13,7 @@ from .db import make_engine, make_sessionmaker
 from .models import ApiKey
 from .ratelimit import RateHeadersMiddleware, RateLimiter
 from .routes import (
+    access,
     admin,
     alerts,
     control,
@@ -92,6 +93,7 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     )
     app.include_router(health.router)
     app.include_router(me.router)
+    app.include_router(access.router)
     app.include_router(ingest.router)
     app.include_router(nodes.router)
     app.include_router(events.router)

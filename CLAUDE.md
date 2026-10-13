@@ -87,7 +87,8 @@ In UI text, docs and code comments use civil terms: "situational awareness",
     act through **named accounts**; field teams and machines use keys labelled by organisation, team or
     system and purpose, never by a person. No shared staff credentials. Give every new endpoint an explicit
     role and update the generated access matrix (`uv run python -m stozher_api.access_matrix --write`); a
-    test fails otherwise. Open decisions D4-D10 are listed there.
+    test fails otherwise. Sensitive admin actions go through the two-person request queue (setup mode while fewer
+    than two named admins exist). Open decisions D4-D10 are listed there.
 
 ## 3. Architecture in one screen
 

@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # Accept records whose node clock is within this window of server time.
     replay_window_s: int = 2 * 86400
     env_name: str = "live"
+    # Terms of use version an organisation must have accepted before it is activated (docs/terms-of-use.md).
+    agreement_version: str = "0.1"
     # Browser origins allowed to call the API (the dashboard); comma separated.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 

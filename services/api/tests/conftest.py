@@ -15,7 +15,7 @@ from sqlalchemy.pool import NullPool
 from stozher_api.auth import hash_key, new_key
 from stozher_api.config import Settings
 from stozher_api.main import create_app
-from stozher_api.models import ApiKey
+from stozher_api.models import ApiKey, Organisation
 
 ADMIN_URL = os.environ.get(
     "STOZHER_TEST_DB_ADMIN_URL", "postgresql://preslaff@/postgres?host=/var/run/postgresql"
@@ -57,18 +57,37 @@ async def _client(database: str, seed: str) -> AsyncIterator[httpx.AsyncClient]:
         async with app.state.sessionmaker() as s:
             await s.execute(
                 text(
-                    "TRUNCATE hazard_history, hazard_reports, road_hazards, watched_routes, acks, alerts, jobs, trust_cells, hotspot_events, hotspots, audit_log, api_keys, events, raw_messages, transport_ids, node_keys, nodes RESTART IDENTITY CASCADE"
+                    "TRUNCATE hazard_history, hazard_reports, road_hazards, watched_routes, acks, alerts, jobs, trust_cells, hotspot_events, hotspots, audit_log, api_keys, users, admin_requests, organisations, events, raw_messages, transport_ids, node_keys, nodes RESTART IDENTITY CASCADE"
                 )
             )
             keys = {}
+            orgs: dict[str, str] = {}
             for role in ("admin", "operator", "responder", "reporter", "public", "system"):
                 full, prefix = new_key("test")
                 s.add(ApiKey(prefix=prefix, hash=hash_key(full), role=role, label=f"test {role}"))
                 keys[role] = full
+            for name, kind, cap in (
+                ("Test platform", "platform", "admin"),
+                ("Test rescue service", "rescue_service", "responder"),
+            ):
+                o = Organisation(
+                    name=name,
+                    type=kind,
+                    contact_name="Duty officer",
+                    contact_address="duty@example.org",
+                    status="active",
+                    max_role=cap,
+                    agreement_version=settings.agreement_version,
+                    created_by="test",
+                )
+                s.add(o)
+                await s.flush()
+                orgs[kind] = str(o.id)
             await s.commit()
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
             c.keys = keys  # type: ignore[attr-defined]
+            c.orgs = orgs  # type: ignore[attr-defined]
             c.app = app  # type: ignore[attr-defined]
             yield c
 

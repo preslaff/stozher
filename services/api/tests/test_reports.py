@@ -294,7 +294,13 @@ async def test_an_admin_can_issue_reporter_keys(client):  # type: ignore[no-unty
     r = await client.post(
         "/v1/admin/api-keys",
         headers=hdr(client, "admin"),
-        json={"label": "Municipal rescue team 3", "role": "reporter"},
+        json={
+            "label": "Municipal rescue team 3",
+            "role": "reporter",
+            "kind": "field",
+            "purpose": "community reports",
+            "organisation_id": client.orgs["rescue_service"],
+        },
     )
     assert r.status_code == 201
     d = r.json()

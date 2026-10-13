@@ -13,7 +13,36 @@ def key_hdr(key: str) -> dict[str, str]:
 
 
 async def create(c: httpx.AsyncClient, **over):  # type: ignore[no-untyped-def]
-    body = {"label": "Port authority routing", "role": "public", **over}
+    """A credential for the test rescue service (or the platform for staff roles), the way the rules require."""
+    role = over.get("role", "public")
+    body: dict = {
+        "label": "Port authority routing",
+        "role": role,
+        "purpose": "tests",
+        "kind": "field",
+        "organisation_id": c.orgs["rescue_service"],
+        **over,
+    }  # type: ignore[attr-defined]
+    if role in ("operator", "admin"):
+        body["organisation_id"] = c.orgs["platform"]  # type: ignore[attr-defined]
+        body["kind"] = "break_glass"
+        if role == "operator":
+            body["kind"] = "staff"
+            u = await c.post(
+                "/v1/admin/users",
+                headers=hdr(c, "admin"),
+                json={
+                    "organisation_id": body["organisation_id"],
+                    "display_name": "Test Operator",
+                    "work_email": f"op{len(str(over))}{id(over)}@example.org",
+                    "role": "operator",
+                },
+            )
+            body["user_id"] = u.json()["result"]["user_id"]
+    elif role == "system":
+        body["kind"] = "service"
+    elif role == "reporter":
+        pass
     return await c.post("/v1/admin/api-keys", json=body, headers=hdr(c, "admin"))
 
 

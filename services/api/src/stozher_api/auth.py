@@ -12,7 +12,7 @@ from fastapi import Depends, Header, Request
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import ApiKey
+from .models import ApiKey, Organisation, StaffUser
 from .problems import ApiError
 from .ratelimit import DEFAULT_LIMITS
 
@@ -29,6 +29,10 @@ class Principal:
     rate_limit: int = 0
     expires_at: datetime | None = None
     allowed_origins: tuple[str, ...] = ()
+    user_id: str | None = None  # the named staff account this key is bound to, if any
+    organisation_id: str | None = None
+    kind: str | None = None
+    purpose: str | None = None
 
 
 def hash_key(full_key: str) -> str:
@@ -71,12 +75,25 @@ async def authenticate(session: AsyncSession, full_key: str) -> Principal | None
         return None
     if row.revoked_at is not None or (row.expires_at is not None and row.expires_at <= now):
         return None
+    # A suspended or offboarded organisation, or a disabled staff account, ends the key at once.
+    if row.organisation_id is not None:
+        org = await session.get(Organisation, row.organisation_id)
+        if org is None or org.status != "active":
+            return None
+    if row.user_id is not None:
+        user = await session.get(StaffUser, row.user_id)
+        if user is None or user.status != "active":
+            return None
     return Principal(
         prefix=row.prefix,
         role=row.role,
         label=row.label,
         rate_limit=row.rate_limit_per_min or DEFAULT_LIMITS[row.role],
         expires_at=row.expires_at,
+        user_id=str(row.user_id) if row.user_id else None,
+        organisation_id=str(row.organisation_id) if row.organisation_id else None,
+        kind=row.kind,
+        purpose=row.purpose,
         allowed_origins=tuple(row.allowed_origins or ()),
     )
 

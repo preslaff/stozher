@@ -15,10 +15,11 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..audit import audit
 from ..auth import Principal, require_role
 from ..hazard_logic import TIER_RANK
 from ..hazard_service import reconcile
-from ..models import AuditLog, HazardHistory, RoadHazard
+from ..models import HazardHistory, RoadHazard
 from ..problems import ApiError
 from .geo import BBOX, age_s, parse_bbox
 
@@ -165,7 +166,7 @@ async def _decide(
     session.add(
         HazardHistory(hazard_id=h.id, at=now, event="decision", value=decision, source="operator")
     )
-    session.add(AuditLog(actor=p.prefix, action=f"hazard.{decision}", target=str(h.id)))
+    session.add(audit(p, f"hazard.{decision}", str(h.id)))
     await session.flush()
     await reconcile(session, now)  # applies the decision and commits
     refreshed = (

@@ -6,12 +6,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import delete, select
 
+from ..audit import audit
 from ..auth import Principal, require_role
 from ..jobs import enqueue
 from ..models import (
     AckRecord,
     Alert,
-    AuditLog,
     Event,
     HotspotEvent,
     Node,
@@ -39,7 +39,7 @@ async def reset(request: Request, p: Principal = Depends(operator)) -> dict[str,
         await session.execute(delete(NodeKey).where(NodeKey.node_id.in_(sim_nodes)))
         await session.execute(delete(TransportId).where(TransportId.node_id.in_(sim_nodes)))
         n_nodes = (await session.execute(delete(Node).where(Node.kind == "sim"))).rowcount
-        session.add(AuditLog(actor=p.prefix, action="sim.reset", target=f"{n_nodes} nodes"))
+        session.add(audit(p, "sim.reset", f"{n_nodes} nodes"))
         await enqueue(session, "recompute", datetime.now(UTC), commit=False)
         await session.commit()
     return {"deleted_nodes": n_nodes, "deleted_events": n_events}

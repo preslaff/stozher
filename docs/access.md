@@ -79,6 +79,23 @@ updating this table fails the build.
 | `PATCH /v1/admin/api-keys/{key_id}` |  |  |  |  | x |  |
 | `POST /v1/admin/api-keys/{key_id}/rotate` |  |  |  |  | x |  |
 | `GET /v1/admin/audit-log` |  |  |  |  | x |  |
+| `GET /v1/admin/inventory` |  |  |  |  | x |  |
+| `GET /v1/admin/organisations` |  |  |  |  | x |  |
+| `POST /v1/admin/organisations` |  |  |  |  | x |  |
+| `GET /v1/admin/organisations/{org_id}` |  |  |  |  | x |  |
+| `PATCH /v1/admin/organisations/{org_id}` |  |  |  |  | x |  |
+| `POST /v1/admin/organisations/{org_id}/activate` |  |  |  |  | x |  |
+| `POST /v1/admin/organisations/{org_id}/agreement` |  |  |  |  | x |  |
+| `POST /v1/admin/organisations/{org_id}/offboard` |  |  |  |  | x |  |
+| `POST /v1/admin/organisations/{org_id}/suspend` |  |  |  |  | x |  |
+| `GET /v1/admin/requests` |  |  |  |  | x |  |
+| `POST /v1/admin/requests/{request_id}/approve` |  |  |  |  | x |  |
+| `POST /v1/admin/requests/{request_id}/cancel` |  |  |  |  | x |  |
+| `POST /v1/admin/requests/{request_id}/reject` |  |  |  |  | x |  |
+| `GET /v1/admin/users` |  |  |  |  | x |  |
+| `POST /v1/admin/users` |  |  |  |  | x |  |
+| `POST /v1/admin/users/{user_id}/disable` |  |  |  |  | x |  |
+| `POST /v1/admin/users/{user_id}/role` |  |  |  |  | x |  |
 | `GET /v1/alerts` |  |  | x | x | x |  |
 | `GET /v1/control/public-key` (no key) | x | x | x | x | x | x |
 | `GET /v1/events` |  |  | x | x | x |  |
@@ -237,16 +254,21 @@ separate specification when the field-kit sync is built.
 | Audit log of key operations, node registration, route watches and hazard decisions, by key prefix | `GET /v1/admin/audit-log` |
 | Reporters pseudonymous by design; no endpoint lists reports by reporter; schema-guard test | `docs/hazards.md`, `test_reports.py` |
 | The access matrix generated from code and checked by a test | this document, `access_matrix.py` |
+| **Phase A:** organisation registry (type, contact, role cap, agreement version, status), every key belongs to an active organisation, has a purpose, a kind and an expiry (default and maximum by kind) | `access_policy.py`, `access_service.py`, `routes/access.py`, migration 0009 |
+| **Phase A:** named staff accounts; staff keys bound to an account; audit entries carry the account (`account` in the audit log, `account` in `/v1/me`) | same |
+| **Phase A:** two-person rule: activating an organisation, creating or re-roling an account, issuing an admin, operator, staff or break-glass key become requests a different named admin approves (`/v1/admin/requests`); fewer than two named admins means *setup mode*, where one admin completes the action and the audit entry is flagged `setup_mode` | same |
+| **Phase A:** access inventory, admin only (`GET /v1/admin/inventory`), legacy keys without organisation or purpose flagged | same |
+| **Phase A:** suspending or offboarding an organisation revokes all its credentials and disables its accounts at once; disabling an account revokes its keys | same |
 
 **Gaps, in order, with what I would do for the hackathon (phase A) and after:**
 
 | # | Gap | Phase |
 |---|---|---|
-| 1 | **Organisation registry**, with every key belonging to an organisation and having a purpose; an expiry required for every key except break-glass | A |
-| 2 | **Named staff accounts** (an account record per person; staff keys bound to an account) and the audit trail naming the actor | A |
-| 3 | **Two-person rule** for creating admin, operator and staff credentials | A |
-| 4 | **Access inventory report**: every active credential with organisation, purpose, role, created, last used, expiry | A |
-| 5 | An **agreement** version per organisation, and the written terms of use | A (text) |
+| 1 | ~~Organisation registry~~ done (phase A) | A |
+| 2 | ~~Named staff accounts~~ done (phase A) | A |
+| 3 | ~~Two-person rule~~ done (phase A) | A |
+| 4 | ~~Access inventory report~~ done (phase A) | A |
+| 5 | Agreement version per organisation done; the written terms are a draft in `docs/terms-of-use.md` that needs legal review | A (text) |
 | 6 | **OIDC sign-in with MFA** for staff; the dashboard login instead of pasting a key | B |
 | 7 | **Source-address or client-certificate binding** for service and integration keys | B |
 | 8 | **Offline revocation** for field kits (short-lived credentials, signed deny-list) | B, with field-kit sync |

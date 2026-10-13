@@ -161,7 +161,11 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | Assistant | `POST /v1/assistant/query` | Question in, answer with tool calls and sources | responder |
 | Simulator | `POST /v1/sim/scenarios`, `POST /v1/sim/scenarios/{id}/run`, `GET /v1/sim/runs/{id}` | Define, run, read ground truth and metrics | operator |
 | Simulator | `POST /v1/sim/reset` | Delete all simulated nodes and their events, raw messages and keys; live data is never touched. Returns `{deleted_nodes, deleted_events}` | operator |
-| Admin | `/v1/admin/api-keys…`, `GET /v1/admin/audit-log` | Key management (section 3) | admin |
+| Admin | `/v1/admin/api-keys…`, `GET /v1/admin/audit-log` | Key management (section 3). `POST /api-keys` requires `kind`, `organisation_id`, `purpose` (and `user_id` for `staff`); admin, operator, staff and break-glass keys answer `202` with a pending request unless in setup mode | admin |
+| Admin | `/v1/admin/organisations…` (`POST`, `GET`, `PATCH`, `/agreement`, `/activate`, `/suspend`, `/offboard`) | Organisation registry (`docs/access.md` section 4) | admin |
+| Admin | `/v1/admin/users…` (`POST`, `GET`, `/role`, `/disable`) | Named staff accounts | admin |
+| Admin | `/v1/admin/requests…` (`GET`, `/approve`, `/reject`, `/cancel`) | Two-person approvals; the secret of an approved key is returned once, to the approver | admin |
+| Admin | `GET /v1/admin/inventory` | Every active credential with organisation, purpose, kind, account, last use, expiry | admin |
 
 ### Situational list responses
 

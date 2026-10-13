@@ -14,8 +14,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..audit import audit
 from ..auth import RANK, Principal, require_role
-from ..models import AuditLog, WatchedRoute
+from ..models import WatchedRoute
 from ..problems import ApiError
 from ..route_service import evaluate, route_json
 from .trust import LineStringIn
@@ -139,7 +140,7 @@ async def create(
         status = await _status(session, w)
         w.last_state = status["overall"]["state"]  # baseline: only changes from here raise alerts
         w.last_evaluated_at = now
-        session.add(AuditLog(actor=p.prefix, action="route.watch", target=str(w.id)))
+        session.add(audit(p, "route.watch", str(w.id)))
         await session.commit()
         status["created_at"] = w.created_at
     return status
@@ -207,6 +208,6 @@ async def update(
 async def delete(watch_id: uuid.UUID, request: Request, p: Principal = Depends(responder)) -> None:
     async with request.app.state.sessionmaker() as session:
         w = await _owned(session, watch_id, p)
-        session.add(AuditLog(actor=p.prefix, action="route.unwatch", target=str(w.id)))
+        session.add(audit(p, "route.unwatch", str(w.id)))
         await session.delete(w)
         await session.commit()

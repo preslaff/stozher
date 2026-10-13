@@ -9,8 +9,9 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from ..audit import audit
 from ..auth import Principal, require_role
-from ..models import AuditLog, Node, NodeKey, TransportId
+from ..models import Node, NodeKey, TransportId
 from ..problems import ApiError
 from ..secrets_box import KekMissingError, seal
 
@@ -107,7 +108,7 @@ async def register(body: NodeIn, request: Request, p: Principal = Depends(operat
                 session.add(
                     TransportId(node_id=node.id, transport=t.transport, external_id=t.external_id)
                 )
-            session.add(AuditLog(actor=p.prefix, action="node.register", target=str(node.id)))
+            session.add(audit(p, "node.register", str(node.id)))
             await session.commit()
         except KekMissingError as exc:
             await session.rollback()
