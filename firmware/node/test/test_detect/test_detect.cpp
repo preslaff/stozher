@@ -425,6 +425,48 @@ void test_a_large_drop_stands_alone() {
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
 }
 
+// The cover test on the T-Beam: a strong drop with satellites still tracked but weak, then the signal comes back.
+// Per-satellite history must not keep the event alive once every satellite is back where it was.
+void test_a_covered_receiver_clears_when_the_satellites_return() {
+  Recorder r(fixed_cfg());
+  set_svs(r.tmpl, 8, 1, 26);
+  r.tmpl.sats_tracked = 8;
+  r.tmpl.cn0_mean = 26;
+  r.run(120, 0);
+  set_svs(r.tmpl, 8, 1, 13);  // the cover: 13 dB down, all of them
+  r.tmpl.cn0_mean = 13;
+  r.run(30, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  r.run(1500, 0);  // long cover: the baseline must not follow it
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  set_svs(r.tmpl, 8, 1, 26);  // uncovered
+  r.tmpl.cn0_mean = 26;
+  r.run(60, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+}
+
+// The same, but the satellites come back one by one, with a different few first (a receiver reacquiring).
+void test_an_event_clears_while_the_receiver_reacquires_satellites() {
+  Recorder r(fixed_cfg());
+  set_svs(r.tmpl, 8, 1, 26);
+  r.tmpl.sats_tracked = 8;
+  r.tmpl.cn0_mean = 26;
+  r.run(120, 0);
+  r.tmpl.sats_tracked = 0;  // everything lost under the cover
+  r.tmpl.sv_n = 0;
+  r.tmpl.cn0_mean = 0;
+  r.run(600, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  for (uint8_t n = 1; n <= 8; n++) {  // one more satellite every 20 s, new ids first
+    set_svs(r.tmpl, n, (uint16_t)(100 + n), 24);
+    r.tmpl.sats_tracked = n;
+    r.tmpl.cn0_mean = 24;
+    r.run(20, 0);
+  }
+  r.run(60, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+}
+
 void test_the_same_recording_always_gives_the_same_verdicts() {
   Verdict a[200], b[200];
   for (int pass = 0; pass < 2; pass++) {
@@ -538,6 +580,8 @@ int main() {
   RUN_TEST(test_a_modest_drop_with_lost_satellites_is_jamming);
   RUN_TEST(test_a_modest_drop_with_the_receiver_warning_is_jamming);
   RUN_TEST(test_a_large_drop_stands_alone);
+  RUN_TEST(test_a_covered_receiver_clears_when_the_satellites_return);
+  RUN_TEST(test_an_event_clears_while_the_receiver_reacquires_satellites);
   RUN_TEST(test_the_same_recording_always_gives_the_same_verdicts);
   RUN_TEST(test_a_verdict_becomes_a_record_the_codec_round_trips);
   return UNITY_END();
