@@ -77,6 +77,7 @@ void test_jamming_becomes_an_event_on_the_air_within_seconds() {
   int before = b.modem.commands;
   Epoch hit = b.base;
   hit.cn0_mean = 25;
+  hit.jam_ind = 40;  // the receiver's noise indicator is up: jamming, not loss of reception
   hit.sats_tracked = 5;
   int latency = -1;
   for (int i = 0; i < 20 && latency < 0; i++) {
@@ -94,6 +95,7 @@ void test_the_end_of_the_event_is_a_status_change_sent_once() {
   for (int i = 0; i < 40; i++) b.second(b.base);
   Epoch hit = b.base;
   hit.cn0_mean = 25;
+  hit.jam_ind = 40;  // the receiver's noise indicator is up: jamming, not loss of reception
   for (int i = 0; i < 20; i++) b.second(hit);
   for (int i = 0; i < 40; i++) b.second(b.base);
   TEST_ASSERT_EQUAL(kNormal, b.node->current_class());
@@ -139,6 +141,7 @@ void test_a_dead_store_stops_events_but_never_the_detection() {
   b.store.fail_save = true;
   Epoch hit = b.base;
   hit.cn0_mean = 25;
+  hit.jam_ind = 40;  // the receiver's noise indicator is up: jamming, not loss of reception
   for (int i = 0; i < 10; i++) b.second(hit);
   TEST_ASSERT_EQUAL(kJamming, b.node->current_class());  // the node still knows
   TEST_ASSERT_EQUAL(SubmitResult::SeqStoreFailed, b.node->last_submit());  // but will not send what it cannot number
@@ -150,6 +153,7 @@ void test_test_mode_marks_every_record_as_a_test_record() {
   for (int i = 0; i < 40; i++) b.second(b.base);
   Epoch hit = b.base;
   hit.cn0_mean = 25;
+  hit.jam_ind = 40;  // the receiver's noise indicator is up: jamming, not loss of reception
   for (int i = 0; i < 10; i++) b.second(hit);
   TEST_ASSERT_EQUAL(kJamming, b.node->current_class());
   // decode what went to the modem: the event and the heartbeat are both type 3
@@ -164,9 +168,33 @@ void test_test_mode_marks_every_record_as_a_test_record() {
   TEST_ASSERT_EQUAL(kJamming, back.event_class);  // the content is still what the detector saw
 }
 
+// A heartbeat sent while an event is active repeats the event's class with its confidence and drop (it used to
+// say jamming with confidence 0 and drop 0).
+void test_a_heartbeat_during_an_event_carries_the_events_confidence() {
+  Bench b;
+  for (int i = 0; i < 40; i++) b.second(b.base);
+  Epoch hit = b.base;
+  hit.cn0_mean = 25;
+  hit.jam_ind = 40;
+  for (int i = 0; i < 3700; i++) b.second(hit);
+  TEST_ASSERT_EQUAL(kJamming, b.node->current_class());
+  const char* h = b.modem.last_command() + 17;
+  uint8_t raw[kMaxLen], m[16];
+  size_t n = 0;
+  from_hex(h, strcspn(h, "\r\n"), raw, sizeof raw, n);
+  for (int i = 0; i < 16; i++) m[i] = (uint8_t)i;
+  Record back;
+  TEST_ASSERT_EQUAL(Status::Ok, decode(raw, n, 1, m, back));
+  TEST_ASSERT_EQUAL(kHeartbeat, back.type);
+  TEST_ASSERT_EQUAL(kJamming, back.event_class);
+  TEST_ASSERT_TRUE(back.confidence > 0);
+  TEST_ASSERT_TRUE(back.cn0_drop >= 10);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_a_healthy_node_sends_one_heartbeat_and_no_events);
+  RUN_TEST(test_a_heartbeat_during_an_event_carries_the_events_confidence);
   RUN_TEST(test_jamming_becomes_an_event_on_the_air_within_seconds);
   RUN_TEST(test_the_end_of_the_event_is_a_status_change_sent_once);
   RUN_TEST(test_our_own_burst_does_not_raise_an_alarm);

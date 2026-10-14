@@ -18,6 +18,9 @@ struct Epoch {
   uint8_t sats_tracked = 0, sats_used = 0;
   uint8_t cn0_mean = 0, cn0_spread_x10 = 0;
   uint8_t jam_state = 0, jam_ind = 0;
+#ifndef STZ_NO_PER_SV
+  uint16_t noise = 0, agc = 0;  // receiver noise floor (noisePerMS) and AGC count: they rise under jamming, not under a cover
+#endif
   uint8_t spoof_state = 0;
 #ifndef STZ_NO_PER_SV
   uint8_t sv_n = 0;  // tracked signals one by one, as in ubx::SatSummary

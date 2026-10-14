@@ -11,8 +11,9 @@ namespace stz {
 
 // Bump on every change to the detection rules or their thresholds: it is logged at boot and in the epoch log, so
 // a recording always says which rule produced it. 1 mean-based J1; 2 + hysteresis; 3 + per-satellite drop and
-// a second sign for modest drops.
-constexpr uint8_t kDetectorRev = 3;
+// a second sign for modest drops; 4 jamming needs noise evidence, a drop without it is
+// loss of reception (class 3, benign degradation).
+constexpr uint8_t kDetectorRev = 4;
 
 enum Rule : uint8_t {
   kRuleJ1 = 1 << 0,  // C/N0 drop against the rolling baseline, or receiver jamming indicator
@@ -22,6 +23,7 @@ enum Rule : uint8_t {
   kRuleS4 = 1 << 4,  // clock or time jump
   kRuleS5 = 1 << 5,  // implausible motion, or motion that disagrees with the accelerometer
   kRuleT1 = 1 << 6,  // enclosure opened or shock
+  kRuleL1 = 1 << 7,  // loss of reception: the C/N0 is down for a while but the receiver's noise floor is not (a cover, a building)
 };
 
 struct DetectConfig {
@@ -32,9 +34,11 @@ struct DetectConfig {
   float cn0_drop_db = 6.0f;          // J1
   uint8_t cn0_drop_epochs = 3;       // J1
   float cn0_clear_db = 3.0f;         // J1: once raised, held until the drop is below this (hysteresis); keep it above 0 and below cn0_drop_db
-  float cn0_drop_strong_db = 12.0f;  // J1: a drop this large stands alone; a smaller one needs a second indicator to start an event
-  float sat_loss = 2.0f;             // J1 second indicator: tracked satellites lost against the baseline
-  float jam_ind_rise = 10.0f;        // J1 second indicator: the receiver's jamming indicator above its baseline
+#ifndef STZ_NO_PER_SV
+  float jam_ind_rise = 10.0f;        // noise evidence: the receiver's jamming indicator above its baseline
+  float noise_rise = 40.0f;          // noise evidence: noisePerMS above its baseline (not calibrated yet: see the epoch log)
+  uint16_t loss_epochs = 60;         // L1: a drop without noise evidence must last this long before it is an event
+#endif
   uint8_t min_sv_match = 3;          // satellites seen now and in the baseline needed to judge each one against its own history
   uint32_t min_event_ms = 30000;     // an event is held at least this long: a signal hovering at the threshold must not flap
   uint8_t min_sats_uniform = 8;      // S2
@@ -69,8 +73,10 @@ class Detector {
   explicit Detector(const DetectConfig& cfg) : cfg_(cfg) {}
   Verdict update(const Epoch& e);
   bool has_baseline() const { return baseline_ready_; }
-  // A drop past the trigger that no second indicator backs (the node stays quiet: a satellite changing, not jamming).
+  // A C/N0 drop past the trigger without noise evidence, not yet long enough to be an event (loss of reception).
+#ifndef STZ_NO_PER_SV
   bool suspect() const { return suspect_; }
+#endif
   float baseline() const { return baseline_; }
 
  private:
@@ -80,12 +86,14 @@ class Detector {
   float drop_of(const Epoch& e) const;
 #ifndef STZ_NO_PER_SV
   void update_sv_baseline(const Epoch& e);
-  bool corroborated(const Epoch& e) const;
+  bool noise_evidence(const Epoch& e) const;
 #endif
 
   DetectConfig cfg_;
   uint16_t epochs_seen_ = 0;
+#ifndef STZ_NO_PER_SV
   bool suspect_ = false;
+#endif
 #ifndef STZ_NO_PER_SV
   // Each tracked satellite against its own history, plus the usual number tracked and the jamming indicator.
   uint8_t svb_n_ = 0;
@@ -93,7 +101,10 @@ class Detector {
   float svb_[ubx::kMaxSv] = {};
   uint16_t svb_age_[ubx::kMaxSv] = {};
   bool aux_ready_ = false;
-  float tracked_base_ = 0.0f, jam_ind_base_ = 0.0f;
+  float jam_ind_base_ = 0.0f, noise_base_ = 0.0f;
+#endif
+#ifndef STZ_NO_PER_SV
+  uint16_t loss_n_ = 0;
 #endif
   // baseline
   bool baseline_ready_ = false;

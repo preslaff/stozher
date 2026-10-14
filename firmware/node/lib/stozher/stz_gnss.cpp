@@ -36,6 +36,10 @@ bool EpochBuilder::flush(uint32_t now_ms, Epoch& out) {
   e.spoof_state = have_status_ ? status_.spoof_state : 0;
   e.jam_state = rf_.jam_state;
   e.jam_ind = rf_.jam_ind;
+#ifndef STZ_NO_PER_SV
+  e.noise = rf_.noise;
+  e.agc = rf_.agc;
+#endif
   out = e;
   clear();
   return true;

@@ -28,6 +28,8 @@ stz::Epoch makeEpoch(TinyGPSPlus &gps)
     if (haveRf) {
         e.jam_state = lastRf.jam_state;
         e.jam_ind = lastRf.jam_ind;
+        e.noise = lastRf.noise;
+        e.agc = lastRf.agc;
     }
     bool fix = gps.location.isValid() && gps.location.age() < 3000;
     e.fix_ok = fix;

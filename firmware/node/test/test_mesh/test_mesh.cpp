@@ -257,6 +257,7 @@ void test_one_event_reaches_both_the_satellite_and_the_mesh_with_the_same_bytes(
   for (int i = 0; i < 40; i++) f.second(f.base);
   Epoch hit = f.base;
   hit.cn0_mean = 25;
+  hit.jam_ind = 40;  // the receiver's noise indicator is up: jamming, not loss of reception
   for (int i = 0; i < 10; i++) f.second(hit);
   TEST_ASSERT_EQUAL(kJamming, f.node->current_class());
   TEST_ASSERT_TRUE(f.kim.commands >= 2);   // boot heartbeat + the event
@@ -291,6 +292,7 @@ void test_an_ack_over_the_mesh_stops_the_satellite_repeats_too() {
   for (int i = 0; i < 40; i++) f.second(f.base);
   Epoch hit = f.base;
   hit.cn0_mean = 25;
+  hit.jam_ind = 40;  // the receiver's noise indicator is up: jamming, not loss of reception
   for (int i = 0; i < 6; i++) f.second(hit);
   size_t before = f.tx->pending();
   TEST_ASSERT_TRUE(before >= 1);

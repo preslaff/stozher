@@ -287,10 +287,10 @@ void StozherModule::onEpoch(const stz::Epoch &in)
 #if STOZHER_EPOCH_LOG_S > 0
     // Numbers for tuning the rules on real data; no position is logged.
     if (impl->epochs % STOZHER_EPOCH_LOG_S == 0)
-        LOG_INFO("STOZHER epoch: fix=%d sats=%u/%u cn0=%u spread=%u.%u drop=%u base=%.1f jam_ind=%u jam=%u class=%u",
+        LOG_INFO("STOZHER epoch: fix=%d sats=%u/%u cn0=%u spread=%u.%u drop=%u base=%.1f jam_ind=%u jam=%u class=%u noise=%u agc=%u",
                  e.fix_ok ? 1 : 0, e.sats_used, e.sats_tracked, e.cn0_mean, e.cn0_spread_x10 / 10, e.cn0_spread_x10 % 10,
                  v.cn0_drop_db, impl->node->detector().has_baseline() ? impl->node->detector().baseline() : -1.0f,
-                 e.jam_ind, e.jam_state, v.event_class);
+                 e.jam_ind, e.jam_state, v.event_class, (unsigned)e.noise, (unsigned)e.agc);
     if (impl->epochs % STOZHER_EPOCH_LOG_S == 0) {
         // Each satellite on its own (id:C/N0), the data the per-satellite rule is calibrated on.
         char sv[200];

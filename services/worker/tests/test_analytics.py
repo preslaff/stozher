@@ -11,7 +11,7 @@ from stozher_worker.points import EventPoint
 
 NOW = datetime(2026, 11, 28, 10, 0, tzinfo=UTC)
 VARNA = (43.20, 27.91)
-JAM, SPOOF, NORMAL, TAMPER = 1, 2, 0, 4
+JAM, SPOOF, NORMAL, TAMPER, BENIGN = 1, 2, 0, 4, 3
 
 
 def pt(
@@ -57,6 +57,15 @@ def test_time_gap_splits_a_hotspot() -> None:
 
 def test_non_adverse_events_make_no_hotspot() -> None:
     assert build_hotspots([pt(1, cls=NORMAL), pt(2, cls=TAMPER)], NOW) == []
+
+
+def test_loss_of_reception_makes_a_degraded_cell_and_no_hotspot() -> None:
+    # A node that lost reception (a cover, a building: class 3, low confidence) says the signal is degraded there.
+    # It is not jamming: no hotspot, no alert source, and the cell is never JAMMED.
+    loss = pt(1, cls=BENIGN, conf=6)
+    assert build_hotspots([loss], NOW) == []
+    cells = build_cells([loss], NOW)
+    assert cells and {c.state for c in cells} == {TrustState.DEGRADED}
 
 
 def test_state_active_then_closed() -> None:

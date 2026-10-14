@@ -16,6 +16,7 @@ uint8_t class_of(uint8_t rules) {
   if (rules & (kRuleS1 | kRuleS2 | kRuleS3 | kRuleS5)) return kSpoofing;
   if (rules & kRuleJ1) return kJamming;
   if (rules & kRuleS4) return kTimeAnomaly;
+  if (rules & kRuleL1) return kBenign;
   return kNormal;
 }
 
@@ -57,12 +58,12 @@ float Detector::drop_of(const Epoch& e) const {
 }
 
 #ifndef STZ_NO_PER_SV
-// A second sign besides the C/N0 drop: the receiver says so, the fix is gone, satellites were lost, or the
-// jamming indicator is up.
-bool Detector::corroborated(const Epoch& e) const {
-  if (e.jam_state >= 2 || !e.fix_ok) return true;
+// Is the receiver's noise floor up? Jamming raises it; a cover or a building lowers the signals and leaves it
+// alone. The receiver's own warning, the jamming indicator above its baseline, or the noise level above its baseline.
+bool Detector::noise_evidence(const Epoch& e) const {
+  if (e.jam_state >= 2) return true;
   if (!aux_ready_) return false;
-  return tracked_base_ - (float)e.sats_tracked >= cfg_.sat_loss || (float)e.jam_ind - jam_ind_base_ >= cfg_.jam_ind_rise;
+  return (float)e.jam_ind - jam_ind_base_ >= cfg_.jam_ind_rise || (float)e.noise - noise_base_ >= cfg_.noise_rise;
 }
 
 void Detector::update_sv_baseline(const Epoch& e) {
@@ -87,12 +88,12 @@ void Detector::update_sv_baseline(const Epoch& e) {
     svb_age_[at] = 0;
   }
   if (!aux_ready_) {
-    tracked_base_ = (float)e.sats_tracked;
     jam_ind_base_ = (float)e.jam_ind;
+    noise_base_ = (float)e.noise;
     aux_ready_ = true;
   } else {
-    tracked_base_ += ((float)e.sats_tracked - tracked_base_) * (1.0f / 32.0f);
     jam_ind_base_ += ((float)e.jam_ind - jam_ind_base_) * (1.0f / 32.0f);
+    noise_base_ += ((float)e.noise - noise_base_) * (1.0f / 32.0f);
   }
 }
 #endif
@@ -111,13 +112,16 @@ void Detector::count_rules(const Epoch& e, uint8_t& now, float& drop_out) {
   bool j1_active = (mask_ & kRuleJ1) != 0;
   float j1_threshold = j1_active ? cfg_.cn0_clear_db : cfg_.cn0_drop_db;
   bool cn0_hit = drop >= j1_threshold;
-  suspect_ = false;
 #ifndef STZ_NO_PER_SV
-  // Starting an event on a modest drop alone is how a satellite changing looks like jamming: it needs a second sign.
-  if (cn0_hit && !j1_active && drop < cfg_.cn0_drop_strong_db && !corroborated(e)) {
-    cn0_hit = false;
-    suspect_ = true;
-  }
+  // The same drop is jamming only with noise evidence, otherwise loss of reception (L1, below). An event already
+  // raised is held by the lower clear level whatever the noise says.
+  bool l1_active = (mask_ & kRuleL1) != 0;
+  bool noise = noise_evidence(e);
+  bool loss_cond = !j1_active && !noise && drop >= (l1_active ? cfg_.cn0_clear_db : cfg_.cn0_drop_db);
+  if (cn0_hit && !j1_active && !noise) cn0_hit = false;
+  suspect_ = loss_cond && !l1_active;
+  loss_n_ = loss_cond ? (uint16_t)(loss_n_ < 65535 ? loss_n_ + 1 : 65535) : 0;
+  if (loss_n_ >= cfg_.loss_epochs) now |= kRuleL1;
 #endif
   bool j1_hit = cn0_hit || (settled && e.jam_state >= 2);
   jam_n_ = j1_hit ? (uint8_t)(jam_n_ < 255 ? jam_n_ + 1 : 255) : 0;
@@ -242,9 +246,17 @@ Verdict Detector::update(const Epoch& e) {
   if (cls_ != kNormal) {
     // Confidence: a base for any rule, more when the receiver's own flags agree, for each further rule, and
     // for how long the condition has lasted. S2 alone is only a suspicion.
+#ifndef STZ_NO_PER_SV
+    int c = (mask_ == kRuleS2) ? 8 : (mask_ == kRuleL1) ? 6 : 12;
+#else
     int c = (mask_ == kRuleS2) ? 8 : 12;
+#endif
     if (e.jam_state >= 2 || e.spoof_state >= 2) c += 6;
     c += 4 * (popcount8(mask_) - 1);
+#ifndef STZ_NO_PER_SV
+    if (mask_ == kRuleL1) c += v.duration_s / 60 > 4 ? 4 : v.duration_s / 60;  // a loss never outranks jamming
+    else
+#endif
     c += v.duration_s / 10 > 5 ? 5 : v.duration_s / 10;
     v.confidence = (uint8_t)(c > 31 ? 31 : c);
   }

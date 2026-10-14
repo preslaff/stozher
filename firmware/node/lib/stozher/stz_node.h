@@ -49,6 +49,7 @@ class Node {
   bool have_epoch_ = false;
   bool test_mode_ = false;
   uint8_t class_ = kNormal;
+  uint8_t last_conf_ = 0, last_drop_ = 0;  // of the latest examined epoch: a heartbeat during an event repeats them
   SubmitResult last_submit_ = SubmitResult::Queued;
 };
 

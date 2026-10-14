@@ -80,6 +80,7 @@ void test_a_cn0_drop_is_jamming_within_three_epochs_and_clears() {
   r.run(60);
   r.tmpl.cn0_mean = 28;  // 14 dB below the baseline
   r.tmpl.sats_tracked = 6;
+  r.tmpl.jam_ind = 40;  // and the receiver's noise indicator is up: that is what makes it jamming
   int first = r.run(30);
   TEST_ASSERT_EQUAL(2, first);  // the third epoch of the drop
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
@@ -88,6 +89,7 @@ void test_a_cn0_drop_is_jamming_within_three_epochs_and_clears() {
   TEST_ASSERT_TRUE(r.last.duration_s >= 25);
   r.tmpl.cn0_mean = 42;
   r.tmpl.sats_tracked = 12;
+  r.tmpl.jam_ind = 0;
   r.run(9);
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);  // still held: ten clean epochs end it
   r.run(3);
@@ -100,6 +102,7 @@ void test_a_cn0_drop_is_jamming_within_three_epochs_and_clears() {
 void test_a_signal_hovering_at_the_threshold_gives_one_event() {
   Recorder r(fixed_cfg());
   r.run(60, 0);
+  r.tmpl.jam_ind = 40;
   for (int k = 0; k < 8; k++) {
     r.tmpl.cn0_mean = 34;  // 8 dB below the baseline, and satellites lost: raises it
     r.tmpl.sats_tracked = 9;
@@ -111,6 +114,7 @@ void test_a_signal_hovering_at_the_threshold_gives_one_event() {
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
   TEST_ASSERT_EQUAL(1, r.changes);
   r.tmpl.cn0_mean = 42;  // the signal is really back
+  r.tmpl.jam_ind = 0;
   r.run(12, 0);
   TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
   TEST_ASSERT_EQUAL(2, r.changes);
@@ -120,6 +124,7 @@ void test_an_event_is_held_while_the_drop_is_above_the_clear_level() {
   Recorder r(fixed_cfg());
   r.run(60, 0);
   r.tmpl.cn0_mean = 30;
+  r.tmpl.jam_ind = 40;
   r.run(10, 0);
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
   r.tmpl.cn0_mean = 38;  // 4 dB below the baseline: better, but not clear
@@ -134,9 +139,11 @@ void test_a_short_event_is_held_for_its_minimum_length() {
   Recorder r(fixed_cfg());
   r.run(60, 0);
   r.tmpl.cn0_mean = 28;
+  r.tmpl.jam_ind = 40;
   r.run(5, 0);  // raised on the third epoch
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
   r.tmpl.cn0_mean = 42;
+  r.tmpl.jam_ind = 0;
   r.run(12, 0);  // ten clean epochs have passed, but the event is only about 14 s old
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
   r.run(20, 0);
@@ -153,9 +160,10 @@ void test_a_drop_does_not_move_the_baseline() {
   TEST_ASSERT_EQUAL_FLOAT(before, r.det.baseline());
 }
 
-void test_total_loss_of_signals_is_jamming() {
+void test_total_loss_of_signals_with_the_noise_up_is_jamming() {
   Recorder r(fixed_cfg());
   r.run(60);
+  r.tmpl.jam_ind = 40;
   r.tmpl.sats_tracked = 0;
   r.tmpl.cn0_mean = 0;
   r.tmpl.cn0_spread_x10 = 0;
@@ -171,11 +179,10 @@ void test_a_slow_decline_is_not_absorbed_into_the_baseline() {
   for (int i = 0; i < 300 && detected < 0; i++) {
     r.tmpl.cn0_mean = (uint8_t)(42 - i / 10);  // 0.1 dB per second
     r.run(1, 0);
-    if (r.last.event_class == kJamming) detected = i;
+    if (r.last.event_class != kNormal) detected = i;  // loss of reception here: the noise indicator stays flat
   }
   TEST_ASSERT_TRUE(detected > 0);
-  // A modest drop alone is only a suspicion (see the corroboration tests); it is an event once it is large.
-  TEST_ASSERT_TRUE(detected < 150);  // the baseline did not follow the signal down
+  TEST_ASSERT_TRUE(detected < 150);  // 6 dB down at 60 s, then the 60 s a loss must last  // the baseline did not follow the signal down
 }
 
 void test_the_receiver_jamming_flag_alone_is_enough() {
@@ -330,6 +337,7 @@ void test_a_real_attack_during_blanking_is_seen_once_blanking_ends() {
   r.run(60);
   r.tmpl.blanked = true;
   r.tmpl.cn0_mean = 20;
+  r.tmpl.jam_ind = 40;
   r.run(10);
   r.tmpl.blanked = false;  // the attack is still there
   int first = r.run(10);
@@ -341,6 +349,7 @@ void test_blanked_epochs_inside_an_event_keep_the_event() {
   Recorder r(fixed_cfg());
   r.run(60);
   r.tmpl.cn0_mean = 20;
+  r.tmpl.jam_ind = 40;
   r.run(10);
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
   r.tmpl.blanked = true;
@@ -384,26 +393,73 @@ void test_every_satellite_falling_together_is_jamming() {
   r.run(120, 0);
   set_svs(r.tmpl, 12, 1, 22);
   r.tmpl.cn0_mean = 22;
+  r.tmpl.jam_ind = 40;
   r.run(10, 0);
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
 }
 
-// A drop past the trigger but not large, with nothing else changing, starts no event; the node knows it is suspicious.
-void test_a_modest_drop_alone_starts_no_event() {
+// A drop without any sign of noise is loss of reception: nothing for the first minute (the node only knows it is
+// suspicious), then one class 3 (benign degradation) event, never jamming.
+void test_a_drop_without_noise_is_loss_of_reception_after_a_minute() {
   Recorder r(fixed_cfg());
   r.run(60, 0);
-  r.tmpl.cn0_mean = 33;  // 9 dB down; the same number of satellites, the receiver content
-  r.run(30, 0);
+  r.tmpl.cn0_mean = 33;  // 9 dB down; the same satellites, the noise indicator flat
+  r.run(50, 0);
   TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
   TEST_ASSERT_EQUAL(0, r.changes);
   TEST_ASSERT_TRUE(r.det.suspect());
+  r.run(15, 0);
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
+  TEST_ASSERT_TRUE(r.last.rules & kRuleL1);
+  TEST_ASSERT_FALSE(r.last.rules & kRuleJ1);
+  TEST_ASSERT_TRUE(r.last.confidence >= 6 && r.last.confidence <= 10);
+  TEST_ASSERT_EQUAL(1, r.changes);
+  r.tmpl.cn0_mean = 42;
+  r.run(40, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+  TEST_ASSERT_EQUAL(2, r.changes);
 }
 
-void test_a_modest_drop_with_lost_satellites_is_jamming() {
+// A dip shorter than a minute (an underpass) sends nothing.
+void test_a_short_dip_without_noise_sends_nothing() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 25;
+  r.run(40, 0);
+  r.tmpl.cn0_mean = 42;
+  r.run(60, 0);
+  TEST_ASSERT_EQUAL(0, r.changes);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+}
+
+// The noise indicator comes up while a loss is already reported: the class rises to jamming, once.
+void test_a_loss_becomes_jamming_when_the_noise_rises() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 28;
+  r.run(70, 0);
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
+  r.tmpl.jam_ind = 40;
+  r.run(10, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  TEST_ASSERT_EQUAL(2, r.changes);
+}
+
+// The receiver's noise level on its own is noise evidence too.
+void test_a_rise_of_the_noise_level_is_jamming() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 30;
+  r.tmpl.noise = 120;  // baseline 0 in this template: well above noise_rise
+  r.run(10, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+}
+
+void test_a_modest_drop_with_the_noise_up_is_jamming() {
   Recorder r(fixed_cfg());
   r.run(60, 0);
   r.tmpl.cn0_mean = 33;
-  r.tmpl.sats_tracked = 8;
+  r.tmpl.jam_ind = 40;
   r.run(10, 0);
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
 }
@@ -417,28 +473,29 @@ void test_a_modest_drop_with_the_receiver_warning_is_jamming() {
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
 }
 
-void test_a_large_drop_stands_alone() {
+// Even a very large drop is not jamming without noise evidence: the platform's own rule (docs/scenario.md).
+void test_a_large_drop_without_noise_is_still_loss_of_reception() {
   Recorder r(fixed_cfg());
   r.run(60, 0);
   r.tmpl.cn0_mean = 24;  // 18 dB
-  r.run(10, 0);
-  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  r.run(120, 0);
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
 }
 
 // The cover test on the T-Beam: a strong drop with satellites still tracked but weak, then the signal comes back.
 // Per-satellite history must not keep the event alive once every satellite is back where it was.
-void test_a_covered_receiver_clears_when_the_satellites_return() {
+void test_a_covered_receiver_is_loss_of_reception_and_clears_when_the_satellites_return() {
   Recorder r(fixed_cfg());
   set_svs(r.tmpl, 8, 1, 26);
   r.tmpl.sats_tracked = 8;
   r.tmpl.cn0_mean = 26;
   r.run(120, 0);
-  set_svs(r.tmpl, 8, 1, 13);  // the cover: 13 dB down, all of them
+  set_svs(r.tmpl, 8, 1, 13);  // the cover: 13 dB down, all of them, the noise indicator flat
   r.tmpl.cn0_mean = 13;
-  r.run(30, 0);
-  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  r.run(90, 0);
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
   r.run(1500, 0);  // long cover: the baseline must not follow it
-  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
   set_svs(r.tmpl, 8, 1, 26);  // uncovered
   r.tmpl.cn0_mean = 26;
   r.run(60, 0);
@@ -456,7 +513,7 @@ void test_an_event_clears_while_the_receiver_reacquires_satellites() {
   r.tmpl.sv_n = 0;
   r.tmpl.cn0_mean = 0;
   r.run(600, 0);
-  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
   for (uint8_t n = 1; n <= 8; n++) {  // one more satellite every 20 s, new ids first
     set_svs(r.tmpl, n, (uint16_t)(100 + n), 24);
     r.tmpl.sats_tracked = n;
@@ -554,7 +611,7 @@ int main() {
   RUN_TEST(test_an_event_is_held_while_the_drop_is_above_the_clear_level);
   RUN_TEST(test_a_short_event_is_held_for_its_minimum_length);
   RUN_TEST(test_a_drop_does_not_move_the_baseline);
-  RUN_TEST(test_total_loss_of_signals_is_jamming);
+  RUN_TEST(test_total_loss_of_signals_with_the_noise_up_is_jamming);
   RUN_TEST(test_a_slow_decline_is_not_absorbed_into_the_baseline);
   RUN_TEST(test_the_receiver_jamming_flag_alone_is_enough);
   RUN_TEST(test_no_cn0_rule_fires_before_a_baseline_exists);
@@ -576,11 +633,14 @@ int main() {
   RUN_TEST(test_time_without_a_fix_is_not_a_reference_for_the_clock_rule);
   RUN_TEST(test_a_change_of_the_tracked_satellites_is_not_a_drop);
   RUN_TEST(test_every_satellite_falling_together_is_jamming);
-  RUN_TEST(test_a_modest_drop_alone_starts_no_event);
-  RUN_TEST(test_a_modest_drop_with_lost_satellites_is_jamming);
+  RUN_TEST(test_a_drop_without_noise_is_loss_of_reception_after_a_minute);
+  RUN_TEST(test_a_short_dip_without_noise_sends_nothing);
+  RUN_TEST(test_a_loss_becomes_jamming_when_the_noise_rises);
+  RUN_TEST(test_a_rise_of_the_noise_level_is_jamming);
+  RUN_TEST(test_a_modest_drop_with_the_noise_up_is_jamming);
   RUN_TEST(test_a_modest_drop_with_the_receiver_warning_is_jamming);
-  RUN_TEST(test_a_large_drop_stands_alone);
-  RUN_TEST(test_a_covered_receiver_clears_when_the_satellites_return);
+  RUN_TEST(test_a_large_drop_without_noise_is_still_loss_of_reception);
+  RUN_TEST(test_a_covered_receiver_is_loss_of_reception_and_clears_when_the_satellites_return);
   RUN_TEST(test_an_event_clears_while_the_receiver_reacquires_satellites);
   RUN_TEST(test_the_same_recording_always_gives_the_same_verdicts);
   RUN_TEST(test_a_verdict_becomes_a_record_the_codec_round_trips);
