@@ -9,6 +9,11 @@
 
 namespace stz {
 
+// Bump on every change to the detection rules or their thresholds: it is logged at boot and in the epoch log, so
+// a recording always says which rule produced it. 1 mean-based J1; 2 + hysteresis; 3 + per-satellite drop and
+// a second sign for modest drops.
+constexpr uint8_t kDetectorRev = 3;
+
 enum Rule : uint8_t {
   kRuleJ1 = 1 << 0,  // C/N0 drop against the rolling baseline, or receiver jamming indicator
   kRuleS1 = 1 << 1,  // fixed node: position away from the surveyed one while stationary

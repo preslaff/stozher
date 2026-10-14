@@ -22,6 +22,12 @@
 #ifndef STOZHER_NODE_ID
 #define STOZHER_NODE_ID 1
 #endif
+// -D STOZHER_BUILD=<git short hash> names the build in the boot log (never quoted: it is stringified here).
+#ifndef STOZHER_BUILD
+#define STOZHER_BUILD unknown
+#endif
+#define STOZHER_STR2(x) #x
+#define STOZHER_STR(x) STOZHER_STR2(x)
 #ifndef STOZHER_EPOCH_LOG_S
 #define STOZHER_EPOCH_LOG_S 0 // >0: log the detector's numbers every N epochs (1 epoch = 1 s), for tuning the rules
 #endif
@@ -213,6 +219,7 @@ StozherModule::StozherModule() : SinglePortModule("stozher", meshtastic_PortNum_
 
     LOG_WARN("STOZHER: node id %u with the PUBLIC TEST KEY, uplink: mesh%s. Not a real node.", (unsigned)tc.node_id,
              tc.satellite_enabled ? " + KIM1 (untested on hardware)" : " only (no KIM1)");
+    LOG_INFO("STOZHER build %s detector rev %u", STOZHER_STR(STOZHER_BUILD), (unsigned)stz::kDetectorRev);
     stozherModule = this;
 }
 
@@ -291,7 +298,7 @@ void StozherModule::onEpoch(const stz::Epoch &in)
         for (uint8_t i = 0; i < e.sv_n && n + 8 < sizeof(sv); i++)
             n += snprintf(sv + n, sizeof(sv) - n, " %u:%u", (unsigned)(e.sv_key[i] & 0xff), (unsigned)e.sv_cno[i]);
         sv[n < sizeof(sv) ? n : sizeof(sv) - 1] = 0;
-        LOG_INFO("STOZHER sv:%s suspect=%d", sv, impl->node->detector().suspect() ? 1 : 0);
+        LOG_INFO("STOZHER sv:%s suspect=%d rev=%u", sv, impl->node->detector().suspect() ? 1 : 0, (unsigned)stz::kDetectorRev);
     }
 #endif
     if (v.changed && !v.blanked)
