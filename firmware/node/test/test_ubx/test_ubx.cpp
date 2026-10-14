@@ -106,6 +106,33 @@ void test_mon_rf_takes_the_worst_block() {
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(v.jam_state, r.rf().jam_state, v.name);
     TEST_ASSERT_EQUAL_UINT16_MESSAGE(v.agc, r.rf().agc, v.name);
     TEST_ASSERT_EQUAL_UINT8_MESSAGE(v.jam_ind, r.rf().jam_ind, v.name);
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(v.noise, r.rf().noise, v.name);
+  }
+}
+
+void test_neo6_nav_svinfo_gives_the_same_summary_as_nav_sat() {
+  for (const SatVec& v : kSvinfo) {
+    ubx::Reader r;
+    char kinds[8];
+    feed_all(r, v.hex, kinds, sizeof kinds);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("S", kinds, v.name);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(v.tracked, r.sat().tracked, v.name);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(v.used, r.sat().used, v.name);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(v.mean, r.sat().cno_mean, v.name);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(v.spread10, r.sat().cno_spread_x10, v.name);
+  }
+}
+
+void test_neo6_mon_hw_in_both_lengths() {
+  for (const RfVec& v : kHw) {
+    ubx::Reader r;
+    char kinds[8];
+    feed_all(r, v.hex, kinds, sizeof kinds);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE("R", kinds, v.name);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(v.jam_state, r.rf().jam_state, v.name);
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(v.agc, r.rf().agc, v.name);
+    TEST_ASSERT_EQUAL_UINT8_MESSAGE(v.jam_ind, r.rf().jam_ind, v.name);
+    TEST_ASSERT_EQUAL_UINT16_MESSAGE(v.noise, r.rf().noise, v.name);
   }
 }
 
@@ -198,7 +225,9 @@ int main() {
   RUN_TEST(test_nav_pvt_fields);
   RUN_TEST(test_no_valid_time_gives_no_unix_time);
   RUN_TEST(test_nav_sat_summary_including_a_message_longer_than_the_buffer);
+  RUN_TEST(test_neo6_nav_svinfo_gives_the_same_summary_as_nav_sat);
   RUN_TEST(test_nav_status_spoofing_state);
+  RUN_TEST(test_neo6_mon_hw_in_both_lengths);
   RUN_TEST(test_mon_rf_takes_the_worst_block);
   RUN_TEST(test_noise_and_bad_frames_never_produce_a_message);
   RUN_TEST(test_a_bad_checksum_leaves_the_last_good_values);

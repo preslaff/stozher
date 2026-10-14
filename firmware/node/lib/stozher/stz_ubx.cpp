@@ -8,8 +8,8 @@ namespace ubx {
 
 namespace {
 constexpr uint8_t kSync1 = 0xB5, kSync2 = 0x62;
-constexpr uint8_t kClsNav = 0x01, kIdPvt = 0x07, kIdStatus = 0x03, kIdSat = 0x35;
-constexpr uint8_t kClsMon = 0x0A, kIdRf = 0x38;
+constexpr uint8_t kClsNav = 0x01, kIdPvt = 0x07, kIdStatus = 0x03, kIdSat = 0x35, kIdSvinfo = 0x30;
+constexpr uint8_t kClsMon = 0x0A, kIdRf = 0x38, kIdHw = 0x09;
 constexpr uint8_t kClsCfg = 0x06, kIdValset = 0x8A;
 constexpr size_t kPvtLen = 92, kStatusLen = 16, kSatHeader = 8, kSatSv = 12, kRfHeader = 4, kRfBlock = 24;
 
@@ -27,19 +27,21 @@ void Reader::begin_frame() {
 
 void Reader::on_payload_byte(uint8_t b) {
   if (pos_ < kMaxPayload) buf_[pos_] = b;
-  if (cls_ == kClsNav && id_ == kIdSat) {
-    if (pos_ < 4) {
-      buf_[pos_] = b;  // iTOW is kept in buf_ (the first four bytes)
-    } else if (pos_ >= kSatHeader) {
+  bool sat = cls_ == kClsNav && id_ == kIdSat;
+  bool svinfo = cls_ == kClsNav && id_ == kIdSvinfo;
+  if (sat || svinfo) {
+    if (pos_ >= kSatHeader) {  // iTOW (the first four bytes) is already kept in buf_
       size_t k = (pos_ - kSatHeader) % kSatSv;
       sv_[k] = b;
       if (k == kSatSv - 1) {
-        uint8_t cno = sv_[2];
+        // NAV-SAT: cno at 2, svUsed is bit 3 of the flags at 8. NAV-SVINFO: flags at 2 (svUsed bit 0), cno at 4.
+        uint8_t cno = sat ? sv_[2] : sv_[4];
+        bool used = sat ? (sv_[8] & 0x08) != 0 : (sv_[2] & 0x01) != 0;
         if (cno > 0) {
           n_++;
           sum_ += cno;
           sumsq_ += (uint32_t)cno * cno;
-          if (sv_[8] & 0x08) used_++;  // flags bit 3: svUsed
+          if (used) used_++;
         }
       }
     }
@@ -117,7 +119,8 @@ Kind Reader::finish() {
     status_.spoof_state = (buf_[7] >> 3) & 0x03;
     return Kind::Status;
   }
-  if (cls_ == kClsNav && id_ == kIdSat && len_ >= kSatHeader && (len_ - kSatHeader) % kSatSv == 0) {
+  if (cls_ == kClsNav && (id_ == kIdSat || id_ == kIdSvinfo) && len_ >= kSatHeader &&
+      (len_ - kSatHeader) % kSatSv == 0) {
     SatSummary s;
     s.itow_ms = u4(buf_);
     s.tracked = n_;
@@ -140,10 +143,22 @@ Kind Reader::finish() {
       const uint8_t* p = buf_ + kRfHeader + i * kRfBlock;
       uint8_t jam_state = p[1] & 0x03;
       uint16_t agc = u2(p + 14);
+      uint16_t noise = u2(p + 12);
       if (jam_state > r.jam_state) r.jam_state = jam_state;
       if (p[16] > r.jam_ind) r.jam_ind = p[16];
       if (agc > r.agc) r.agc = agc;
+      if (noise > r.noise) r.noise = noise;
     }
+    rf_ = r;
+    return Kind::Rf;
+  }
+  // NEO-6 / M8 MON-HW: 68 bytes on u-blox 6 (jamInd at 53), 60 on u-blox 7/8 (jamInd at 45).
+  if (cls_ == kClsMon && id_ == kIdHw && (len_ == 60 || len_ == 68)) {
+    RfSummary r;
+    r.noise = u2(buf_ + 16);
+    r.agc = u2(buf_ + 18);
+    r.jam_state = (buf_[22] >> 2) & 0x03;
+    r.jam_ind = buf_[len_ == 60 ? 45 : 53];
     rf_ = r;
     return Kind::Rf;
   }

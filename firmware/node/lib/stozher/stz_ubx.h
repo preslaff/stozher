@@ -1,5 +1,6 @@
-// u-blox UBX protocol, as far as the node needs it (M10): a streaming frame reader for NAV-PVT, NAV-SAT,
-// NAV-STATUS and MON-RF, and the CFG-VALSET boot configuration. No dynamic allocation; the reader holds one
+// u-blox UBX protocol, as far as the node needs it: a streaming frame reader for NAV-PVT, NAV-SAT, NAV-STATUS and
+// MON-RF (M10), and for NAV-SVINFO and MON-HW (the older NEO-6 dialect, reported through the same Sat and Rf
+// kinds), plus the CFG-VALSET boot configuration. No dynamic allocation; the reader holds one
 // small payload buffer and summarises NAV-SAT on the fly, so the same code fits an 8-bit board.
 // Layouts are checked against frames built by pyubx2 (test/test_ubx), not against hardware yet.
 #pragma once
@@ -44,6 +45,7 @@ struct RfSummary {
   uint8_t jam_state = 0;  // 0 unknown, 1 ok, 2 warning, 3 critical
   uint8_t jam_ind = 0;    // 0..255
   uint16_t agc = 0;       // agcCnt
+  uint16_t noise = 0;     // noisePerMS
 };
 
 class Reader {

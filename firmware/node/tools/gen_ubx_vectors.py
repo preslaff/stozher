@@ -91,6 +91,19 @@ def sat(name, svs, itow=1000):
             }
         )
     m = UBXMessage("NAV", "NAV-SAT", GET, **kw)
+    n, used, mean, spread10 = _stats(name, svs)
+    return dict(
+        name=name,
+        hex=m.serialize().hex(),
+        itow=itow,
+        tracked=n,
+        used=used,
+        mean=mean,
+        spread10=spread10,
+    )
+
+
+def _stats(name, svs):
     tracked = [c for _, _, c, _ in svs if c > 0]
     n = len(tracked)
     mean_exact = sum(tracked) / n if n else 0.0
@@ -98,14 +111,79 @@ def sat(name, svs, itow=1000):
     var = sum(c * c for c in tracked) / n - mean_exact**2 if n else 0.0
     spread10 = 10 * math.sqrt(max(var, 0.0))
     assert abs((spread10 % 1) - 0.5) > 0.05, f"{name}: spread too close to a rounding boundary"
+    used = sum(1 for _, _, c, u in svs if c > 0 and u)
+    return n, used, mean, int(spread10 + 0.5)
+
+
+def svinfo(name, svs, itow=1000):
+    """NAV-SVINFO (the NEO-6 / u-blox 6 satellite message), same expected summary as NAV-SAT."""
+    kw = dict(iTOW=itow, numCh=len(svs), chipGen=1, reserved1=0)
+    for i, (_, sv, cno, used) in enumerate(svs, 1):
+        kw.update(
+            {
+                f"chn_{i:02d}": i - 1,
+                f"svid_{i:02d}": sv,
+                f"svUsed_{i:02d}": used,
+                f"qualityInd_{i:02d}": 7 if cno else 0,
+                f"cno_{i:02d}": cno,
+                f"elev_{i:02d}": 30,
+                f"azim_{i:02d}": 100,
+                f"prRes_{i:02d}": 0,
+            }
+        )
+    m = UBXMessage("NAV", "NAV-SVINFO", GET, **kw)
+    n, used, mean, spread10 = _stats(name, svs)
     return dict(
         name=name,
         hex=m.serialize().hex(),
         itow=itow,
         tracked=n,
-        used=sum(1 for _, _, c, u in svs if c > 0 and u),
+        used=used,
         mean=mean,
-        spread10=int(spread10 + 0.5),
+        spread10=spread10,
+    )
+
+
+def _frame(cls, mid, payload):
+    body = bytes([cls, mid]) + len(payload).to_bytes(2, "little") + payload
+    a = b = 0
+    for x in body:
+        a = (a + x) & 0xFF
+        b = (b + a) & 0xFF
+    return (b"\xb5\x62" + body + bytes([a, b])).hex()
+
+
+def hw(name, jam_state, noise, agc, jam_ind, long=False):
+    """NAV MON-HW: 60 bytes by pyubx2 (u-blox 7/8 layout); `long` re-lays it out as the 68-byte u-blox 6 form
+    (VP[25]) by hand, so that one is NOT independent of the C++ and must be confirmed on a real NEO-6."""
+    z4 = b"\x00" * 4
+    kw = dict(
+        pinSel=z4,
+        pinBank=z4,
+        pinDir=z4,
+        pinVal=z4,
+        noisePerMS=noise,
+        agcCnt=agc,
+        aStatus=2,
+        aPower=1,
+    )
+    kw.update(
+        rtcCalib=1, safeBoot=0, jammingState=jam_state, xtalAbsent=0, reserved0=0, usedMask=z4
+    )
+    kw.update(jamInd=jam_ind, reserved1=0, pinIrq=z4, pullH=z4, pullL=z4)
+    for i in range(1, 18):
+        kw[f"VP_{i:02d}"] = b"\x00"
+    payload = UBXMessage("MON", "MON-HW", GET, **kw).serialize()[6:-2]
+    assert len(payload) == 60
+    if long:
+        payload = payload[:45] + b"\x00" * 8 + payload[45:]
+    return dict(
+        name=name,
+        hex=_frame(0x0A, 0x09, payload),
+        jam_state=jam_state,
+        agc=agc,
+        jam_ind=jam_ind,
+        noise=noise,
     )
 
 
@@ -136,6 +214,7 @@ def rf(name, blocks):
         jam_state=max(b[0] for b in blocks),
         agc=max(b[1] for b in blocks),
         jam_ind=max(b[2] for b in blocks),
+        noise=90,
     )
 
 
@@ -189,6 +268,31 @@ def render() -> str:
         ),
         sat("sat_two_next", [(2, 5, 40, 1), (0, 7, 38, 1)], itow=2000),
     ]
+    twelve = [
+        (0, 3, 44, 1),
+        (0, 5, 41, 1),
+        (0, 8, 38, 1),
+        (0, 11, 45, 1),
+        (0, 1, 36, 1),
+        (0, 7, 33, 1),
+        (0, 12, 30, 0),
+        (0, 2, 0, 0),
+        (0, 4, 35, 1),
+        (0, 9, 29, 0),
+        (0, 6, 0, 0),
+        (0, 14, 42, 1),
+    ]
+    svinfos = [
+        svinfo("svinfo_two", [(0, 5, 38, 1), (0, 9, 0, 0)]),
+        svinfo("svinfo_twelve", twelve),
+        svinfo("svinfo_empty", []),
+        svinfo("svinfo_forty", [(0, i + 1, 24 + (i * 5) % 17, i % 4 != 0) for i in range(40)]),
+    ]
+    hws = [
+        hw("hw_clean", 1, 60, 2500, 12),
+        hw("hw_warning", 2, 77, 3100, 140),
+        hw("hw_68_bytes", 2, 120, 4000, 200, long=True),
+    ]
     stats = [status(f"status_spoof_{s}", s) for s in range(4)]
     rfs = [rf("rf_ok", [(1, 3000, 12)]), rf("rf_two_blocks", [(2, 4000, 77), (3, 5000, 180)])]
     valset = UBXMessage.config_set(1, 0, BOOT_CONFIG).serialize().hex()
@@ -210,7 +314,7 @@ def render() -> str:
         "struct PvtVec { const char* name; const char* hex; uint32_t itow; uint16_t year; uint8_t month, day, hour, min, sec, fix_type, fix_ok, num_sv; int32_t lat_e7, lon_e7; uint32_t h_acc_mm; int32_t g_speed_mm_s, nano; uint32_t t_acc_ns, unix_s; };",
         "struct SatVec { const char* name; const char* hex; uint32_t itow; uint8_t tracked, used, mean, spread10; };",
         "struct StatusVec { const char* name; const char* hex; uint32_t itow; uint8_t spoof; };",
-        "struct RfVec { const char* name; const char* hex; uint8_t jam_state; uint16_t agc; uint8_t jam_ind; };",
+        "struct RfVec { const char* name; const char* hex; uint8_t jam_state; uint16_t agc; uint8_t jam_ind; uint16_t noise; };",
         "struct StreamVec { const char* name; const char* hex; const char* kinds; };",
         "",
         "static const PvtVec kPvt[] = {",
@@ -254,6 +358,20 @@ def render() -> str:
                 v["spread10"],
             )
         )
+    o += ["};", "", "static const SatVec kSvinfo[] = {"]
+    for v in svinfos:
+        o.append(
+            "  {%s, %s, %du, %d, %d, %d, %d},"
+            % (
+                json.dumps(v["name"]),
+                json.dumps(v["hex"]),
+                v["itow"],
+                v["tracked"],
+                v["used"],
+                v["mean"],
+                v["spread10"],
+            )
+        )
     o += ["};", "", "static const StatusVec kStatus[] = {"]
     for v in stats:
         o.append(
@@ -263,8 +381,28 @@ def render() -> str:
     o += ["};", "", "static const RfVec kRf[] = {"]
     for v in rfs:
         o.append(
-            "  {%s, %s, %d, %d, %d},"
-            % (json.dumps(v["name"]), json.dumps(v["hex"]), v["jam_state"], v["agc"], v["jam_ind"])
+            "  {%s, %s, %d, %d, %d, %d},"
+            % (
+                json.dumps(v["name"]),
+                json.dumps(v["hex"]),
+                v["jam_state"],
+                v["agc"],
+                v["jam_ind"],
+                v["noise"],
+            )
+        )
+    o += ["};", "", "static const RfVec kHw[] = {"]
+    for v in hws:
+        o.append(
+            "  {%s, %s, %d, %d, %d, %d},"
+            % (
+                json.dumps(v["name"]),
+                json.dumps(v["hex"]),
+                v["jam_state"],
+                v["agc"],
+                v["jam_ind"],
+                v["noise"],
+            )
         )
     o += ["};", "", f"static const char kBootConfigHex[] = {json.dumps(valset)};", ""]
     o.append("static const StreamVec kStreams[] = {")

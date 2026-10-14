@@ -146,3 +146,30 @@ confirmed that, in that mode, a *direct* message addressed to the node is writte
 channel message is. If it is not, acks will not arrive over this path and the satellite-only retransmission
 policy still works. The node cannot probe the Serial module at boot (it has no handshake), so "mesh present" comes
 from configuration, not detection.
+
+## T-Beam fork: STOZHER inside Meshtastic (analysis and step 2)
+
+**Why.** The T-Beam is an ESP32 running Meshtastic; a STOZHER module inside that firmware would replace the
+XIAO node, the serial link and the second device. From reading the Meshtastic source (2.8.x, `Meshtastic-firmware`):
+a module can send and receive text packets in process (`allocDataPacket`, `sendToMesh`, `handleReceived`), so the
+`STZ1:` uplink and the `STZA1:` acks need no Serial module; `RadioTxHook` reports when the radio starts and finishes a
+packet, which is exact blanking instead of a guess; and `GPS::whileActive()` reads every GPS byte, so one line there
+taps the stream. `lib/stozher` has no Arduino dependency and is used as is.
+
+**Costs.** The NEO-6M is GPS-only with no spoofing flag (rule S3 cannot fire) and speaks the older dialect (NAV-SVINFO
+and MON-HW instead of NAV-SAT and MON-RF; now supported by `stz_ubx`, vectors from pyubx2). Meshtastic duty-cycles the
+GPS (your boards: `gpsUpdateInterval` 120), which detection cannot live with. The KIM1 needs a UART and a status pin
+on a board with few free pins. The firmware is GPL-3.0, so the T-Beam image is too (declared in DECLARATIONS.md);
+that is why the integration is a patch plus a few files, not a vendored copy. It cuts against the "we do not write
+mesh firmware" line of docs/mesh.md, so the XIAO design stays as the fallback.
+
+**Size.** Stock `tbeam` 2.8.2: 2,057,744 bytes in a 2,424,832-byte app partition. With the tap: 2,060,688 bytes (+2.9 KB),
+85.0% of the partition, 110 KB static RAM. Our whole node logic is about 60 KB, so there is room.
+
+**Step 2 (this commit).** `firmware/tbeam/`: the tap, a patch and an apply script; `tbeam-stozher` builds. It only
+logs one line per second (`STOZHER epoch tracked=... cn0=... jam_ind=...`) and the first MON-HW. NOT flashed yet. The
+MON-HW length (60 or 68 bytes) and whether the NEO-6M in the T-Beam sends NAV-SVINFO at all are exactly what the first
+flash is meant to show. The 68-byte MON-HW test vector is hand-made, not from pyubx2.
+
+Next (in order): flash one board and read real data; always-on GPS configuration; the module that sends `STZ1:` and
+receives acks; the KIM1 on UART2.
