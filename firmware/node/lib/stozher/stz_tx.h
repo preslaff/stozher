@@ -54,6 +54,14 @@ struct TxConfig {
   uint32_t blank_guard_ms = 3000;     // detector stays blanked this long after TX_STATUS falls
 };
 
+// Anything that wants a copy of every queued record and every verified acknowledgement (the mesh uplink).
+class RecordSink {
+ public:
+  virtual ~RecordSink() {}
+  virtual void on_record(TxKind kind, uint16_t seq, const uint8_t* raw, size_t len, uint32_t now_ms) = 0;
+  virtual void on_ack(const Ack& a) = 0;
+};
+
 class Tx {
  public:
   Tx(const TxConfig& cfg, const Keys& keys, kim1::Port& port, SeqStore& store);
@@ -73,6 +81,7 @@ class Tx {
   AckResult on_ack(const Ack& a);
 
   bool heartbeat_due(uint32_t now_ms) const;
+  void set_sink(RecordSink* sink) { sink_ = sink; }
 
   // For tests and the status display.
   size_t pending() const;
@@ -108,6 +117,7 @@ class Tx {
   Keys keys_;
   kim1::Port& port_;
   SeqStore& store_;
+  RecordSink* sink_ = nullptr;
   kim1::LineParser parser_;
   Entry q_[STZ_TX_QUEUE];
 

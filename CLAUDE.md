@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 >
 > **Firmware (`docs/firmware.md`):** codec, Ed25519 ack verification, UBX reader and detection rules are built and
 > tested on the host (`make fw-test`), plus the KIM1 driver, sequence numbers and retransmission against a scripted modem;
-> ESP32-S3 and Leonardo builds compile. Not built: the mesh uplink. Nothing has run against a real KIM1 (waiting for the
+> ESP32-S3 and Leonardo builds compile. The mesh uplink (to a stock Meshtastic T-Beam) is built on the host too. Nothing has run against a real KIM1 (waiting for the
 > KIM1), nor against a real GNSS receiver.
 >
 > **Not built yet:** `situation`, webhooks, Kinéis adapter, assistant,

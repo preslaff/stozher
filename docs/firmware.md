@@ -11,7 +11,7 @@ binaries that sit in `firmware/node/` are for flashing the T-Beams and are not p
 | 2. Ed25519 verification of signed acknowledgements (`docs/control.md`), TweetNaCl vendored in `lib/tweetnacl/` | **Done** (`lib/stozher/stz_ack.*`, `test/test_ack`; freshness and replay rules of control.md step 4 come with the node state in step 4) |
 | 3. Detection rules on recorded epochs, UBX parsing, u-blox M10 setup | **Done on the host** (`stz_ubx`, `stz_gnss`, `stz_detect`; `test/test_ubx`, `test/test_detect`); not yet run against a real receiver |
 | 4. KIM1 driver behind an interface (fake modem for tests), sequence numbers persisted before use, blanking | **Done on the host** (`stz_kim1`, `stz_tx`, `stz_node`; `test/test_tx`, `test/test_node`); never run against a real KIM1 |
-| 5. Mesh uplink (`STZ1:` text over Meshtastic) | Next |
+| 5. Mesh uplink (`STZ1:` text over Meshtastic) | **Done on the host** (`stz_mesh`; `test/test_mesh`); never run against a T-Beam |
 
 ## Codec (`lib/stozher`)
 
@@ -115,3 +115,34 @@ organisers give the real values). The pin numbers in both mains are placeholders
 Leonardo: with the whole node (UBX, detection, uplink, EEPROM store, software serial) the image is 27.9 KB of the
 28.7 KB flash (97%) and 1.5 KB static RAM (59%, queue of 4). It fits but there is no headroom left there; the
 ESP32-S3 image is 299 KB (9%).
+
+## Mesh uplink (step 5)
+
+The witness node talks to a **stock Meshtastic** T-Beam through that device's Serial module in TEXTMSG mode, as
+the specification says (we write no mesh firmware, `docs/mesh.md`). `stz_mesh`:
+
+- **Out:** every record the uplink queues is also sent as `STZ1:` + lowercase hex + newline (the Serial module
+  sends one message per line). The text equals `"STZ1:"` + the golden vector hex for all valid vectors. An event
+  goes out at once and once more after 30 s; status changes and heartbeats once; messages are at least 5 s apart
+  and capped at 40 an hour, because LoRa airtime is shared. A write that fails is retried, never waited for.
+  The gateway and the API already drop mesh repeats (same sender, same bytes).
+- **Back:** lines from the Serial module are read; only a line that is `STZA1:` + a valid cloud signature (the
+  same verification as for any ack, `stz_ack`) counts. Chat, other apps, half lines, over-long lines and forged
+  acks are ignored. A verified ack goes to `Tx::on_ack`, which frees the satellite queue and the mesh queue
+  together.
+- **Blanking:** each mesh send tells the uplink (`note_mesh_tx`, 2 s of airtime plus the guard) so the detector
+  does not read our own LoRa burst as an attack. This is approximate: the Serial module forwards the text when its
+  radio gets a slot, which we cannot see.
+- **Optional by construction:** `Node` takes a mesh link or none; without one the node is the satellite-only
+  node, and the record's "mesh present" flag says which. `STZ_NO_MESH` leaves the code out of the image (the
+  Leonardo build, which has 22 bytes... no room: 97.8% of flash without it) and `STZ_NO_ACK_VERIFY` drops ack
+  verification on boards that cannot hold it.
+- **ESP32 wiring (placeholder pins):** UART0 on D6/D7 to the T-Beam, 38400 baud (must match `serial.baud`
+  there), GNSS on D9/D10, KIM1 on D8/D0 with TX_STATUS on D1, I2C D4/D5 left for the Grove sensors.
+
+Not verified: the T-Beam side. Its Serial module needs `enabled`, `mode = TEXTMSG`, matching `baud` and the
+`rxd`/`txd` pins set (check the names and values against the Meshtastic documentation or the app), and I have not
+confirmed that, in that mode, a *direct* message addressed to the node is written to the serial port the way a
+channel message is. If it is not, acks will not arrive over this path and the satellite-only retransmission
+policy still works. The node cannot probe the Serial module at boot (it has no handshake), so "mesh present" comes
+from configuration, not detection.

@@ -9,18 +9,24 @@
 
 #include "stz_detect.h"
 #include "stz_gnss.h"
+#include "stz_mesh.h"
 #include "stz_node.h"
 #include "stz_tx.h"
 #include "stz_ubx.h"
 
+// Placeholder pin plan (the XIAO has 11 usable GPIOs). UART0 (D6/D7) goes to the T-Beam's Serial module,
+// D4/D5 stay free for the Grove I2C sensors, D2/D3 for the buzzer and the button.
 #ifndef STZ_GNSS_RX
-#define STZ_GNSS_RX D7
-#define STZ_GNSS_TX D6
+#define STZ_GNSS_RX D9
+#define STZ_GNSS_TX D10
 #endif
 #ifndef STZ_KIM1_RX
-#define STZ_KIM1_RX D5
-#define STZ_KIM1_TX D4
-#define STZ_KIM1_STATUS D3
+#define STZ_KIM1_RX D8
+#define STZ_KIM1_TX D0
+#define STZ_KIM1_STATUS D1
+#endif
+#ifndef STZ_MESH_BAUD
+#define STZ_MESH_BAUD 38400  // must match serial.baud on the T-Beam (check its Serial module settings)
 #endif
 
 namespace {
@@ -63,7 +69,17 @@ class NvsSeqStore : public stz::SeqStore {
   Preferences prefs_;
 };
 
+class UartMesh : public stz::mesh::Port {
+ public:
+  void begin() { Serial0.begin(STZ_MESH_BAUD, SERIAL_8N1); }  // UART0 on its default pins D6 (TX) and D7 (RX)
+  size_t write(const uint8_t* d, size_t n) override { return Serial0.write(d, n); }
+  int read() override { return Serial0.available() ? Serial0.read() : -1; }
+};
+
 UartKim1 kim1_port(Serial2, STZ_KIM1_STATUS);
+UartMesh mesh_port;
+stz::mesh::Link* mesh_link = nullptr;
+stz::CloudKey cloud_keys[1];
 NvsSeqStore seq_store;
 stz::ubx::Reader reader;
 stz::EpochBuilder builder;
@@ -91,7 +107,13 @@ void setup() {
   stz::Keys keys;
   stz::derive_keys(master, node_id, tc.key_id, keys);
   tx = new stz::Tx(tc, keys, kim1_port, seq_store);
-  node = new stz::Node(stz::DetectConfig{}, *tx);
+  // The cloud's public key (public by nature); the test key's public half until the real one is provisioned.
+  cloud_keys[0].id = 1;
+  size_t kn = 0;
+  stz::from_hex("03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8", 64, cloud_keys[0].pub, 32, kn);
+  mesh_port.begin();
+  mesh_link = new stz::mesh::Link(stz::mesh::MeshConfig{}, mesh_port, cloud_keys, 1);
+  node = new stz::Node(stz::DetectConfig{}, *tx, mesh_link);
 
   // The receiver has no flash: configure it at every boot.
   uint8_t frame[96];

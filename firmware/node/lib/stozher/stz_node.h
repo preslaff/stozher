@@ -9,9 +9,16 @@
 
 namespace stz {
 
+namespace mesh {
+class Link;
+}
+
 class Node {
  public:
-  Node(const DetectConfig& cfg, Tx& tx) : detector_(cfg), tx_(tx) {}
+  // `mesh` is optional: without it the node is exactly the satellite-only node. With it, every queued record is
+  // also sent as mesh text, and verified acknowledgements arriving by mesh reach the uplink.
+  // Define STZ_NO_MESH to leave the mesh code out of the image altogether (the Leonardo build does).
+  Node(const DetectConfig& cfg, Tx& tx, mesh::Link* mesh = nullptr);
 
   // One finished GNSS epoch. Marks it blanked while our own transmitters are active, runs the rules, and queues
   // an event when a class starts (or changes) and a status change when it ends. Returns the verdict.
@@ -20,12 +27,20 @@ class Node {
   // Call every loop: queues the hourly heartbeat (once there is a position to report) and drives the uplink.
   void tick(uint32_t now_ms);
 
+  bool mesh_present() const {
+#ifdef STZ_NO_MESH
+    return false;
+#else
+    return mesh_ != nullptr;
+#endif
+  }
   uint8_t current_class() const { return class_; }
   SubmitResult last_submit() const { return last_submit_; }
 
  private:
   Detector detector_;
   Tx& tx_;
+  mesh::Link* mesh_;
   Epoch last_epoch_;
   bool have_epoch_ = false;
   uint8_t class_ = kNormal;

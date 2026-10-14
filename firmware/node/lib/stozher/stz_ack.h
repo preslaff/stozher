@@ -9,6 +9,7 @@ namespace stz {
 constexpr size_t kAckPayloadLen = 15;
 constexpr size_t kAckLen = 79;  // payload + 64-byte Ed25519 signature
 constexpr uint8_t kAckType = 0xA1;
+constexpr size_t kAckTextMax = 6 + 2 * kAckLen;  // "STZA1:" + hex
 
 enum class AckStatus : uint8_t { Ok, BadText, BadHex, BadLength, BadType, UnknownCloudKey, BadSignature };
 const char* reason(AckStatus s);  // "bad_text", "bad_hex", ... the strings the API uses

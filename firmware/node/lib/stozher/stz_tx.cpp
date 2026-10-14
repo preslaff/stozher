@@ -79,6 +79,7 @@ SubmitResult Tx::submit(TxKind kind, Record& r, uint32_t now_ms) {
     have_heartbeat_ = true;
     queue_resends(now_ms);
   }
+  if (sink_) sink_->on_record(kind, seq, slot->raw, slot->len, now_ms);
   return SubmitResult::Queued;
 }
 
@@ -232,6 +233,7 @@ AckResult Tx::on_ack(const Ack& a) {
     }
     if (acked) e.used = false;
   }
+  if (sink_) sink_->on_ack(a);
   return AckResult::Applied;
 }
 
