@@ -272,6 +272,7 @@ client's device.
 |---|---|
 | `geometry` | GeoJSON LineString, EPSG:4326, 2 to 500 positions |
 | `buffer_m` | Corridor half-width, 50-2000 (default 200). A corridor of k cells (`round(buffer_m / 920)`) means the worst cell within it counts |
+| `hazard_min_tier` | Lowest road-hazard tier that alerts (`unverified` < `corroborated` default < `confirmed`); see `docs/hazards.md` section 8 |
 | `min_level` | Lowest state that alerts: `degraded` (default) < `jammed` < `spoofed`; `UNKNOWN` never alerts |
 | `notify` | Only `{"sse": true}` today (the alert stream). Webhook ids and mesh delivery are refused with 422 until they exist; mesh gateways relay route alerts by the global relay rules |
 | `expires_at` | Needs a time zone; default now + 24 h, at most now + 7 days, must be in the future. Expired watches are deleted by the worker |
@@ -340,7 +341,7 @@ segment index only.
 | Method and path | Purpose |
 |---|---|
 | `GET /v1/watched-routes` | Caller's watches (operator and above: all, `?owner=` filter) |
-| `PATCH /v1/watched-routes/{id}` | Change `name`, `buffer_m`, `min_level`, `expires_at`. The geometry cannot change (422): create a new watch |
+| `PATCH /v1/watched-routes/{id}` | Change `name`, `buffer_m`, `min_level`, `hazard_min_tier`, `expires_at`. The geometry cannot change (422): create a new watch |
 | `DELETE /v1/watched-routes/{id}` | Stop watching |
 
 ### Rules

@@ -100,8 +100,9 @@ updating this table fails the build.
 | `GET /v1/control/public-key` (no key) | x | x | x | x | x | x |
 | `GET /v1/events` |  |  | x | x | x |  |
 | `GET /v1/events/{event_id}` |  |  | x | x | x |  |
-| `GET /v1/hazards` |  |  | x | x | x |  |
-| `GET /v1/hazards/{hazard_id}` |  |  | x | x | x |  |
+| `GET /v1/hazards` | x | x | x | x | x |  |
+| `POST /v1/hazards/along-route` |  |  | x | x | x |  |
+| `GET /v1/hazards/{hazard_id}` | x | x | x | x | x |  |
 | `POST /v1/hazards/{hazard_id}/close` |  |  |  | x | x |  |
 | `POST /v1/hazards/{hazard_id}/confirm` |  |  |  | x | x |  |
 | `POST /v1/hazards/{hazard_id}/dismiss` |  |  |  | x | x |  |

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from stozher_api.config import get_settings
 from stozher_api.hazard_service import reconcile
 
+from .hazard_alerts import watch_hazards
 from .queue import Handler, enqueue, run_pending
 from .recompute import recompute
 
@@ -25,6 +26,8 @@ async def _handle_recompute(session: AsyncSession, now: datetime) -> object:
 
 async def _handle_hazards(session: AsyncSession, now: datetime) -> object:
     summary = await reconcile(session, now)
+    await watch_hazards(session, now)
+    await session.commit()
     if summary.created or summary.changed or summary.purged:
         log.info("hazards: %s", summary)
     return summary

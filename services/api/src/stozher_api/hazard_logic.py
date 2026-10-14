@@ -17,6 +17,7 @@ import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Any
 
 from pyproj import Geod
 
@@ -185,3 +186,26 @@ def derive(h: Haz, now: datetime) -> Derived:
     return Derived(
         tier, status, passability, len(teams), len(clear_teams), first, last, valid_until, ended
     )
+
+
+# What the public and reporter roles may see (docs/hazards.md section 8): confirmed hazards of a few kinds,
+# on a coarse grid. Nothing here depends on who reported.
+PUBLIC_KINDS = ("closed_by_authority", "flood", "landslide", "snow_ice", "fire_near_road")
+BLUR_M = 100.0
+_DEG_LAT = BLUR_M / 111_320.0
+
+
+def blur_geometry(geo: dict[str, Any]) -> dict[str, Any]:
+    """Snap a Point or LineString to the centres of a 100 m grid: a Point, or a MultiPoint of the cells touched."""
+    raw = geo["coordinates"]
+    coords: list[list[float]] = [raw] if geo["type"] == "Point" else raw
+    cells: list[tuple[float, float]] = []
+    for lon, lat, *_ in coords:
+        row = math.floor(lat / _DEG_LAT)
+        step = _DEG_LAT / max(0.05, math.cos(math.radians((row + 0.5) * _DEG_LAT)))
+        c = (round((math.floor(lon / step) + 0.5) * step, 5), round((row + 0.5) * _DEG_LAT, 5))
+        if c not in cells:
+            cells.append(c)
+    if len(cells) == 1:
+        return {"type": "Point", "coordinates": list(cells[0])}
+    return {"type": "MultiPoint", "coordinates": [list(c) for c in cells[:200]]}

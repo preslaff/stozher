@@ -328,12 +328,105 @@ async def test_no_response_ever_contains_a_reporter_prefix_or_a_decider(client):
     assert "Team A" not in "".join(seen)  # team labels are not exposed either
 
 
-async def test_reading_hazards_needs_a_responder_key(client):  # type: ignore[no-untyped-def]
-    for role in ("public", "reporter", "system"):
-        assert (await client.get("/v1/hazards", headers=hdr(client, role))).status_code == 403, role
+async def test_reading_hazards_needs_a_key_and_lower_roles_get_the_coarse_view(client):  # type: ignore[no-untyped-def]
+    assert (await client.get("/v1/hazards", headers=hdr(client, "system"))).status_code == 403
     assert (await client.get("/v1/hazards")).status_code == 401
-    for role in ("responder", "operator", "admin"):
+    for role in ("public", "reporter", "responder", "operator", "admin"):
         assert (await client.get("/v1/hazards", headers=hdr(client, role))).status_code == 200
+
+
+async def test_public_and_reporters_see_only_confirmed_listed_kinds_on_a_coarse_grid(client):  # type: ignore[no-untyped-def]
+    t = await team(client, "Team A")
+    await report(client, t, kind="flood")
+    await report(client, t, kind="debris", east=2000)
+    await run(client)
+    items = (await hazards(client))["items"]
+    flood = [h for h in items if h["kind"] == "flood"][0]
+    debris = [h for h in items if h["kind"] == "debris"][0]
+    for role in ("public", "reporter"):
+        assert (await hazards(client, role=role))["count"] == 0  # unverified is never public
+    await decide(client, flood["id"], "confirm", "verified_on_site")
+    await decide(client, debris["id"], "confirm", "verified_on_site")
+    for role in ("public", "reporter"):
+        got = await hazards(client, role=role, min_tier="unverified", status="all", kind="debris")
+        assert (
+            got["count"] == 0
+        )  # debris is not a public kind, and the filters cannot widen the view
+        got = await hazards(client, role=role)
+        assert got["count"] == 1
+        h = got["items"][0]
+        assert h["kind"] == "flood" and h["tier"] == "confirmed" and h["blur_m"] == 100
+        assert h["geometry"]["type"] == "Point" and h["geometry"]["coordinates"] != [LON, LAT]
+        assert (
+            abs(h["geometry"]["coordinates"][1] - LAT) < 0.001
+            and abs(h["geometry"]["coordinates"][0] - LON) < 0.002
+        )
+        assert not {
+            "sources",
+            "evidence",
+            "decision",
+            "decision_reason",
+            "first_seen",
+            "decided_at",
+        } & set(h)
+        one = await client.get(f"/v1/hazards/{h['id']}", headers=hdr(client, role))
+        assert one.status_code == 200 and "timeline" not in one.json()
+        assert (
+            await client.get(f"/v1/hazards/{debris['id']}", headers=hdr(client, role))
+        ).status_code == 404
+    assert (await hazards(client))["count"] == 2  # responders still see everything, exact
+
+
+def test_blur_snaps_to_a_100_m_grid_and_keeps_only_the_vertices():
+    from stozher_api.hazard_logic import blur_geometry
+
+    a = blur_geometry({"type": "Point", "coordinates": [27.91004, 43.20002]})
+    b = blur_geometry({"type": "Point", "coordinates": [27.91012, 43.20006]})
+    assert a == b and a["type"] == "Point"  # nearby points share a cell
+    line = blur_geometry({"type": "LineString", "coordinates": [[27.91, 43.2], [27.93, 43.2]]})
+    assert line["type"] == "MultiPoint" and len(line["coordinates"]) == 2  # vertices only
+
+
+async def test_along_route_lists_hazards_in_order_with_tier_and_age(client):  # type: ignore[no-untyped-def]
+    t = await team(client, "Team A")
+    await report(client, t, kind="flood", east=1500)
+    await report(client, t, kind="debris", east=500)
+    await report(client, t, kind="landslide", east=0, minutes=-5)
+    await report(
+        client, t, kind="road_collapse", east=0, minutes=-5
+    )  # same place: merges only if same kind
+    await run(client)
+    far = await report(client, t, kind="debris", east=9000)  # far from the route
+    del far
+    await run(client)
+    route = {"type": "LineString", "coordinates": [[LON - 0.005, LAT], [LON + 0.03, LAT]]}
+    r = await client.post(
+        "/v1/hazards/along-route?buffer_m=100", json=route, headers=hdr(client, "responder")
+    )
+    assert r.status_code == 200, r.text
+    d = r.json()
+    kinds = [h["kind"] for h in d["items"]]
+    assert "flood" in kinds and "debris" in kinds and d["count"] == len(kinds) <= 4
+    at = [h["at_m"] for h in d["items"]]
+    assert at == sorted(at) and d["length_m"] > 2500
+    assert all("tier" in h and "data_age_s" in h and h["distance_m"] <= 100 for h in d["items"])
+    assert not any(
+        abs(h["geometry"]["coordinates"][0] - (LON + 9000 / 81_000.0)) < 1e-3 for h in d["items"]
+    )
+    only_flood = await client.post(
+        "/v1/hazards/along-route?min_tier=confirmed", json=route, headers=hdr(client, "responder")
+    )
+    assert only_flood.json()["count"] == 0
+    for role in ("public", "reporter", "system"):
+        assert (
+            await client.post("/v1/hazards/along-route", json=route, headers=hdr(client, role))
+        ).status_code == 403
+    bad = await client.post(
+        "/v1/hazards/along-route",
+        json={"type": "LineString", "coordinates": [[0, 0]]},
+        headers=hdr(client, "responder"),
+    )
+    assert bad.status_code == 422
 
 
 async def test_ended_hazards_and_their_reports_are_deleted_after_the_retention_period(client):  # type: ignore[no-untyped-def]
@@ -361,3 +454,100 @@ async def test_the_worker_job_merges_reports_without_being_called_directly(clien
     async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
         assert (await s.execute(select(HazardReport.hazard_id))).scalar_one() is not None
         assert (await s.execute(select(RoadHazard.sim))).scalar_one() is False
+
+
+async def watch(c, **over):  # type: ignore[no-untyped-def]
+    body = {
+        "name": "Coast road",
+        "geometry": {"type": "LineString", "coordinates": [[LON - 0.005, LAT], [LON + 0.03, LAT]]},
+        "buffer_m": 100,
+        **over,
+    }
+    r = await c.post("/v1/watched-routes", json=body, headers=hdr(c, "responder"))
+    assert r.status_code == 201, r.text
+    return r.json()["id"]
+
+
+async def tick(c, now=None):  # type: ignore[no-untyped-def]
+    from stozher_worker.hazard_alerts import watch_hazards
+
+    async with c.app.state.sessionmaker() as s:
+        await reconcile(s, now or datetime.now(UTC))
+        n = await watch_hazards(s, now or datetime.now(UTC))
+        await s.commit()
+        return n
+
+
+async def route_alerts(c, wid: str):  # type: ignore[no-untyped-def]
+    r = await c.get(f"/v1/alerts?route_id={wid}&limit=50", headers=hdr(c, "responder"))
+    return [a for a in r.json()["items"] if a["kind"].startswith("route_hazard")]
+
+
+async def test_a_watched_route_alerts_when_a_hazard_of_enough_tier_appears_and_when_it_closes(
+    client,
+):  # type: ignore[no-untyped-def]
+    wid = await watch(client)
+    a, b = await team(client, "Team A"), await team(client, "Team B")
+    await report(client, a, east=500)
+    assert await tick(client) == 0  # unverified is below the default corroborated
+    await report(client, b, east=520)  # an independent team: corroborated
+    assert await tick(client) == 1
+    got = await route_alerts(client, wid)
+    assert len(got) == 1 and got[0]["kind"] == "route_hazard" and got[0]["level"] == "critical"
+    msg = got[0]["message"]
+    assert (
+        "corroborated" in msg
+        and "2 reports" in msg
+        and "km 0." in msg
+        and "min old" in msg
+        or "s old" in msg
+    )
+    assert a.prefix not in msg and "Team A" not in msg
+    assert await tick(client) == 0  # nothing changed: nothing raised
+    hid = (await hazards(client))["items"][0]["id"]
+    await decide(client, hid, "close", "cleared_on_site")
+    assert await tick(client) == 1
+    got = await route_alerts(client, wid)
+    assert [x["kind"] for x in got][0] == "route_hazard_cleared" and "closed" in got[0]["message"]
+    assert await tick(client) == 0
+
+
+async def test_expiry_and_dismissal_never_say_cleared_and_unverified_is_opt_in(client):  # type: ignore[no-untyped-def]
+    wid = await watch(client, hazard_min_tier="unverified")
+    a = await team(client, "Team A")
+    await report(client, a, east=500, minutes=-5)
+    assert (
+        await tick(client) == 1
+        and (await route_alerts(client, wid))[0]["message"].count("unverified") == 1
+    )
+    await tick(client, datetime.now(UTC) + timedelta(hours=13))  # debris is valid for 12 h
+    assert [x["kind"] for x in await route_alerts(client, wid)] == [
+        "route_hazard"
+    ]  # expired is not clear
+    b = await team(client, "Team B")
+    await report(client, b, kind="flood", east=900)
+    assert await tick(client) == 1
+    fl = [h for h in (await hazards(client))["items"] if h["kind"] == "flood"][0]["id"]
+    await decide(client, fl, "dismiss", "false_report")
+    await tick(client)
+    kinds = [x["kind"] for x in await route_alerts(client, wid)]
+    assert "route_hazard_cleared" not in kinds
+
+
+async def test_a_worse_passability_alerts_again_and_far_hazards_do_not(client):  # type: ignore[no-untyped-def]
+    wid = await watch(client, hazard_min_tier="unverified")
+    a = await team(client, "Team A")
+    await report(client, a, east=300, passability="restricted")
+    await report(client, a, east=20000)  # nowhere near the route
+    assert await tick(client) == 1
+    await report(client, a, east=310, passability="blocked")
+    assert await tick(client) == 1
+    got = await route_alerts(client, wid)
+    assert len(got) == 2 and got[0]["level"] == "critical" and got[1]["level"] == "warning"
+    assert (
+        await client.patch(
+            f"/v1/watched-routes/{wid}",
+            json={"hazard_min_tier": "confirmed"},
+            headers=hdr(client, "responder"),
+        )
+    ).json()["hazard_min_tier"] == "confirmed"

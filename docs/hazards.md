@@ -1,8 +1,8 @@
 # Road hazards and community reports (specification)
 
-**Status: specification. Build steps 1 and 2 of section 13 are implemented** (the `reporter` role, reports,
-merging into hazards, tiers, operator decisions, expiry, retention, and read access for responders and
-above); the rest is not. See "Implementation notes" at the end for where the build refines this text. It extends the platform with a second
+**Status: specification. Build steps 1 to 3 of section 13 are implemented** (the `reporter` role, reports,
+merging into hazards, tiers, operator decisions, expiry, retention, role views, `along-route` and watched-route
+hazard alerts); the rest is not. See "Implementation notes" at the end for where the build refines this text. It extends the platform with a second
 module beside GNSS Trust: physical hazards that block or endanger movement on roads, reported by
 people in the field and by other sources, shown with their source and verification level, and checked
 against routes. It follows the `docs/api.md` conventions; where an API shape here becomes real, copy it
@@ -252,7 +252,7 @@ Done when:
 
 1. **Done:** migration, models and the report endpoint with validation, rate limits and the `reporter` role.
 2. **Done:** merging and tiers (worker job and operator decisions), expiry, retention.
-3. Hazards read API with role views; `along-route`; watched-route alerts.
+3. **Done:** hazards read API with role views; `along-route`; watched-route alerts.
 4. Simulator scenario and tests for every acceptance line above.
 5. Dashboard: report tool, hazard layer, route panel.
 6. EO findings and OSM closures as sources.
@@ -286,9 +286,18 @@ Where the build is more specific than, or refines, the text above:
   decision runs it immediately. A database advisory lock serialises runs.
 - **Retention** is `HAZARD_RETENTION_DAYS` (default 30) after a hazard ended; its reports and history go
   with it, and unattached reports older than that are deleted.
-- **Not yet built:** public and reporter views (confirmed only, blurred), `along-route`, hazard alerts on
-  watched routes and the stream, reporter weighting from confirmed and dismissed reports, the dashboard
-  tool, the simulator scenario, EO and OSM sources.
+- **Step 3 notes.** `public` and `reporter` get `GET /v1/hazards` and `/{id}` as a coarse view: confirmed,
+  active, kinds `flood`, `landslide`, `snow_ice`, `fire_near_road` (and `closed_by_authority` once it exists),
+  geometry snapped to a 100 m grid (a Point, or a MultiPoint of the snapped vertices), and no sources, evidence,
+  decisions or timeline. Filters cannot widen that view. A reporter sees their own reports with
+  `GET /v1/reports?mine=true`, not through the hazard list. `POST /v1/hazards/along-route?buffer_m&min_tier`
+  (responder) returns hazards in route order with `at_m` and `distance_m`. Watched routes gain
+  `hazard_min_tier` and the worker raises `route_hazard` and `route_hazard_cleared` alerts (on the existing
+  alert list and stream, filtered by `route_id`); only a **closed** hazard raises "cleared", never expiry or
+  dismissal. A new watch alerts about hazards already on the route at the next run (there is no baseline,
+  unlike GNSS trust). No separate `hazard_*` stream event types were added; they are `alert` events with these kinds.
+- **Not yet built:** reporter weighting from confirmed and dismissed reports, the dashboard tool, the
+  simulator scenario, EO and OSM sources.
 
 ## 15. References
 

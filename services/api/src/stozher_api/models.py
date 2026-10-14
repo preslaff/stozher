@@ -335,6 +335,9 @@ class WatchedRoute(Base):
         Integer, default=0
     )  # alerts raised so far (dedupe key)
     last_evaluated_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    hazard_min_tier: Mapped[str] = mapped_column(String(16), default="corroborated")
+    # hazards already alerted on this route: {hazard_id: {"p": passability, "n": alerts so far}}
+    hazard_state: Mapped[Any] = mapped_column(JSONB, default=dict)
 
 
 class HazardReport(Base):

@@ -40,6 +40,7 @@ class WatchIn(BaseModel):
     geometry: LineStringIn
     buffer_m: int = Field(default=200, ge=50, le=2000)
     min_level: Literal["degraded", "jammed", "spoofed"] = "degraded"
+    hazard_min_tier: Literal["unverified", "corroborated", "confirmed"] = "corroborated"
     notify: Notify = Notify()
     expires_at: datetime | None = None
     asset_type: str | None = Field(default=None, max_length=32)
@@ -57,6 +58,7 @@ class WatchPatch(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     buffer_m: int | None = Field(default=None, ge=50, le=2000)
     min_level: Literal["degraded", "jammed", "spoofed"] | None = None
+    hazard_min_tier: Literal["unverified", "corroborated", "confirmed"] | None = None
     notify: Notify | None = None
     expires_at: datetime | None = None
 
@@ -82,6 +84,7 @@ async def _status(session: AsyncSession, w: WatchedRoute) -> dict[str, Any]:
         "name": w.name,
         "buffer_m": w.buffer_m,
         "min_level": w.min_level,
+        "hazard_min_tier": w.hazard_min_tier,
         "notify": w.notify,
         "asset_type": w.asset_type,
         "created_at": w.created_at,
@@ -130,6 +133,8 @@ async def create(
             coordinates=body.geometry.coordinates,
             buffer_m=body.buffer_m,
             min_level=body.min_level,
+            hazard_min_tier=body.hazard_min_tier,
+            hazard_state={},
             notify=body.notify.model_dump(),
             asset_type=body.asset_type,
             expires_at=expires,
@@ -198,6 +203,8 @@ async def update(
             w.buffer_m = body.buffer_m
         if body.min_level is not None:
             w.min_level = body.min_level
+        if body.hazard_min_tier is not None:
+            w.hazard_min_tier = body.hazard_min_tier
         if body.expires_at is not None:
             w.expires_at = _expiry(body.expires_at, now)
         await session.commit()
