@@ -8,6 +8,8 @@ from stozher_api.models import Event
 from stozher_worker.main import HANDLERS
 from stozher_worker.queue import run_pending
 
+from .test_api import hdr
+
 
 async def test_coastal_scenario_end_to_end(client):  # type: ignore[no-untyped-def]
     sim = SimClient(client, client.keys["operator"], client.keys["system"])
@@ -50,3 +52,48 @@ async def test_reset_removes_only_simulated_data(client):  # type: ignore[no-unt
     events = (await client.get("/v1/events", headers=hdr(client, "responder"))).json()
     assert events["count"] == 1 and events["items"][0]["sim"] is False
     assert (await client.post("/v1/sim/reset", headers=hdr(client, "responder"))).status_code == 403
+
+
+async def test_hazard_scenario_end_to_end(client):  # type: ignore[no-untyped-def]
+    from simulator.hazards import HazardScenario
+
+    async def worker() -> None:
+        await run_pending(client.app.state.sessionmaker, HANDLERS)
+
+    card = await HazardScenario(client, client.keys["operator"], tick=worker, timeout_s=5).run()
+    failed = [(c.name, c.detail) for c in card.checks if not c.ok]
+    assert failed == [] and len(card.checks) == 17
+
+
+async def test_simulated_reports_are_labelled_and_reset_removes_only_them(client):  # type: ignore[no-untyped-def]
+    from datetime import UTC, datetime
+
+    from stozher_api.models import HazardReport, RoadHazard
+
+    from .test_hazards import report, run, team
+
+    t = await team(client, "Live team")
+    await report(client, t, kind="flood")  # a live report
+    body = {
+        "team": "A",
+        "kind": "debris",
+        "passability": "blocked",
+        "observed_at": datetime.now(UTC).isoformat(),
+        "geometry": {"type": "Point", "coordinates": [27.5, 43.0]},
+    }
+    assert (
+        await client.post("/v1/sim/reports", json=body, headers=hdr(client, "operator"))
+    ).status_code == 202
+    for role in ("responder", "reporter", "public", "system"):
+        assert (
+            await client.post("/v1/sim/reports", json=body, headers=hdr(client, role))
+        ).status_code == 403
+    await run(client)
+    async with client.app.state.sessionmaker() as s:
+        sims = (await s.execute(select(RoadHazard.sim))).scalars().all()
+        assert sorted(sims) == [False, True]
+    out = await client.post("/v1/sim/reset", headers=hdr(client, "operator"))
+    assert out.json()["deleted_reports"] == 1
+    async with client.app.state.sessionmaker() as s:
+        assert (await s.execute(select(func.count()).select_from(HazardReport))).scalar_one() == 1
+        assert (await s.execute(select(RoadHazard.sim))).scalars().all() == [False]

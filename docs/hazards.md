@@ -253,7 +253,7 @@ Done when:
 1. **Done:** migration, models and the report endpoint with validation, rate limits and the `reporter` role.
 2. **Done:** merging and tiers (worker job and operator decisions), expiry, retention.
 3. **Done:** hazards read API with role views; `along-route`; watched-route alerts.
-4. Simulator scenario and tests for every acceptance line above.
+4. **Done:** simulator scenario (`make sim-hazards`, `simulator/hazards.py`) and an in-process test; the checks cover the lines above except the public view and the reporter-key reads, which `test_hazards.py` / `test_reports.py` cover.
 5. Dashboard: report tool, hazard layer, route panel.
 6. EO findings and OSM closures as sources.
 7. Mesh report contract with golden vectors.
@@ -296,8 +296,13 @@ Where the build is more specific than, or refines, the text above:
   alert list and stream, filtered by `route_id`); only a **closed** hazard raises "cleared", never expiry or
   dismissal. A new watch alerts about hazards already on the route at the next run (there is no baseline,
   unlike GNSS trust). No separate `hazard_*` stream event types were added; they are `alert` events with these kinds.
-- **Not yet built:** reporter weighting from confirmed and dismissed reports, the dashboard tool, the
-  simulator scenario, EO and OSM sources.
+- **Step 4 notes.** Simulated reports use `POST /v1/sim/reports` (operator): same fields as a report plus `team` and
+  `reporter`, stored with `sim = true` and `hazard_reports.sim_team` (the only extra column; the schema guard test lists it).
+  A hazard is `sim` only if all its reports are; `POST /v1/sim/reset` deletes simulated reports, hazards and history.
+  The scenario covers: lone report, duplicate, corroboration with a watch alert, a same-team pair, a dismissed doubtful
+  report, refused fields, operator confirmation, two clear reports closing a hazard, and expiry. "Bad history" weighting
+  is not modelled because reporter weighting is not built.
+- **Not yet built:** reporter weighting from confirmed and dismissed reports, the dashboard tool, EO and OSM sources.
 
 ## 15. References
 

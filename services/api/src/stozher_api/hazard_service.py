@@ -52,12 +52,13 @@ async def _reports(session: AsyncSession, where: Any) -> list[tuple[HazardReport
             r,
             Rep(
                 r.id,
-                label or r.reporter_prefix,
+                r.sim_team or label or r.reporter_prefix,
                 r.kind,
                 r.passability,
                 _points(geo),
                 r.observed_at,
                 r.received_at,
+                r.sim,
             ),
         )
         for r, label, geo in rows
@@ -98,7 +99,7 @@ async def reconcile(session: AsyncSession, now: datetime) -> Summary:
                 first_seen=first.observed_at,
                 valid_until=first.observed_at,
                 status="active",
-                sim=False,
+                sim=first.sim,
             )
         )
     await session.flush()
@@ -126,6 +127,10 @@ async def reconcile(session: AsyncSession, now: datetime) -> Summary:
         if d.status != "active" and row.ended_at is None:
             row.ended_at = d.ended_at or now
         row.sources = _sources(row)
+        if (
+            h.members
+        ):  # simulated only if every report is: live reports never hide behind a SIM badge
+            row.sim = all(m.sim for m in h.members)
         row.evidence = {
             "reports": len(asserts),
             "clear_reports": len(h.members) - len(asserts),

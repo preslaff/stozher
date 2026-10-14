@@ -359,6 +359,9 @@ class HazardReport(Base):
     observed_at: Mapped[datetime] = mapped_column(TS)  # the reporter's claim
     received_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
     sim: Mapped[bool] = mapped_column(Boolean, default=False)
+    sim_team: Mapped[str | None] = mapped_column(
+        String(40), nullable=True
+    )  # simulated reports only: the team they pretend to come from
     status: Mapped[str] = mapped_column(String(16), default="accepted")  # accepted, withdrawn
     hazard_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 

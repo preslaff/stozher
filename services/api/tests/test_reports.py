@@ -174,6 +174,7 @@ def test_schema_guard_the_report_stores_and_accepts_only_what_the_privacy_rules_
         "observed_at",
         "received_at",
         "sim",
+        "sim_team",
         "status",
         "hazard_id",
     }

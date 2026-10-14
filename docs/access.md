@@ -119,6 +119,7 @@ updating this table fails the build.
 | `GET /v1/reports` |  | x | x | x | x |  |
 | `POST /v1/reports` |  | x | x | x | x |  |
 | `POST /v1/reports/{report_id}/withdraw` |  | x | x | x | x |  |
+| `POST /v1/sim/reports` |  |  |  | x | x |  |
 | `POST /v1/sim/reset` |  |  |  | x | x |  |
 | `GET /v1/stream/alerts` |  |  | x | x | x |  |
 | `GET /v1/trust` | x | x | x | x | x |  |

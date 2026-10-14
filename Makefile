@@ -1,4 +1,4 @@
-.PHONY: up down field migrate test lint sim fw fw-upload worker api bridge
+.PHONY: up down field migrate test lint sim sim-hazards fw fw-upload worker api bridge
 
 COMPOSE := docker compose -f infra/compose.yml
 S ?= coastal
@@ -36,6 +36,9 @@ bridge:  # needs STOZHER_SYSTEM_KEY; MESH_PORT=fake runs with no radio
 
 sim:
 	uv run python -m simulator run $(S)
+
+sim-hazards:  # needs api + worker running and STOZHER_OPERATOR_KEY
+	uv run python -m simulator hazards
 
 fw:
 	pio run -d firmware/node

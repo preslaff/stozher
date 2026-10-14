@@ -57,6 +57,27 @@ async def _run(args: argparse.Namespace) -> int:
     return 0 if rep.detection_rate == 1.0 and not rep.mismatches and not rep.merged_sources else 1
 
 
+async def _run_hazards(args: argparse.Namespace) -> int:
+    from .hazards import HazardScenario
+
+    key = os.environ.get("STOZHER_OPERATOR_KEY", "")
+    if not key:
+        print(
+            "set STOZHER_OPERATOR_KEY (see docs/api.md section 3); a worker must be running",
+            file=sys.stderr,
+        )
+        return 2
+    async with httpx.AsyncClient(base_url=args.api, timeout=30) as http:
+        card = await HazardScenario(http, key).run(keep=args.keep)
+    for ch in card.checks:
+        print(
+            f"{'ok  ' if ch.ok else 'FAIL'} {ch.name}"
+            + (f"   [{ch.detail}]" if ch.detail and not ch.ok else "")
+        )
+    print(f"\n{sum(c.ok for c in card.checks)}/{len(card.checks)} checks passed")
+    return 0 if card.passed else 1
+
+
 async def _reset(args: argparse.Namespace) -> int:
     async with httpx.AsyncClient(base_url=args.api, timeout=30) as http:
         print(await SimClient(http, os.environ.get("STOZHER_OPERATOR_KEY", ""), "").reset())
@@ -118,6 +139,8 @@ def main() -> None:
     )
     r.add_argument("--keep", action="store_true", help="do not reset earlier simulated data first")
     r.add_argument("--out", help="write the report as JSON")
+    h = sub.add_parser("hazards", help="run the road-hazard scenario (needs a running worker)")
+    h.add_argument("--keep", action="store_true", help="do not reset earlier simulated data first")
     sub.add_parser("reset", help="delete all simulated data")
     k = sub.add_parser("packet", help="print one signed record as STZ1:<hex> mesh text (test data)")
     k.add_argument("--node-id", type=int, required=True, help="the node's uint32 id from the API")
@@ -136,4 +159,4 @@ def main() -> None:
     args = ap.parse_args()
     if args.cmd == "packet":
         sys.exit(cmd_packet(args))
-    sys.exit(asyncio.run(_run(args) if args.cmd == "run" else _reset(args)))
+    sys.exit(asyncio.run({"run": _run, "hazards": _run_hazards}.get(args.cmd, _reset)(args)))

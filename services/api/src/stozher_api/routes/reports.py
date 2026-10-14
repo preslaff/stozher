@@ -98,21 +98,25 @@ def _retry_after(oldest: datetime, window: timedelta, now: datetime) -> str:
     return str(max(1, int((oldest + window - now).total_seconds())))
 
 
+def check_report_time(observed_at: datetime, now: datetime, max_age_h: int) -> None:
+    if observed_at > now + FUTURE_SKEW:
+        raise ApiError(422, "validation-error", "Invalid time", "observed_at is in the future")
+    if observed_at < now - timedelta(hours=max_age_h):
+        raise ApiError(
+            422,
+            "validation-error",
+            "Report too old",
+            f"observed_at must be within the last {max_age_h} hours",
+        )
+
+
 @router.post("", status_code=202)
 async def submit(
     body: ReportIn, request: Request, p: Principal = Depends(reporter)
 ) -> dict[str, Any]:
     cfg = request.app.state.settings
     now = datetime.now(UTC)
-    if body.observed_at > now + FUTURE_SKEW:
-        raise ApiError(422, "validation-error", "Invalid time", "observed_at is in the future")
-    if body.observed_at < now - timedelta(hours=cfg.report_max_age_h):
-        raise ApiError(
-            422,
-            "validation-error",
-            "Report too old",
-            f"observed_at must be within the last {cfg.report_max_age_h} hours",
-        )
+    check_report_time(body.observed_at, now, cfg.report_max_age_h)
     async with request.app.state.sessionmaker() as session:
         for window, limit in (
             (timedelta(hours=1), cfg.report_limit_per_hour),

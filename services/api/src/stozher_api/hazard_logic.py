@@ -51,6 +51,7 @@ class Rep:
     points: tuple[Point, ...]
     observed_at: datetime
     received_at: datetime
+    sim: bool = False
 
     @property
     def is_clear(self) -> bool:
