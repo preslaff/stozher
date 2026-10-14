@@ -38,6 +38,9 @@ enum class SubmitResult : uint8_t { Queued, QueueFull, SeqStoreFailed, KeyExhaus
 enum class AckResult : uint8_t { Applied, NotForThisNode, WrongKey, Stale };
 
 struct TxConfig {
+  // false: no KIM1 on this node. Records still get sequence numbers, are encoded and handed to the sink (mesh),
+  // but nothing is queued for the satellite and the modem is never touched.
+  bool satellite_enabled = true;
   uint32_t node_id = 0;
   uint8_t key_id = 0;
   kim1::Params radio;
@@ -88,6 +91,7 @@ class Tx {
   uint16_t sent_last_24h() const;
   bool in_flight() const { return state_ == State::AwaitingResult; }
   uint32_t transmissions() const { return total_sent_; }
+  uint32_t acks_applied() const { return acks_applied_; }
 
  private:
   struct Entry {
@@ -134,6 +138,7 @@ class Tx {
   uint32_t last_heartbeat_ms_ = 0;
   bool have_heartbeat_ = false;
   uint32_t total_sent_ = 0;
+  uint32_t acks_applied_ = 0;
 
   uint8_t bucket_[24];
   uint32_t bucket_start_ms_ = 0;

@@ -38,6 +38,30 @@ index 8f1b7c8c9..ad67bd024 100644
          if (charsInBuf > sizeof(UBXscratch) - 10 || c == '\r') {
              if (strnstr((char *)UBXscratch, "$GPTXT,01,01,02,u-blox ag - www.u-blox.com*50", charsInBuf)) {
                  rebootsSeen++;
+diff --git a/src/modules/Modules.cpp b/src/modules/Modules.cpp
+index dec52ae73..9607b4bac 100644
+--- a/src/modules/Modules.cpp
++++ b/src/modules/Modules.cpp
+@@ -41,6 +41,9 @@
+ #endif
+ #if !MESHTASTIC_EXCLUDE_GPS
+ #include "modules/PositionModule.h"
++#ifdef STOZHER_TAP
++#include "gps/StozherModule.h"
++#endif
+ #endif
+ #if !MESHTASTIC_EXCLUDE_REMOTEHARDWARE
+ #include "modules/RemoteHardwareModule.h"
+@@ -167,6 +170,9 @@ void setupModules()
+ #if !MESHTASTIC_EXCLUDE_GPS
+     positionModule = new PositionModule();
+ #endif
++#ifdef STOZHER_TAP
++    new StozherModule(); // STOZHER witness module, see the STOZHER repository firmware/tbeam
++#endif
+ #if !MESHTASTIC_EXCLUDE_WAYPOINT
+     waypointModule = new WaypointModule();
+     geofenceModule = new GeofenceModule();
 diff --git a/variants/esp32/tbeam/platformio.ini b/variants/esp32/tbeam/platformio.ini
 index 7669afc57..d29ee645e 100644
 --- a/variants/esp32/tbeam/platformio.ini

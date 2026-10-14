@@ -572,6 +572,44 @@ void test_blanking_keeps_our_own_kim1_from_looking_like_jamming() {
   TEST_ASSERT_TRUE(jam_without > 0);
 }
 
+// ---- a node with no KIM1 ----
+
+struct CountingSink : RecordSink {
+  int records = 0, acks = 0;
+  uint16_t last_seq = 0;
+  void on_record(TxKind, uint16_t seq, const uint8_t*, size_t len, uint32_t) override {
+    records++;
+    last_seq = seq;
+    TEST_ASSERT_TRUE(len == kCoreLen || len == kExtLen);
+  }
+  void on_ack(const Ack&) override { acks++; }
+};
+
+void test_without_a_satellite_modem_records_are_numbered_and_handed_to_the_sink_only() {
+  TxConfig c;
+  c.node_id = kNode;
+  c.satellite_enabled = false;
+  Rig r(c);
+  CountingSink sink;
+  r.tx->set_sink(&sink);
+  for (int i = 0; i < 40; i++) TEST_ASSERT_EQUAL(SubmitResult::Queued, r.send(i % 3 ? TxKind::Event : TxKind::Heartbeat));
+  TEST_ASSERT_EQUAL(40, sink.records);
+  TEST_ASSERT_EQUAL_UINT16(40, sink.last_seq);  // sequence numbers still advance and are stored first
+  r.run(60000);
+  TEST_ASSERT_EQUAL(0, r.modem.commands);  // the modem is never touched
+  TEST_ASSERT_EQUAL(0, (int)r.tx->pending());
+  TEST_ASSERT_FALSE(r.tx->blanked(r.now));
+  r.modem.force_busy_pin = true;  // a floating status pin must not blank a node that has no KIM1
+  TEST_ASSERT_FALSE(r.tx->blanked(r.now));
+  Ack a;
+  a.node_id = kNode;
+  a.max_seq = 10;
+  a.signed_at = 1;
+  TEST_ASSERT_EQUAL(AckResult::Applied, r.tx->on_ack(a));
+  TEST_ASSERT_EQUAL(1, sink.acks);
+  TEST_ASSERT_EQUAL(1, (int)r.tx->acks_applied());
+}
+
 // ---- sanity ----
 
 void test_the_same_inputs_give_the_same_commands() {
@@ -622,6 +660,7 @@ int main() {
   RUN_TEST(test_blanking_follows_a_silent_modem_until_the_timeout);
   RUN_TEST(test_our_own_mesh_transmissions_blank_too);
   RUN_TEST(test_blanking_keeps_our_own_kim1_from_looking_like_jamming);
+  RUN_TEST(test_without_a_satellite_modem_records_are_numbered_and_handed_to_the_sink_only);
   RUN_TEST(test_the_same_inputs_give_the_same_commands);
   return UNITY_END();
 }

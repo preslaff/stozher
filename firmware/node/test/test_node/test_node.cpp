@@ -144,6 +144,26 @@ void test_a_dead_store_stops_events_but_never_the_detection() {
   TEST_ASSERT_EQUAL(SubmitResult::SeqStoreFailed, b.node->last_submit());  // but will not send what it cannot number
 }
 
+void test_test_mode_marks_every_record_as_a_test_record() {
+  Bench b;
+  b.node->set_test_mode(true);
+  for (int i = 0; i < 40; i++) b.second(b.base);
+  Epoch hit = b.base;
+  hit.cn0_mean = 25;
+  for (int i = 0; i < 10; i++) b.second(hit);
+  TEST_ASSERT_EQUAL(kJamming, b.node->current_class());
+  // decode what went to the modem: the event and the heartbeat are both type 3
+  const char* h = b.modem.last_command() + 17;
+  uint8_t raw[kMaxLen], m[16];
+  size_t n = 0;
+  from_hex(h, strcspn(h, "\r\n"), raw, sizeof raw, n);
+  for (int i = 0; i < 16; i++) m[i] = (uint8_t)i;
+  Record back;
+  TEST_ASSERT_EQUAL(Status::Ok, decode(raw, n, 1, m, back));
+  TEST_ASSERT_EQUAL(kTest, back.type);
+  TEST_ASSERT_EQUAL(kJamming, back.event_class);  // the content is still what the detector saw
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_a_healthy_node_sends_one_heartbeat_and_no_events);
@@ -152,5 +172,6 @@ int main() {
   RUN_TEST(test_our_own_burst_does_not_raise_an_alarm);
   RUN_TEST(test_the_heartbeat_waits_for_a_position);
   RUN_TEST(test_a_dead_store_stops_events_but_never_the_detection);
+  RUN_TEST(test_test_mode_marks_every_record_as_a_test_record);
   return UNITY_END();
 }

@@ -34,6 +34,9 @@ class Node {
     return mesh_ != nullptr;
 #endif
   }
+  // Records built from synthetic epochs must never pass as live ones: in test mode every record is type `test`.
+  void set_test_mode(bool on) { test_mode_ = on; }
+  Tx& tx() { return tx_; }
   uint8_t current_class() const { return class_; }
   SubmitResult last_submit() const { return last_submit_; }
 
@@ -43,6 +46,7 @@ class Node {
   mesh::Link* mesh_;
   Epoch last_epoch_;
   bool have_epoch_ = false;
+  bool test_mode_ = false;
   uint8_t class_ = kNormal;
   SubmitResult last_submit_ = SubmitResult::Queued;
 };

@@ -59,8 +59,11 @@ void Tx::queue_resends(uint32_t now_ms) {
 }
 
 SubmitResult Tx::submit(TxKind kind, Record& r, uint32_t now_ms) {
-  Entry* slot = free_slot(kind);  // before the sequence number: a full queue must not burn one
-  if (!slot) return SubmitResult::QueueFull;
+  Entry* slot = nullptr;
+  if (cfg_.satellite_enabled) {
+    slot = free_slot(kind);  // before the sequence number: a full queue must not burn one
+    if (!slot) return SubmitResult::QueueFull;
+  }
   uint16_t seq;
   SubmitResult why;
   if (!alloc_seq(seq, why)) return why;
@@ -73,13 +76,13 @@ SubmitResult Tx::submit(TxKind kind, Record& r, uint32_t now_ms) {
   e.seq = seq;
   e.kind = kind;
   e.due_ms = now_ms;
-  *slot = e;
+  if (slot) *slot = e;
   if (kind == TxKind::Heartbeat) {
     last_heartbeat_ms_ = now_ms;
     have_heartbeat_ = true;
     queue_resends(now_ms);
   }
-  if (sink_) sink_->on_record(kind, seq, slot->raw, slot->len, now_ms);
+  if (sink_) sink_->on_record(kind, seq, e.raw, e.len, now_ms);
   return SubmitResult::Queued;
 }
 
@@ -185,6 +188,7 @@ void Tx::observe(uint32_t now_ms) {
 }
 
 void Tx::poll(uint32_t now_ms) {
+  if (!cfg_.satellite_enabled) return;
   for (int i = 0; i < 64; i++) {  // bounded: a chatty or broken modem cannot keep us here
     int c = port_.read();
     if (c < 0) break;
@@ -199,8 +203,10 @@ void Tx::poll(uint32_t now_ms) {
 }
 
 bool Tx::blanked(uint32_t now_ms) {
-  observe(now_ms);
-  if (state_ == State::AwaitingResult || port_.tx_status()) return true;
+  if (cfg_.satellite_enabled) {
+    observe(now_ms);
+    if (state_ == State::AwaitingResult || port_.tx_status()) return true;
+  }
   if (guard_active_) {
     if (!reached(now_ms, guard_until_ms_)) return true;
     guard_active_ = false;
@@ -233,6 +239,7 @@ AckResult Tx::on_ack(const Ack& a) {
     }
     if (acked) e.used = false;
   }
+  acks_applied_++;
   if (sink_) sink_->on_ack(a);
   return AckResult::Applied;
 }

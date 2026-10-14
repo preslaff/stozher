@@ -19,6 +19,14 @@ class Port {
   virtual bool tx_status() = 0;  // KIM1 pin 11: transmission in progress
 };
 
+// A port for a node with no KIM1 attached (see TxConfig::satellite_enabled): writes nothing, reads nothing.
+class NullPort : public Port {
+ public:
+  size_t write(const uint8_t*, size_t) override { return 0; }
+  int read() override { return -1; }
+  bool tx_status() override { return false; }
+};
+
 struct Params {
   char band[3] = {'B', '1', 0};  // B1..B9; the organisers give the real values (placeholder)
   uint16_t freq = 300;           // 0..600 (0..700 for B4 and B5), steps within the band

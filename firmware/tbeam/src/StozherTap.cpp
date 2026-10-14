@@ -1,6 +1,7 @@
 #include "StozherTap.h"
 
 #include "TinyGPS++.h"
+#include "StozherModule.h"
 #include "configuration.h"
 #include "stz_gnss.h"
 #include "stz_ubx.h"
@@ -69,7 +70,11 @@ void stozherGpsByte(uint8_t b, TinyGPSPlus &gps)
         }
     } else if (k == Kind::Sat) {
         stz::Epoch e = makeEpoch(gps);
-        LOG_INFO("STOZHER epoch tracked=%u used=%u cn0=%u spread_x10=%u jam_ind=%u jam_state=%u fix=%d nmea_sats=%u utc=%u", e.sats_tracked,
+        if (stozherModule)
+            stozherModule->onEpoch(e);
+        static uint32_t n = 0;
+        if (n++ % 10 == 0)
+            LOG_INFO("STOZHER epoch tracked=%u used=%u cn0=%u spread_x10=%u jam_ind=%u jam_state=%u fix=%d nmea_sats=%u utc=%u", e.sats_tracked,
                  e.sats_used, e.cn0_mean, e.cn0_spread_x10, e.jam_ind, e.jam_state, e.fix_ok ? 1 : 0, e.num_sv, (unsigned)e.utc_s);
     }
 

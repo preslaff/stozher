@@ -15,7 +15,7 @@ Node::Node(const DetectConfig& cfg, Tx& tx, mesh::Link* mesh) : detector_(cfg), 
 Verdict Node::on_epoch(Epoch e, uint32_t now_ms) {
   e.blanked = tx_.blanked(now_ms);
   Verdict v = detector_.update(e);
-  if (!e.blanked) {
+  if (!e.blanked && e.fix_ok) {  // a heartbeat reports the last place we really had a fix
     last_epoch_ = e;
     have_epoch_ = true;
   }
@@ -23,6 +23,7 @@ Verdict Node::on_epoch(Epoch e, uint32_t now_ms) {
     Record r;
     fill_record(v, e, r);
     r.mesh = mesh_present();
+    if (test_mode_) r.type = kTest;
     last_submit_ = tx_.submit(v.event_class != kNormal ? TxKind::Event : TxKind::Status, r, now_ms);
     class_ = v.event_class;
   }
@@ -37,6 +38,7 @@ void Node::tick(uint32_t now_ms) {
     fill_record(v, last_epoch_, r);
     r.type = kHeartbeat;
     r.mesh = mesh_present();
+    if (test_mode_) r.type = kTest;
     tx_.submit(TxKind::Heartbeat, r, now_ms);
   }
   tx_.poll(now_ms);
