@@ -203,8 +203,14 @@ Found on the way:
 - **The Meshtastic node number changed with the 2.7.26 -> 2.8.2 upgrade** (`!bdf0abac` became `!5faa5e2e`, device state
   version 24 -> 25). The backend had to learn the new transport id (done in the dev DB by hand: there is no way to change
   a node's transport id through the API, which a replaced or re-flashed radio needs; open item).
-- **The ack did not arrive**: the node's log shows `Ignore rx packet, error=-7` for the gateway's direct message, which is
-  RadioLib's CRC mismatch, at RSSI -52 dBm with TX power 27 dBm and the two boards side by side. Most likely receiver
-  overload at close range, not the module (compare "single-shot direct messages were lost about half the time" in
-  docs/mesh.md). The ack path in the module is therefore **not yet verified end to end on air**; the library side (verify,
-  free both queues) is covered by the host tests.
+- **The ack, first try, did not arrive** with the boards side by side: `Ignore rx packet, error=-7` (RadioLib's CRC
+  mismatch) at RSSI about -52 dBm and TX power 27 dBm, which points at receiver overload at close range.
+- **The ack, second try, arrived** once the gateway board was moved away: the node logged `ack text from !bdf0a4b0 queued
+  for verification` and then `signed acknowledgement verified and applied`. So the whole loop has now been seen on air
+  between two real T-Beams: record -> LoRa -> gateway -> `mesh_bridge` -> API -> cloud-signed ack -> LoRa direct message ->
+  module -> Ed25519 verification (TweetNaCl) -> applied. Even then several direct messages still failed the CRC
+  (RSSI still strong), and the bridge's link-layer retries are what got one through. Bridge counters over the run: 6 records
+  accepted, 0 rejected, 3 acks sent.
+- **Port names move.** Moving a board re-enumerated both: `ttyUSB0` became the other board, and a bridge started with
+  `--port /dev/ttyUSB0` then reconnected to the wrong radio. Use `/dev/serial/by-id/...` paths. A serial client that
+  connects to a board leaves it in protobuf mode (binary frames instead of the text log) until it reboots.
