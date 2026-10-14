@@ -93,11 +93,26 @@ def render_ack() -> str:
         "static const ValidAck kValidAcks[] = {",
     ]
     for v in d["valid"]:
-        cells = [json.dumps(v["name"]), v["cloud"], f"{v['node']}u", v["key"], v["max_seq"], v["mask"], f"{v['at']}u", json.dumps(v["message_hex"]), json.dumps(v["text"])]
+        cells = [
+            json.dumps(v["name"]),
+            v["cloud"],
+            f"{v['node']}u",
+            v["key"],
+            v["max_seq"],
+            v["mask"],
+            f"{v['at']}u",
+            json.dumps(v["message_hex"]),
+            json.dumps(v["text"]),
+        ]
         out.append("  {" + ", ".join(str(c) for c in cells) + "},")
     out += ["};", "", "static const InvalidAck kInvalidAcks[] = {"]
     for v in d["invalid"]:
-        cells = [json.dumps(v["name"]), json.dumps(v["reason"]), json.dumps(v["message_hex"] or ""), json.dumps(v["text"] or "")]
+        cells = [
+            json.dumps(v["name"]),
+            json.dumps(v["reason"]),
+            json.dumps(v["message_hex"] or ""),
+            json.dumps(v["text"] or ""),
+        ]
         out.append("  {" + ", ".join(cells) + "},")
     out += ["};", ""]
     return "\n".join(out)
