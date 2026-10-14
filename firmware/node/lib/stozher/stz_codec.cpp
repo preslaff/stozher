@@ -164,7 +164,7 @@ void to_hex(const uint8_t* data, size_t len, char* out) {
 
 uint8_t jump_code_from_units(float units) {
   if (units <= 0) return 0;
-  float c = roundf(8.0f * log2f(1.0f + units));
+  float c = roundf(8.0f * logf(1.0f + units) * 1.44269504f);
   return c > 255.0f ? 255 : (uint8_t)c;
 }
 
