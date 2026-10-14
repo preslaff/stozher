@@ -1,4 +1,4 @@
-.PHONY: up down field migrate test lint sim sim-hazards fw fw-upload worker api bridge
+.PHONY: up down field migrate test lint sim sim-hazards fw fw-test fw-vectors fw-upload worker api bridge
 
 COMPOSE := docker compose -f infra/compose.yml
 S ?= coastal
@@ -42,6 +42,12 @@ sim-hazards:  # needs api + worker running and STOZHER_OPERATOR_KEY
 
 fw:
 	pio run -d firmware/node
+
+fw-vectors:  # regenerate the C++ test header from tests/vectors
+	python3 firmware/node/tools/gen_vectors_h.py
+
+fw-test: fw-vectors  # codec and detection tests on the host, no hardware needed
+	pio test -d firmware/node -e native
 
 fw-upload:
 	pio run -d firmware/node -t upload

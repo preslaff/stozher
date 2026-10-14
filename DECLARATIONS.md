@@ -31,3 +31,6 @@ Every library, tool, model and dataset used, with licence. Add a row when you ad
 | Copernicus EMS rapid-mapping products (EMSR692 AOI 05) | dataset | Copernicus EMS terms (free, attribution) | spikes/eo_flood | validation reference only, not redistributed |
 | OpenStreetMap roads via the Overpass API | dataset | ODbL | spikes/eo_flood | road overlay |
 | openeo (Python client), rasterio, scipy, shapely, pyproj, geopandas, pyogrio, matplotlib, pillow | libraries | Apache-2.0 / BSD / MIT | spikes/eo_flood (isolated script environments) | |
+| PlatformIO Core, Espressif 32 platform, Arduino-ESP32 framework | tooling | Apache-2.0 / LGPL-2.1 | firmware/node | build and flash; the Arduino core is linked into the node image |
+| Unity (ThrowTheSwitch) | library | MIT | firmware/node tests | host unit tests (`pio test -e native`) |
+| Own C++ SHA-256, HMAC, HKDF, AES-128 | project code | project | firmware/node/lib/stozher | written here from FIPS 180-4, RFC 2104/5869 and FIPS 197; checked against the standard test vectors and the golden packet vectors; a hardware mbedTLS backend may replace it later |
