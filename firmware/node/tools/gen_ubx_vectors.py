@@ -296,8 +296,26 @@ def render() -> str:
     stats = [status(f"status_spoof_{s}", s) for s in range(4)]
     rfs = [rf("rf_ok", [(1, 3000, 12)]), rf("rf_two_blocks", [(2, 4000, 77), (3, 5000, 180)])]
     valset = UBXMessage.config_set(1, 0, BOOT_CONFIG).serialize().hex()
-    cfg_rst = UBXMessage("CFG", "CFG-RST", SET, navBbrMask=b"\x00\x00", resetMode=2).serialize().hex()
-    cfg_msg = UBXMessage("CFG", "CFG-MSG", SET, msgClass=1, msgID=0x30, rateDDC=0, rateUART1=1, rateUART2=0, rateUSB=0, rateSPI=0, reserved=0).serialize().hex()
+    cfg_rst = (
+        UBXMessage("CFG", "CFG-RST", SET, navBbrMask=b"\x00\x00", resetMode=2).serialize().hex()
+    )
+    cfg_msg = (
+        UBXMessage(
+            "CFG",
+            "CFG-MSG",
+            SET,
+            msgClass=1,
+            msgID=0x30,
+            rateDDC=0,
+            rateUART1=1,
+            rateUART2=0,
+            rateUSB=0,
+            rateSPI=0,
+            reserved=0,
+        )
+        .serialize()
+        .hex()
+    )
     good = pvts[0]["hex"]
     streams = [
         ("two_frames_back_to_back", sats[0]["hex"] + stats[2]["hex"], "ST"),
@@ -407,7 +425,11 @@ def render() -> str:
             )
         )
     o += ["};", "", f"static const char kBootConfigHex[] = {json.dumps(valset)};"]
-    o += [f"static const char kCfgRstHotHex[] = {json.dumps(cfg_rst)};", f"static const char kCfgMsgSvinfoHex[] = {json.dumps(cfg_msg)};", ""]
+    o += [
+        f"static const char kCfgRstHotHex[] = {json.dumps(cfg_rst)};",
+        f"static const char kCfgMsgSvinfoHex[] = {json.dumps(cfg_msg)};",
+        "",
+    ]
     o.append("static const StreamVec kStreams[] = {")
     for n, h, k in streams:
         o.append("  {%s, %s, %s}," % (json.dumps(n), json.dumps(h), json.dumps(k)))
