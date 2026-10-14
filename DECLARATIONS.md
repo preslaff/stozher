@@ -34,3 +34,4 @@ Every library, tool, model and dataset used, with licence. Add a row when you ad
 | PlatformIO Core, Espressif 32 platform, Arduino-ESP32 framework | tooling | Apache-2.0 / LGPL-2.1 | firmware/node | build and flash; the Arduino core is linked into the node image |
 | Unity (ThrowTheSwitch) | library | MIT | firmware/node tests | host unit tests (`pio test -e native`) |
 | Own C++ SHA-256, HMAC, HKDF, AES-128 | project code | project | firmware/node/lib/stozher | written here from FIPS 180-4, RFC 2104/5869 and FIPS 197; checked against the standard test vectors and the golden packet vectors; a hardware mbedTLS backend may replace it later |
+| TweetNaCl 20140427 (Bernstein, Lange, Schwabe et al.) | library | Public domain | firmware/node/lib/tweetnacl | vendored unmodified; only `crypto_sign_open` is used, to verify Ed25519-signed acknowledgements (docs/control.md); checked against tests/vectors/ack_messages.json |

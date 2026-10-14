@@ -8,8 +8,8 @@ binaries that sit in `firmware/node/` are for flashing the T-Beams and are not p
 | Step | State |
 |---|---|
 | 1. Witness record codec in C++ (`lib/stozher/`), checked against the golden vectors on the host | **Done** |
-| 2. Ed25519 verification of signed acknowledgements (`docs/control.md`) | Next |
-| 3. Detection rules on recorded epochs, UBX parsing, u-blox M10 setup | Not started |
+| 2. Ed25519 verification of signed acknowledgements (`docs/control.md`), TweetNaCl vendored in `lib/tweetnacl/` | **Done** (`lib/stozher/stz_ack.*`, `test/test_ack`; freshness and replay rules of control.md step 4 come with the node state in step 4) |
+| 3. Detection rules on recorded epochs, UBX parsing, u-blox M10 setup | Next |
 | 4. KIM1 driver behind an interface (fake modem for tests), sequence numbers persisted before use, blanking | Not started |
 | 5. Mesh uplink (`STZ1:` text over Meshtastic) | Not started |
 

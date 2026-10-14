@@ -1,0 +1,5 @@
+{
+  "name": "tweetnacl",
+  "version": "20140427",
+  "build": { "flags": ["-w", "-Wno-error", "-std=gnu99", "-fno-sanitize=shift-base"] }
+}
