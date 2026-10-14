@@ -38,6 +38,7 @@ class Node {
   void set_test_mode(bool on) { test_mode_ = on; }
   Tx& tx() { return tx_; }
   uint8_t current_class() const { return class_; }
+  const Detector& detector() const { return detector_; }
   SubmitResult last_submit() const { return last_submit_; }
 
  private:

@@ -22,6 +22,9 @@
 #ifndef STOZHER_NODE_ID
 #define STOZHER_NODE_ID 1
 #endif
+#ifndef STOZHER_EPOCH_LOG_S
+#define STOZHER_EPOCH_LOG_S 0 // >0: log the detector's numbers every N epochs (1 epoch = 1 s), for tuning the rules
+#endif
 #ifndef STOZHER_SELFTEST_AT_S
 #define STOZHER_SELFTEST_AT_S 0 // >0: that many seconds after boot, feed a synthetic jamming episode (records are type `test`)
 #endif
@@ -274,6 +277,14 @@ void StozherModule::onEpoch(const stz::Epoch &in)
 #endif
 
     stz::Verdict v = impl->node->on_epoch(e, now);
+#if STOZHER_EPOCH_LOG_S > 0
+    // Numbers for tuning the rules on real data; no position is logged.
+    if (impl->epochs % STOZHER_EPOCH_LOG_S == 0)
+        LOG_INFO("STOZHER epoch: fix=%d sats=%u/%u cn0=%u spread=%u.%u drop=%u base=%.1f jam_ind=%u jam=%u class=%u",
+                 e.fix_ok ? 1 : 0, e.sats_used, e.sats_tracked, e.cn0_mean, e.cn0_spread_x10 / 10, e.cn0_spread_x10 % 10,
+                 v.cn0_drop_db, impl->node->detector().has_baseline() ? impl->node->detector().baseline() : -1.0f,
+                 e.jam_ind, e.jam_state, v.event_class);
+#endif
     if (v.changed && !v.blanked)
         LOG_INFO("STOZHER: class -> %u (rules 0x%02x, confidence %u): record %s", v.event_class, v.rules, v.confidence,
                  impl->node->last_submit() == stz::SubmitResult::Queued ? "queued" : "NOT queued");
