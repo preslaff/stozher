@@ -173,3 +173,17 @@ flash is meant to show. The 68-byte MON-HW test vector is hand-made, not from py
 
 Next (in order): flash one board and read real data; always-on GPS configuration; the module that sends `STZ1:` and
 receives acks; the KIM1 on UART2.
+
+**First flash (Oct 2026, T-Beam "abac").** Backed up the whole 4 MB flash first (`data/tbeam-backups/`, git-ignored,
+it holds the board's keys), then flashed `tbeam-stozher` over USB (all partitions verified by hash). Real data from the
+NEO-6M, read from the debug log:
+
+- Meshtastic identifies it as **u-blox 6, firmware 7.03, hardware 00040007**. Both new messages arrive **once a second
+  with no checksum errors** (20 NAV-SVINFO and 20 MON-HW in the first 30 s, 0 bad).
+- Indoors by a window: 7 to 11 satellites tracked, 5 to 8 used, mean C/N0 about 20 dB-Hz, spread 3 to 7 dB, `jam_ind`
+  3 to 4, noise 99, AGC 6630, `jam_state` 1 (ok). That is the first real "normal" baseline; it is a poor-sky one.
+- **GPS duty cycling is real**: with Meshtastic's default `position.gps_update_interval` (120 s) the receiver was
+  powered down about 20 s after the fix. Setting it to **5 s** (anything at or under 10 s keeps the GPS on, per
+  `GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS`) gave one epoch per second continuously (70 in 70 s). This setting was changed on "abac".
+- Still unknown: whether MON-HW is the 60- or 68-byte form (values look sane either way; log the length next), and
+  whether `jam_state` ever leaves 1 on this receiver (it is the M8-style field; the NEO-6 may only use `jam_ind`).
