@@ -45,6 +45,7 @@ fw:
 
 fw-vectors:  # regenerate the C++ test header from tests/vectors
 	python3 firmware/node/tools/gen_vectors_h.py
+	uv run python firmware/node/tools/gen_ubx_vectors.py
 
 fw-test: fw-vectors  # codec and detection tests on the host, no hardware needed
 	pio test -d firmware/node -e native

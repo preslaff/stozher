@@ -9,7 +9,7 @@ binaries that sit in `firmware/node/` are for flashing the T-Beams and are not p
 |---|---|
 | 1. Witness record codec in C++ (`lib/stozher/`), checked against the golden vectors on the host | **Done** |
 | 2. Ed25519 verification of signed acknowledgements (`docs/control.md`), TweetNaCl vendored in `lib/tweetnacl/` | **Done** (`lib/stozher/stz_ack.*`, `test/test_ack`; freshness and replay rules of control.md step 4 come with the node state in step 4) |
-| 3. Detection rules on recorded epochs, UBX parsing, u-blox M10 setup | Next |
+| 3. Detection rules on recorded epochs, UBX parsing, u-blox M10 setup | **Done on the host** (`stz_ubx`, `stz_gnss`, `stz_detect`; `test/test_ubx`, `test/test_detect`); not yet run against a real receiver |
 | 4. KIM1 driver behind an interface (fake modem for tests), sequence numbers persisted before use, blanking | Not started |
 | 5. Mesh uplink (`STZ1:` text over Meshtastic) | Not started |
 
@@ -53,3 +53,25 @@ and KIM1 (see CLAUDE.md section 12).
 
 Flashed and run on a real Leonardo (Oct 2026): the self-test decodes golden vector `core_event_jamming` and prints
 `STOZHER codec self-test: ok` over USB serial.
+
+## GNSS path and detection (step 3)
+
+`stz_ubx` is a streaming UBX reader (NAV-PVT, NAV-SAT summarised on the fly, NAV-STATUS spoofDetState, MON-RF)
+with the CFG-VALSET boot configuration (UBX only, 1 Hz, those four messages; RAM layer, since the module has no
+flash). `stz_gnss` assembles one `Epoch` per second from them (by iTOW; a missing NAV-SAT sets `sat_missing`
+instead of inventing C/N0). `stz_detect` applies rules J1, S1-S5 and T1 from the specification
+(`DetectConfig` holds the initial thresholds), keeps a C/N0 baseline that only follows clean, healthy epochs and
+never drifts down with a developing attack, and does not touch any state on `blanked` epochs (own transmitter on).
+Event class priority: tamper, spoofing, jamming, time anomaly; the other evidence stays in `Verdict.rules`.
+`fill_record` turns a verdict into the telemetry fields of a witness record.
+
+How it is tested: `gen_ubx_vectors.py` builds frames with **pyubx2**, an independent implementation of the u-blox
+layouts and key IDs (it corrected one key ID I had from memory: MON-RF output is `0x2091035a`), and the C++ reader
+must read the same values back, resync after noise, bad checksums and absurd lengths, and produce a byte-identical
+boot configuration frame. The detection tests run **synthetic** recordings (labelled so in the file): ten quiet
+minutes with no event, each rule with its time to detect, slow decline not absorbed into the baseline, blanking,
+determinism, and a verdict that round-trips through the codec.
+
+Not verified yet: the real module. Layouts come from the pyubx2 tables, which follow the u-blox documentation, but
+nothing has been read from an actual M10; `DetectConfig` thresholds are guesses until real captures exist. On the
+Leonardo the whole path (reader, epochs, detector, USB report) is 19.7 KB flash (69%) and 1.6 KB static RAM (61%).

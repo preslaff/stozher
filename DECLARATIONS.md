@@ -35,3 +35,5 @@ Every library, tool, model and dataset used, with licence. Add a row when you ad
 | Unity (ThrowTheSwitch) | library | MIT | firmware/node tests | host unit tests (`pio test -e native`) |
 | Own C++ SHA-256, HMAC, HKDF, AES-128 | project code | project | firmware/node/lib/stozher | written here from FIPS 180-4, RFC 2104/5869 and FIPS 197; checked against the standard test vectors and the golden packet vectors; a hardware mbedTLS backend may replace it later |
 | TweetNaCl 20140427 (Bernstein, Lange, Schwabe et al.) | library | Public domain | firmware/node/lib/tweetnacl | vendored unmodified; only `crypto_sign_open` is used, to verify Ed25519-signed acknowledgements (docs/control.md); checked against tests/vectors/ack_messages.json |
+| pyubx2 | library (dev tool only) | BSD-3-Clause | firmware/node/tools, tests | builds the u-blox UBX frames used as independent test vectors for the C++ parser; not part of the firmware |
+| Own C++ UBX reader, epoch builder and detection rules | project code | project | firmware/node/lib/stozher | written here from the u-blox M10 interface description as reflected by pyubx2's message definitions; thresholds are initial values |

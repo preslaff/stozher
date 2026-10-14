@@ -1,0 +1,375 @@
+// Detection rules on recorded epochs. The recordings are SYNTHETIC (a fixed pseudo-random generator, a
+// healthy fixed receiver, then scripted attacks); they stand in for real captures until we have some.
+#include <string.h>
+#include <unity.h>
+
+#include "stz_codec.h"
+#include "stz_detect.h"
+
+using namespace stz;
+
+static const int32_t kLat = 425000000, kLon = 270000000;
+static const uint32_t kUtc0 = 1795775405u;
+
+// Deterministic noise in [-1, 1].
+struct Rng {
+  uint32_t s = 12345;
+  float next() {
+    s = s * 1664525u + 1013904223u;
+    return ((s >> 8) & 0xFFFF) / 32767.5f - 1.0f;
+  }
+};
+
+struct Recorder {
+  Rng rng;
+  Detector det;
+  uint32_t t = 0;  // seconds since the start
+  Epoch tmpl;      // what the next epoch looks like; tests edit it between runs
+  int changes = 0;
+  Verdict last;
+  explicit Recorder(const DetectConfig& cfg) : det(cfg) {
+    tmpl.fix_ok = true;
+    tmpl.num_sv = 14;
+    tmpl.lat_e7 = kLat;
+    tmpl.lon_e7 = kLon;
+    tmpl.h_acc_mm = 1500;
+    tmpl.sats_tracked = 12;
+    tmpl.sats_used = 11;
+    tmpl.cn0_mean = 42;
+    tmpl.cn0_spread_x10 = 38;
+    tmpl.jam_state = 1;
+    tmpl.spoof_state = 1;
+    tmpl.sensor_stationary = true;
+  }
+  // Runs `n` seconds with the template (plus noise on C/N0); returns the first second at which the class was
+  // not Normal, or -1.
+  int run(int n, int noise = 1) {
+    int first = -1;
+    for (int i = 0; i < n; i++, t++) {
+      Epoch e = tmpl;
+      e.utc_s = kUtc0 + t + (utc_offset);
+      e.mono_ms = 100000u + t * 1000u;
+      if (noise) e.cn0_mean = (uint8_t)(e.cn0_mean + (rng.next() > 0.3f ? 1 : 0) - (rng.next() < -0.3f ? 1 : 0));
+      last = det.update(e);
+      if (last.changed) changes++;
+      if (first < 0 && last.event_class != kNormal) first = i;
+    }
+    return first;
+  }
+  int32_t utc_offset = 0;
+};
+
+static DetectConfig fixed_cfg() {
+  DetectConfig c;
+  c.fixed_node = true;
+  c.surveyed_lat_e7 = kLat;
+  c.surveyed_lon_e7 = kLon;
+  return c;
+}
+
+void test_ten_minutes_of_normal_operation_raise_nothing() {
+  Recorder r(fixed_cfg());
+  TEST_ASSERT_EQUAL(-1, r.run(600));
+  TEST_ASSERT_EQUAL(0, r.changes);
+  TEST_ASSERT_TRUE(r.det.has_baseline());
+  TEST_ASSERT_FLOAT_WITHIN(1.0f, 42.0f, r.det.baseline());
+}
+
+void test_a_cn0_drop_is_jamming_within_three_epochs_and_clears() {
+  Recorder r(fixed_cfg());
+  r.run(60);
+  r.tmpl.cn0_mean = 28;  // 14 dB below the baseline
+  r.tmpl.sats_tracked = 6;
+  int first = r.run(30);
+  TEST_ASSERT_EQUAL(2, first);  // the third epoch of the drop
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  TEST_ASSERT_TRUE(r.last.rules & kRuleJ1);
+  TEST_ASSERT_TRUE(r.last.cn0_drop_db >= 12);
+  TEST_ASSERT_TRUE(r.last.duration_s >= 25);
+  r.tmpl.cn0_mean = 42;
+  r.tmpl.sats_tracked = 12;
+  r.run(9);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);  // still held: ten clean epochs end it
+  r.run(3);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+  TEST_ASSERT_EQUAL(2, r.changes);  // onset and end, nothing else
+}
+
+void test_a_drop_does_not_move_the_baseline() {
+  Recorder r(fixed_cfg());
+  r.run(60);
+  float before = r.det.baseline();
+  r.tmpl.cn0_mean = 25;
+  r.run(120);
+  TEST_ASSERT_EQUAL_FLOAT(before, r.det.baseline());
+}
+
+void test_total_loss_of_signals_is_jamming() {
+  Recorder r(fixed_cfg());
+  r.run(60);
+  r.tmpl.sats_tracked = 0;
+  r.tmpl.cn0_mean = 0;
+  r.tmpl.cn0_spread_x10 = 0;
+  r.tmpl.fix_ok = false;
+  r.run(10, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+}
+
+void test_a_slow_decline_is_not_absorbed_into_the_baseline() {
+  Recorder r(fixed_cfg());
+  r.run(60);
+  int detected = -1;
+  for (int i = 0; i < 300 && detected < 0; i++) {
+    r.tmpl.cn0_mean = (uint8_t)(42 - i / 10);  // 0.1 dB per second
+    r.run(1, 0);
+    if (r.last.event_class == kJamming) detected = i;
+  }
+  TEST_ASSERT_TRUE(detected > 0);
+  TEST_ASSERT_TRUE(detected < 120);  // well before the signal has lost 12 dB
+}
+
+void test_the_receiver_jamming_flag_alone_is_enough() {
+  Recorder r(fixed_cfg());
+  r.run(30);
+  r.tmpl.jam_state = 2;
+  int first = r.run(10);
+  TEST_ASSERT_EQUAL(2, first);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  TEST_ASSERT_TRUE(r.last.confidence >= 18);  // the receiver agrees: higher confidence
+}
+
+void test_no_cn0_rule_fires_before_a_baseline_exists() {
+  Recorder r(fixed_cfg());
+  r.tmpl.cn0_mean = 20;  // a poor site, from the first second
+  TEST_ASSERT_EQUAL(-1, r.run(8));
+  TEST_ASSERT_FALSE(r.det.has_baseline());
+}
+
+void test_the_receiver_spoofing_flag_is_spoofing_after_two_epochs() {
+  Recorder r(fixed_cfg());
+  r.run(30);
+  r.tmpl.spoof_state = 2;
+  int first = r.run(10);
+  TEST_ASSERT_EQUAL(1, first);
+  TEST_ASSERT_EQUAL(kSpoofing, r.last.event_class);
+  TEST_ASSERT_TRUE(r.last.rules & kRuleS3);
+  r.tmpl.spoof_state = 3;
+  r.run(2);
+  TEST_ASSERT_EQUAL(kSpoofing, r.last.event_class);
+}
+
+void test_position_drift_of_a_stationary_fixed_node_is_spoofing() {
+  Recorder r(fixed_cfg());
+  r.run(30);
+  r.tmpl.lat_e7 = kLat + 20000;  // about 220 m north
+  int first = r.run(10);
+  TEST_ASSERT_EQUAL(4, first);  // five epochs of deviation
+  TEST_ASSERT_EQUAL(kSpoofing, r.last.event_class);
+  TEST_ASSERT_TRUE(r.last.rules & kRuleS1);
+}
+
+void test_position_drift_is_ignored_when_the_node_is_being_moved() {
+  Recorder r(fixed_cfg());
+  r.run(30);
+  r.tmpl.sensor_stationary = false;
+  r.tmpl.sensor_moving = true;
+  r.tmpl.lat_e7 = kLat + 20000;
+  TEST_ASSERT_EQUAL(-1, r.run(30));
+}
+
+void test_uniform_cn0_over_many_satellites_is_a_suspicion() {
+  Recorder r(fixed_cfg());
+  r.run(30);
+  r.tmpl.cn0_spread_x10 = 4;  // 0.4 dB across 12 satellites
+  int first = r.run(20);
+  TEST_ASSERT_EQUAL(9, first);  // ten epochs
+  TEST_ASSERT_EQUAL(kSpoofing, r.last.event_class);
+  TEST_ASSERT_EQUAL(kRuleS2, r.last.rules);
+  TEST_ASSERT_TRUE(r.last.confidence <= 14);  // a suspicion, not a certainty
+}
+
+void test_uniform_cn0_over_few_satellites_is_not() {
+  Recorder r(fixed_cfg());
+  r.run(30);
+  r.tmpl.cn0_spread_x10 = 4;
+  r.tmpl.sats_tracked = 5;
+  TEST_ASSERT_EQUAL(-1, r.run(30));
+}
+
+void test_a_clock_jump_is_a_time_anomaly_held_then_cleared() {
+  Recorder r(fixed_cfg());
+  r.run(30);
+  r.utc_offset = 3600;
+  int first = r.run(1);
+  TEST_ASSERT_EQUAL(0, first);
+  TEST_ASSERT_EQUAL(kTimeAnomaly, r.last.event_class);
+  r.run(25);  // GNSS time is consistent again, one hour on
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+  TEST_ASSERT_EQUAL(2, r.changes);
+}
+
+void test_a_mobile_node_is_not_flagged_for_driving() {
+  DetectConfig c;  // not a fixed node
+  Recorder r(c);
+  r.tmpl.sensor_stationary = false;
+  r.tmpl.sensor_moving = true;
+  r.tmpl.speed_mm_s = 20000;
+  for (int i = 0; i < 120; i++) {
+    r.tmpl.lat_e7 = kLat + i * 180;  // 20 m per second northwards
+    r.run(1);
+  }
+  TEST_ASSERT_EQUAL(0, r.changes);
+}
+
+void test_an_impossible_position_jump_of_a_mobile_node_is_spoofing() {
+  DetectConfig c;
+  Recorder r(c);
+  r.tmpl.sensor_stationary = false;
+  r.run(30);
+  r.tmpl.lat_e7 = kLat + 450000;  // 5 km in one second
+  int first = r.run(1);
+  TEST_ASSERT_EQUAL(0, first);
+  TEST_ASSERT_EQUAL(kSpoofing, r.last.event_class);
+  TEST_ASSERT_TRUE(r.last.rules & kRuleS5);
+}
+
+void test_gnss_speed_with_a_still_accelerometer_is_spoofing() {
+  DetectConfig c;
+  Recorder r(c);
+  r.run(30);
+  r.tmpl.speed_mm_s = 15000;
+  int first = r.run(10);
+  TEST_ASSERT_EQUAL(4, first);
+  TEST_ASSERT_EQUAL(kSpoofing, r.last.event_class);
+}
+
+void test_tamper_is_reported_and_outranks_the_rest() {
+  Recorder r(fixed_cfg());
+  r.run(30);
+  r.tmpl.sensor_tamper = true;
+  TEST_ASSERT_EQUAL(0, r.run(1));
+  TEST_ASSERT_EQUAL(kTamper, r.last.event_class);
+  r.tmpl.spoof_state = 2;
+  r.run(5);
+  TEST_ASSERT_EQUAL(kTamper, r.last.event_class);
+  TEST_ASSERT_TRUE(r.last.rules & kRuleS3);  // the other evidence is still carried
+}
+
+void test_blanked_epochs_are_not_evidence_and_change_nothing() {
+  Recorder r(fixed_cfg());
+  r.run(60);
+  float before = r.det.baseline();
+  r.tmpl.blanked = true;
+  r.tmpl.cn0_mean = 15;  // our own KIM1 transmission wrecks the receiver
+  r.tmpl.jam_state = 3;
+  r.tmpl.spoof_state = 3;
+  TEST_ASSERT_EQUAL(-1, r.run(30));
+  TEST_ASSERT_TRUE(r.last.blanked);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+  TEST_ASSERT_EQUAL_FLOAT(before, r.det.baseline());
+  r.tmpl.blanked = false;
+  r.tmpl.cn0_mean = 42;
+  r.tmpl.jam_state = 1;
+  r.tmpl.spoof_state = 1;
+  TEST_ASSERT_EQUAL(-1, r.run(20));  // and no leftover counters fire afterwards
+  TEST_ASSERT_EQUAL(0, r.changes);
+}
+
+void test_a_real_attack_during_blanking_is_seen_once_blanking_ends() {
+  Recorder r(fixed_cfg());
+  r.run(60);
+  r.tmpl.blanked = true;
+  r.tmpl.cn0_mean = 20;
+  r.run(10);
+  r.tmpl.blanked = false;  // the attack is still there
+  int first = r.run(10);
+  TEST_ASSERT_EQUAL(2, first);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+}
+
+void test_blanked_epochs_inside_an_event_keep_the_event() {
+  Recorder r(fixed_cfg());
+  r.run(60);
+  r.tmpl.cn0_mean = 20;
+  r.run(10);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  r.tmpl.blanked = true;
+  r.run(5);
+  TEST_ASSERT_TRUE(r.last.blanked);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  TEST_ASSERT_FALSE(r.last.changed);
+}
+
+void test_the_same_recording_always_gives_the_same_verdicts() {
+  Verdict a[200], b[200];
+  for (int pass = 0; pass < 2; pass++) {
+    Recorder r(fixed_cfg());
+    r.run(80);
+    r.tmpl.cn0_mean = 30;
+    for (int i = 0; i < 120; i++) {
+      r.run(1);
+      (pass == 0 ? a : b)[i] = r.last;
+    }
+  }
+  TEST_ASSERT_EQUAL_MEMORY(a, b, sizeof(Verdict) * 120);
+}
+
+void test_a_verdict_becomes_a_record_the_codec_round_trips() {
+  Recorder r(fixed_cfg());
+  r.run(60);
+  r.tmpl.cn0_mean = 28;
+  r.tmpl.sats_tracked = 6;
+  r.tmpl.jam_state = 2;
+  r.tmpl.utc_s = 0;
+  r.run(5);
+  Epoch e = r.tmpl;
+  e.utc_s = kUtc0 + 65;
+  Record rec;
+  rec.seq = 7;
+  rec.key_id = 0;
+  fill_record(r.last, e, rec);
+  TEST_ASSERT_EQUAL(kEvent, rec.type);
+  TEST_ASSERT_EQUAL(kJamming, rec.event_class);
+  TEST_ASSERT_TRUE(rec.rx_jamming);
+  TEST_ASSERT_EQUAL_UINT8(28, rec.cn0_mean);
+
+  uint8_t master[16];
+  for (int i = 0; i < 16; i++) master[i] = (uint8_t)i;  // the public test key
+  Keys keys;
+  derive_keys(master, 1, 0, keys);
+  uint8_t raw[kMaxLen];
+  size_t n = encode(rec, 1, keys, raw);
+  Record back;
+  TEST_ASSERT_EQUAL(Status::Ok, decode(raw, n, 1, master, back));
+  TEST_ASSERT_EQUAL(rec.event_class, back.event_class);
+  TEST_ASSERT_EQUAL(rec.confidence, back.confidence);
+  TEST_ASSERT_EQUAL_UINT8(rec.cn0_drop, back.cn0_drop);
+  TEST_ASSERT_EQUAL_INT32(kLat, back.lat_e7);
+}
+
+int main() {
+  UNITY_BEGIN();
+  RUN_TEST(test_ten_minutes_of_normal_operation_raise_nothing);
+  RUN_TEST(test_a_cn0_drop_is_jamming_within_three_epochs_and_clears);
+  RUN_TEST(test_a_drop_does_not_move_the_baseline);
+  RUN_TEST(test_total_loss_of_signals_is_jamming);
+  RUN_TEST(test_a_slow_decline_is_not_absorbed_into_the_baseline);
+  RUN_TEST(test_the_receiver_jamming_flag_alone_is_enough);
+  RUN_TEST(test_no_cn0_rule_fires_before_a_baseline_exists);
+  RUN_TEST(test_the_receiver_spoofing_flag_is_spoofing_after_two_epochs);
+  RUN_TEST(test_position_drift_of_a_stationary_fixed_node_is_spoofing);
+  RUN_TEST(test_position_drift_is_ignored_when_the_node_is_being_moved);
+  RUN_TEST(test_uniform_cn0_over_many_satellites_is_a_suspicion);
+  RUN_TEST(test_uniform_cn0_over_few_satellites_is_not);
+  RUN_TEST(test_a_clock_jump_is_a_time_anomaly_held_then_cleared);
+  RUN_TEST(test_a_mobile_node_is_not_flagged_for_driving);
+  RUN_TEST(test_an_impossible_position_jump_of_a_mobile_node_is_spoofing);
+  RUN_TEST(test_gnss_speed_with_a_still_accelerometer_is_spoofing);
+  RUN_TEST(test_tamper_is_reported_and_outranks_the_rest);
+  RUN_TEST(test_blanked_epochs_are_not_evidence_and_change_nothing);
+  RUN_TEST(test_a_real_attack_during_blanking_is_seen_once_blanking_ends);
+  RUN_TEST(test_blanked_epochs_inside_an_event_keep_the_event);
+  RUN_TEST(test_the_same_recording_always_gives_the_same_verdicts);
+  RUN_TEST(test_a_verdict_becomes_a_record_the_codec_round_trips);
+  return UNITY_END();
+}

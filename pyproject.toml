@@ -16,7 +16,7 @@ stozher-mesh-bridge = { workspace = true }
 members = ["packages/stozher_core", "services/api", "services/worker", "services/simulator", "services/mesh_bridge"]
 
 [dependency-groups]
-dev = ["pytest", "pytest-asyncio", "hypothesis", "httpx", "ruff", "mypy"]
+dev = ["pytest", "pytest-asyncio", "hypothesis", "httpx", "ruff", "mypy", "pyubx2"]
 
 [tool.ruff]
 line-length = 100

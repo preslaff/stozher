@@ -12,3 +12,10 @@ def test_the_firmware_vector_header_is_up_to_date() -> None:
         [sys.executable, str(ROOT / "firmware/node/tools/gen_vectors_h.py"), "--check"]
     )
     assert r.returncode == 0, "run `make fw-vectors` and commit the result"
+
+
+def test_the_ubx_vector_header_is_up_to_date() -> None:
+    r = subprocess.run(
+        [sys.executable, str(ROOT / "firmware/node/tools/gen_ubx_vectors.py"), "--check"]
+    )
+    assert r.returncode == 0, "run `make fw-vectors` and commit the result"
