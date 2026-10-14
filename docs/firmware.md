@@ -187,3 +187,24 @@ NEO-6M, read from the debug log:
   `GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS`) gave one epoch per second continuously (70 in 70 s). This setting was changed on "abac".
 - Still unknown: whether MON-HW is the 60- or 68-byte form (values look sane either way; log the length next), and
   whether `jam_state` ever leaves 1 on this receiver (it is the M8-style field; the NEO-6 may only use `jam_ind`).
+
+**Step 3 result (Oct 2026, over real LoRa).** The STOZHER module (`firmware/tbeam/src/StozherModule.*`) runs the same
+node logic as the XIAO build inside the T-Beam firmware: epochs from the GPS tap -> detector -> `STZ1:` broadcasts
+through `sendToMesh`, `STZA1:` acks taken from incoming text packets in process, every radio transmission (a
+`RadioTxHook`) blanking the detector. No KIM1 here: `TxConfig::satellite_enabled = false`. Node id and key are
+build-time values (`STOZHER_NODE_ID`; the PUBLIC test key), the boot log says so.
+
+With node 4242 registered (mesh transport id of the board), the other T-Beam as gateway and `mesh_bridge` + API on the
+laptop, three records arrived as `received_via: mesh`: a scripted self-test episode (`STOZHER_SELFTEST_AT_S=150`,
+synthetic epochs, so the records are **type `test`**, confidence 18, then the end-of-event status) and a live heartbeat
+(type `heartbeat`, real position). Bridge counters: 3 accepted. The bridge also fetched and sent a signed ack.
+
+Found on the way:
+- **The Meshtastic node number changed with the 2.7.26 -> 2.8.2 upgrade** (`!bdf0abac` became `!5faa5e2e`, device state
+  version 24 -> 25). The backend had to learn the new transport id (done in the dev DB by hand: there is no way to change
+  a node's transport id through the API, which a replaced or re-flashed radio needs; open item).
+- **The ack did not arrive**: the node's log shows `Ignore rx packet, error=-7` for the gateway's direct message, which is
+  RadioLib's CRC mismatch, at RSSI -52 dBm with TX power 27 dBm and the two boards side by side. Most likely receiver
+  overload at close range, not the module (compare "single-shot direct messages were lost about half the time" in
+  docs/mesh.md). The ack path in the module is therefore **not yet verified end to end on air**; the library side (verify,
+  free both queues) is covered by the host tests.
