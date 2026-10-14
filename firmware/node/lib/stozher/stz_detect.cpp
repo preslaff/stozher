@@ -207,6 +207,15 @@ void Detector::update_baseline(const Epoch& e, float drop, bool any_rule) {
   baseline_ += (mean - baseline_) * (1.0f / 32.0f);
 }
 
+void Detector::receiver_restarted() {
+  epochs_seen_ = 0;
+  have_last_ = false;
+  have_last_pos_ = false;
+  flag_n_ = 0;
+  clock_hold_ = 0;
+  jump_hold_ = 0;
+}
+
 Verdict Detector::update(const Epoch& e) {
   Verdict v;
   if (e.blanked) {  // our own transmitter is on: the receiver's view is not evidence, so do not touch any state

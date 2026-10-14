@@ -228,5 +228,31 @@ const size_t kBootConfigCount = sizeof(kBootConfig) / sizeof(kBootConfig[0]);
 
 size_t build_boot_config(uint8_t* out, size_t cap) { return build_valset(kBootConfig, kBootConfigCount, out, cap); }
 
+#ifndef STZ_NO_PER_SV
+namespace {
+size_t frame(uint8_t cls, uint8_t id, const uint8_t* payload, uint8_t len, uint8_t* out, size_t cap) {
+  size_t total = 6 + (size_t)len + 2;
+  if (total > cap) return 0;
+  out[0] = kSync1; out[1] = kSync2; out[2] = cls; out[3] = id; out[4] = len; out[5] = 0;
+  for (uint8_t i = 0; i < len; i++) out[6 + i] = payload[i];
+  uint8_t a = 0, c = 0;
+  for (size_t i = 2; i < 6 + (size_t)len; i++) { a = (uint8_t)(a + out[i]); c = (uint8_t)(c + a); }
+  out[6 + len] = a;
+  out[7 + len] = c;
+  return total;
+}
+}  // namespace
+
+size_t build_cfg_rst(uint16_t nav_bbr_mask, uint8_t reset_mode, uint8_t* out, size_t cap) {
+  const uint8_t p[4] = {(uint8_t)nav_bbr_mask, (uint8_t)(nav_bbr_mask >> 8), reset_mode, 0};
+  return frame(kClsCfg, 0x04, p, sizeof p, out, cap);
+}
+
+size_t build_cfg_msg(uint8_t msg_class, uint8_t msg_id, uint8_t* out, size_t cap) {
+  const uint8_t p[8] = {msg_class, msg_id, 0, 1, 0, 0, 0, 0};  // rate 1 on UART1 only
+  return frame(kClsCfg, 0x01, p, sizeof p, out, cap);
+}
+#endif
+
 }  // namespace ubx
 }  // namespace stz

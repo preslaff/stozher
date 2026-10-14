@@ -191,9 +191,48 @@ void test_a_heartbeat_during_an_event_carries_the_events_confidence() {
   TEST_ASSERT_TRUE(back.cn0_drop >= 10);
 }
 
+// No fix for five minutes with a clean band: the node asks once for a receiver restart. In a noisy band it never does.
+void test_the_node_asks_for_a_receiver_restart_after_five_minutes_without_a_fix() {
+  Bench b;
+  for (int i = 0; i < 40; i++) b.second(b.base);
+  Epoch lost = b.base;
+  lost.fix_ok = false;
+  lost.sats_tracked = 0;
+  lost.cn0_mean = 0;
+  int asked = 0;
+  for (int i = 0; i < 290; i++) {
+    b.second(lost);
+    if (b.node->take_receiver_restart()) asked++;
+  }
+  TEST_ASSERT_EQUAL(0, asked);
+  for (int i = 0; i < 30; i++) {
+    b.second(lost);
+    if (b.node->take_receiver_restart()) asked++;
+  }
+  TEST_ASSERT_EQUAL(1, asked);
+  TEST_ASSERT_EQUAL(1, b.node->receiver_restarts());
+}
+
+void test_the_node_does_not_restart_the_receiver_in_a_noisy_band() {
+  Bench b;
+  for (int i = 0; i < 40; i++) b.second(b.base);
+  Epoch jammed = b.base;
+  jammed.fix_ok = false;
+  jammed.sats_tracked = 0;
+  jammed.cn0_mean = 0;
+  jammed.jam_ind = 60;  // the noise indicator is up
+  for (int i = 0; i < 900; i++) {
+    b.second(jammed);
+    TEST_ASSERT_FALSE(b.node->take_receiver_restart());
+  }
+  TEST_ASSERT_EQUAL(kJamming, b.node->current_class());
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_a_healthy_node_sends_one_heartbeat_and_no_events);
+  RUN_TEST(test_the_node_asks_for_a_receiver_restart_after_five_minutes_without_a_fix);
+  RUN_TEST(test_the_node_does_not_restart_the_receiver_in_a_noisy_band);
   RUN_TEST(test_a_heartbeat_during_an_event_carries_the_events_confidence);
   RUN_TEST(test_jamming_becomes_an_event_on_the_air_within_seconds);
   RUN_TEST(test_the_end_of_the_event_is_a_status_change_sent_once);

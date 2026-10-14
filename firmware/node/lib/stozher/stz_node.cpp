@@ -15,6 +15,12 @@ Node::Node(const DetectConfig& cfg, Tx& tx, mesh::Link* mesh) : detector_(cfg), 
 Verdict Node::on_epoch(Epoch e, uint32_t now_ms) {
   e.blanked = tx_.blanked(now_ms);
   Verdict v = detector_.update(e);
+#ifndef STZ_NO_PER_SV
+  if (!v.blanked && watch_.update(e, detector_.band_clean(e)) == RecoverAction::Restart) {
+    detector_.receiver_restarted();
+    restart_pending_ = true;
+  }
+#endif
   if (!v.blanked) {
     last_conf_ = v.confidence;
     last_drop_ = v.cn0_drop_db;

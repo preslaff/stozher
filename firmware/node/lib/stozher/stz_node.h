@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "stz_detect.h"
+#include "stz_recover.h"
 #include "stz_gnss.h"
 #include "stz_tx.h"
 
@@ -40,6 +41,16 @@ class Node {
   uint8_t current_class() const { return class_; }
   const Detector& detector() const { return detector_; }
   SubmitResult last_submit() const { return last_submit_; }
+#ifndef STZ_NO_PER_SV
+  // True once when the receiver should be restarted (see stz_recover.h); the detector has been told already. The
+  // caller sends the UBX frame (ubx::build_cfg_rst) and re-enables the messages.
+  bool take_receiver_restart() {
+    bool r = restart_pending_;
+    restart_pending_ = false;
+    return r;
+  }
+  uint16_t receiver_restarts() const { return watch_.restarts(); }
+#endif
 
  private:
   Detector detector_;
@@ -49,6 +60,10 @@ class Node {
   bool have_epoch_ = false;
   bool test_mode_ = false;
   uint8_t class_ = kNormal;
+#ifndef STZ_NO_PER_SV
+  ReceiverWatch watch_{RecoverConfig{}};
+  bool restart_pending_ = false;
+#endif
   uint8_t last_conf_ = 0, last_drop_ = 0;  // of the latest examined epoch: a heartbeat during an event repeats them
   SubmitResult last_submit_ = SubmitResult::Queued;
 };

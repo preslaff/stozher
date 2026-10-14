@@ -1,0 +1,33 @@
+diff --git a/src/gps/GPS.h b/src/gps/GPS.h
+--- a/src/gps/GPS.h
++++ b/src/gps/GPS.h
+@@ -116,6 +116,10 @@
+ 
+     // re-enable the thread
+     void enable();
++#ifdef STOZHER_TAP
++    // STOZHER: write raw bytes (a UBX frame) to the receiver; false when there is no serial port yet
++    static bool stozherWriteRaw(const uint8_t *data, size_t len);
++#endif
+ 
+     // Disable the thread
+     int32_t disable() override;
+diff --git a/src/gps/GPS.cpp b/src/gps/GPS.cpp
+--- a/src/gps/GPS.cpp
++++ b/src/gps/GPS.cpp
+@@ -2364,6 +2364,15 @@
+     return false;
+ }
+ 
++#ifdef STOZHER_TAP
++bool GPS::stozherWriteRaw(const uint8_t *data, size_t len)
++{
++    if (!_serial_gps)
++        return false;
++    return _serial_gps->write(data, len) == len;
++}
++#endif
++
+ bool GPS::whileActive()
+ {
+     unsigned int charsInBuf = 0;

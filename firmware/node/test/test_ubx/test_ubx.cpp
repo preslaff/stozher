@@ -167,6 +167,18 @@ void test_boot_configuration_frame_matches_pyubx2() {
   TEST_ASSERT_EQUAL(0, ubx::build_boot_config(tiny, sizeof tiny));
 }
 
+void test_cfg_rst_and_cfg_msg_frames_match_pyubx2() {
+  uint8_t expect[32], got[32];
+  size_t n = unhex(kCfgRstHotHex, expect, sizeof expect);
+  TEST_ASSERT_EQUAL(n, ubx::build_cfg_rst(0x0000, 0x02, got, sizeof got));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expect, got, n);
+  n = unhex(kCfgMsgSvinfoHex, expect, sizeof expect);
+  TEST_ASSERT_EQUAL(n, ubx::build_cfg_msg(0x01, 0x30, got, sizeof got));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expect, got, n);
+  uint8_t tiny[6];
+  TEST_ASSERT_EQUAL(0, ubx::build_cfg_rst(0, 2, tiny, sizeof tiny));
+}
+
 static Epoch collect(const char* const* hexes, size_t count, int& epochs, EpochBuilder& b) {
   ubx::Reader r;
   Epoch out, last;
@@ -232,6 +244,7 @@ int main() {
   RUN_TEST(test_noise_and_bad_frames_never_produce_a_message);
   RUN_TEST(test_a_bad_checksum_leaves_the_last_good_values);
   RUN_TEST(test_boot_configuration_frame_matches_pyubx2);
+  RUN_TEST(test_cfg_rst_and_cfg_msg_frames_match_pyubx2);
   RUN_TEST(test_epoch_completes_when_pvt_sat_and_status_of_one_itow_are_in);
   RUN_TEST(test_a_missing_nav_sat_is_flagged_and_flushed_by_the_next_epoch);
   RUN_TEST(test_a_lone_status_or_sat_without_position_makes_no_epoch);

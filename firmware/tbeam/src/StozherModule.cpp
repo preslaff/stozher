@@ -7,6 +7,7 @@
 #include "NodeDB.h"
 #include "mesh/generated/meshtastic/module_config.pb.h"
 #include "mesh/RadioTxHook.h"
+#include "gps/GPS.h"
 
 #include <Preferences.h>
 
@@ -15,6 +16,7 @@
 #include "stz_mesh.h"
 #include "stz_node.h"
 #include "stz_tx.h"
+#include "stz_ubx.h"
 
 // Provisioning is not built yet: the node id and master key are build-time values, and the default is the PUBLIC test
 // key of tests/vectors, so test records can never be mistaken for a real node's. Register the node in the backend with
@@ -177,6 +179,7 @@ struct StozherModule::Impl {
     uint32_t acksSeen = 0;
     uint32_t satelliteSeen = 0;
     uint32_t epochs = 0;
+    uint32_t reenableAtMs = 0; // after a receiver restart: when to ask for NAV-SVINFO and MON-HW again (0 = nothing pending)
     uint32_t lastStatsMs = 0;
 };
 
@@ -284,6 +287,16 @@ void StozherModule::onEpoch(const stz::Epoch &in)
 #endif
 
     stz::Verdict v = impl->node->on_epoch(e, now);
+    if (impl->node->take_receiver_restart()) {
+        // No fix for minutes with a clean band: restart the receiver's GNSS engine (hot start). The messages the
+        // detector needs are asked for again two seconds later, in case the restart cleared them.
+        uint8_t frame[16];
+        size_t n = stz::ubx::build_cfg_rst(0x0000, 0x02, frame, sizeof frame);
+        bool sent = n > 0 && GPS::stozherWriteRaw(frame, n);
+        impl->reenableAtMs = now + 2000;
+        LOG_WARN("STOZHER: no fix for minutes with a clean band: receiver restart #%u (hot start) %s", (unsigned)impl->node->receiver_restarts(),
+                 sent ? "sent" : "NOT sent (no serial port)");
+    }
 #if STOZHER_EPOCH_LOG_S > 0
     // Numbers for tuning the rules on real data; no position is logged.
     if (impl->epochs % STOZHER_EPOCH_LOG_S == 0)
@@ -318,6 +331,17 @@ int32_t StozherModule::runOnce()
         impl->satelliteSeen = impl->tx->transmissions();
         LOG_INFO("STOZHER: KIM1 transmissions finished: %u (the module said done or failed, not that a satellite heard it)",
                  (unsigned)impl->satelliteSeen);
+    }
+    if (impl->reenableAtMs != 0 && (int32_t)(now - impl->reenableAtMs) >= 0) {
+        impl->reenableAtMs = 0;
+        uint8_t frame[16];
+        size_t n = stz::ubx::build_cfg_msg(0x01, 0x30, frame, sizeof frame);
+        if (n)
+            GPS::stozherWriteRaw(frame, n);
+        n = stz::ubx::build_cfg_msg(0x0A, 0x09, frame, sizeof frame);
+        if (n)
+            GPS::stozherWriteRaw(frame, n);
+        LOG_INFO("STOZHER: NAV-SVINFO and MON-HW asked for again after the receiver restart");
     }
     if ((uint32_t)(now - impl->lastStatsMs) > 60000) {
         impl->lastStatsMs = now;

@@ -12,8 +12,9 @@ namespace stz {
 // Bump on every change to the detection rules or their thresholds: it is logged at boot and in the epoch log, so
 // a recording always says which rule produced it. 1 mean-based J1; 2 + hysteresis; 3 + per-satellite drop and
 // a second sign for modest drops; 4 jamming needs noise evidence, a drop without it is
-// loss of reception (class 3, benign degradation).
-constexpr uint8_t kDetectorRev = 4;
+// loss of reception (class 3, benign degradation); 5 the same rules, plus the node restarts a receiver that has no
+// fix for minutes in a clean band (stz_recover.h).
+constexpr uint8_t kDetectorRev = 5;
 
 enum Rule : uint8_t {
   kRuleJ1 = 1 << 0,  // C/N0 drop against the rolling baseline, or receiver jamming indicator
@@ -76,7 +77,12 @@ class Detector {
   // A C/N0 drop past the trigger without noise evidence, not yet long enough to be an event (loss of reception).
 #ifndef STZ_NO_PER_SV
   bool suspect() const { return suspect_; }
+  // The band is clean: no noise evidence and no jamming event active (what a receiver restart needs to be safe).
+  bool band_clean(const Epoch& e) const { return !noise_evidence(e) && !(mask_ & kRuleJ1); }
 #endif
+  // The caller restarted the receiver: a cold receiver warns and steps its clock while it acquires, so the
+  // start-up holdoff and the continuity checks start again. Baselines and any event in progress are kept.
+  void receiver_restarted();
   float baseline() const { return baseline_; }
 
  private:

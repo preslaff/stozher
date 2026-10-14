@@ -112,5 +112,14 @@ extern const ConfigItem kBootConfig[];
 extern const size_t kBootConfigCount;
 size_t build_boot_config(uint8_t* out, size_t cap);
 
+#ifndef STZ_NO_PER_SV
+// UBX-CFG-RST (class 0x06, id 0x04): `nav_bbr_mask` 0x0000 is a hot start (keeps the ephemerides), `reset_mode` 0x02 a
+// controlled software reset of the GNSS only. Checked against pyubx2's frame; the mode values are from the
+// u-blox protocol description as quoted by community drivers, to be confirmed on the receiver (docs/firmware.md).
+size_t build_cfg_rst(uint16_t nav_bbr_mask, uint8_t reset_mode, uint8_t* out, size_t cap);
+// UBX-CFG-MSG (0x06, 0x01) for the older NEO-6 dialect: message `msg_class`/`msg_id` once per second on UART1.
+size_t build_cfg_msg(uint8_t msg_class, uint8_t msg_id, uint8_t* out, size_t cap);
+#endif
+
 }  // namespace ubx
 }  // namespace stz
