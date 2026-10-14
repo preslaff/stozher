@@ -235,3 +235,5 @@ spoofing flags and clock steps are not judged (a node that boots under real jamm
 later), and **GNSS time only counts as a reference while there is a fix**. Three new host tests cover this
 (a cold receiver warning and stepping its clock stays quiet, a flag that persists past the holdoff is reported, time
 without a fix is ignored). The `type: test` self-test records are, correctly, not analysed by the worker.
+
+**Bluetooth crash on the test board (Oct 2026).** abac rebooted several times a few seconds after boot: the log showed `ASSERT_ERR(0), in ld_acl.c` and a Guru Meditation (IllegalInstruction) right after Bluetooth advertising started. The cause is not proven (the Meshtastic 2.8.2 Bluetooth stack, or a bonded device reconnecting). The board was rebuilt with `-DMESHTASTIC_EXCLUDE_BLUETOOTH=1`. A first guess, that the serial API refused requests because `security.serial_enabled` was off, was wrong: the log itself is gated by the same setting and was printing. The serial CLI answered again after the reflash. Note that opening a board's serial port can reset it.

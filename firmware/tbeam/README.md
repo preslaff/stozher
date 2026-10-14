@@ -29,6 +29,7 @@ binaries in `firmware/node/` restore a board.
 |---|---|
 | `STOZHER_NODE_ID` | the node id registered in the backend (default 1); the master key is the PUBLIC test key until provisioning exists |
 | `STOZHER_SELFTEST_AT_S=N` | N seconds after boot, feed a synthetic jamming episode; every record built from it is type `test` |
+| `MESHTASTIC_EXCLUDE_BLUETOOTH=1` | Meshtastic's own flag (not ours): leave the Bluetooth stack out. Used on the test board after the stack asserted in `ld_acl.c` and rebooted it (Oct 2026). Image 1.86 MB instead of 2.08 MB. We use no phone app |
 | `STOZHER_KIM1=1` | add the Kinéis KIM1 on UART2 (satellite path). **Never run on hardware yet.** Off: the pins are not touched |
 | `STOZHER_KIM1_RX_PIN` / `_TX_PIN` / `_STATUS_PIN` | defaults 36 / 14 / 25. **Placeholders, not checked against the board** |
 | `STOZHER_KIM1_BAND` / `_FREQ` / `_POWER_MW` | `AT+TX` parameters; placeholders `B1`, 300, 500 until the organisers give the real values |
