@@ -10,8 +10,8 @@ binaries that sit in `firmware/node/` are for flashing the T-Beams and are not p
 | 1. Witness record codec in C++ (`lib/stozher/`), checked against the golden vectors on the host | **Done** |
 | 2. Ed25519 verification of signed acknowledgements (`docs/control.md`), TweetNaCl vendored in `lib/tweetnacl/` | **Done** (`lib/stozher/stz_ack.*`, `test/test_ack`; freshness and replay rules of control.md step 4 come with the node state in step 4) |
 | 3. Detection rules on recorded epochs, UBX parsing, u-blox M10 setup | **Done on the host** (`stz_ubx`, `stz_gnss`, `stz_detect`; `test/test_ubx`, `test/test_detect`); not yet run against a real receiver |
-| 4. KIM1 driver behind an interface (fake modem for tests), sequence numbers persisted before use, blanking | Not started |
-| 5. Mesh uplink (`STZ1:` text over Meshtastic) | Not started |
+| 4. KIM1 driver behind an interface (fake modem for tests), sequence numbers persisted before use, blanking | **Done on the host** (`stz_kim1`, `stz_tx`, `stz_node`; `test/test_tx`, `test/test_node`); never run against a real KIM1 |
+| 5. Mesh uplink (`STZ1:` text over Meshtastic) | Next |
 
 ## Codec (`lib/stozher`)
 
@@ -75,3 +75,43 @@ determinism, and a verdict that round-trips through the codec.
 Not verified yet: the real module. Layouts come from the pyubx2 tables, which follow the u-blox documentation, but
 nothing has been read from an actual M10; `DetectConfig` thresholds are guesses until real captures exist. On the
 Leonardo the whole path (reader, epochs, detector, USB report) is 19.7 KB flash (69%) and 1.6 KB static RAM (61%).
+
+## Uplink: KIM1 driver, sequence numbers, retransmission, blanking (step 4)
+
+- `stz_kim1`: builds `AT+TX=<band>,<freq>,<power>,<HEX>\r\n` (band B1-B9, frequency 0-600, or 0-700 for B4/B5, power
+  250/500/750/1000/1500 mW, at most 32 data bytes; anything else is refused), and parses `+TX_INFO: 1|0`. The
+  hardware seam is `kim1::Port` (UART, TX_STATUS pin), so tests use a scripted modem (`stz_fake_kim1.h`).
+- `stz_tx`: never blocks (call `poll()` each loop).
+  - **Sequence numbers** are stored *before* use and read back; a failing or lying store means nothing is queued or
+    sent. A reboot can only skip numbers, never reuse one. A full queue is detected before a number is taken. Key
+    id exhaustion (65535) is refused, not wrapped.
+  - **Policy:** a confirmed event goes out at once and repeats twice, 15 minutes apart (different satellite
+    passes); a status change goes out once; heartbeats about hourly; unacknowledged entries ride along with the next
+    heartbeat at most three times. Failures retry after 60 s, five times, and a silent modem times out after 20 s.
+    One transmission in flight, 5 s apart. Events outrank heartbeats; a full queue drops entries already sent first,
+    then (for an event) the oldest waiting heartbeat.
+  - **Budget:** at most 48 transmissions in a rolling 24 hours (about 1.5 KB); heartbeats stop 12 below that so
+    events keep room. The budget lives in RAM, so a reboot forgets it.
+  - **Acks:** `on_ack` takes an already verified acknowledgement and applies control.md step 3-5: for this node and
+    key, not older than the newest accepted, `max_seq` not going backwards; frees `seq <= max_seq` and the masked ones.
+  - **Blanking:** `blanked()` is true from the AT+TX command until `+TX_INFO` (or the timeout), while TX_STATUS is
+    high, for 3 s after it falls, and after the node's own mesh transmissions. `+TX_INFO: 1` only means the local
+    transmission ended; delivery is known only from an acknowledgement.
+- `stz_node`: the decision loop without hardware. An epoch gets its `blanked` flag from the uplink, goes through the
+  detector, and a new class becomes an Event, the end of one a Status; the heartbeat waits for a first position.
+  `src/main.cpp` (ESP32-S3) and `src/leonardo_main.cpp` only add the UARTs, NVS/EEPROM and pins.
+
+Tested on the host with a scripted modem: exact command bytes; bad parameters; reply parsing and garbage; the
+sequence rules (restart, crash, failing and lying store, exhaustion); repeats, acks (selective, stale, wrong node),
+retries, timeouts, ordering, budget, queue pressure; blanking including the case where the receiver is really upset
+by our own burst (the detector stays quiet with the flag and raises a false jamming event without it); and the
+whole path from epochs to `AT+TX`.
+
+**Unverified against a real KIM1** (assumptions to check on the module): CR LF as the line end; that the reply is
+exactly `+TX_INFO: 1` / `+TX_INFO: 0`; how long a transmission takes (the fake uses 1.5 s); whether TX_STATUS rises
+before or after the command is accepted; the band and frequency (placeholders `B1`, 300, 500 mW until the
+organisers give the real values). The pin numbers in both mains are placeholders.
+
+Leonardo: with the whole node (UBX, detection, uplink, EEPROM store, software serial) the image is 27.9 KB of the
+28.7 KB flash (97%) and 1.5 KB static RAM (59%, queue of 4). It fits but there is no headroom left there; the
+ESP32-S3 image is 299 KB (9%).

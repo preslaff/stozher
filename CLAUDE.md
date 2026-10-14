@@ -19,8 +19,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > retention, public/reporter coarse views, `along-route`, watched-route hazard alerts. The simulator hazard scenario and the dashboard (report tool, hazard layer, route panel) are built. Still to do: EO/OSM hazard sources and the mesh report contract. Access phase A (organisations, named staff, two-person rule) is built.
 >
 > **Firmware (`docs/firmware.md`):** codec, Ed25519 ack verification, UBX reader and detection rules are built and
-> tested on the host (`make fw-test`); ESP32-S3 and Leonardo builds compile. Not built: KIM1 driver (waiting for the
-> KIM1), mesh uplink, anything run against a real GNSS receiver.
+> tested on the host (`make fw-test`), plus the KIM1 driver, sequence numbers and retransmission against a scripted modem;
+> ESP32-S3 and Leonardo builds compile. Not built: the mesh uplink. Nothing has run against a real KIM1 (waiting for the
+> KIM1), nor against a real GNSS receiver.
 >
 > **Not built yet:** `situation`, webhooks, Kinéis adapter, assistant,
 > offline field-kit sync, a dashboard UI for key management (use the admin API or
