@@ -95,6 +95,53 @@ void test_a_cn0_drop_is_jamming_within_three_epochs_and_clears() {
   TEST_ASSERT_EQUAL(2, r.changes);  // onset and end, nothing else
 }
 
+// A signal that hovers around the trigger level (a partial cover, a marginal site) must give one event, not a
+// stream of start/stop records: every status change costs a satellite message.
+void test_a_signal_hovering_at_the_threshold_gives_one_event() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  for (int k = 0; k < 8; k++) {
+    r.tmpl.cn0_mean = 34;  // 8 dB below the baseline: raises it
+    r.run(20, 0);
+    r.tmpl.cn0_mean = 37;  // 5 dB below: under the trigger level, over the clear level
+    r.run(20, 0);
+  }
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  TEST_ASSERT_EQUAL(1, r.changes);
+  r.tmpl.cn0_mean = 42;  // the signal is really back
+  r.run(12, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+  TEST_ASSERT_EQUAL(2, r.changes);
+}
+
+void test_an_event_is_held_while_the_drop_is_above_the_clear_level() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 30;
+  r.run(10, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  r.tmpl.cn0_mean = 38;  // 4 dB below the baseline: better, but not clear
+  r.run(120, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  r.tmpl.cn0_mean = 40;  // 2 dB below: clear
+  r.run(12, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+}
+
+void test_a_short_event_is_held_for_its_minimum_length() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 28;
+  r.run(5, 0);  // raised on the third epoch
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  r.tmpl.cn0_mean = 42;
+  r.run(12, 0);  // ten clean epochs have passed, but the event is only about 14 s old
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  r.run(20, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+  TEST_ASSERT_EQUAL(2, r.changes);
+}
+
 void test_a_drop_does_not_move_the_baseline() {
   Recorder r(fixed_cfg());
   r.run(60);
@@ -203,7 +250,7 @@ void test_a_clock_jump_is_a_time_anomaly_held_then_cleared() {
   int first = r.run(1);
   TEST_ASSERT_EQUAL(0, first);
   TEST_ASSERT_EQUAL(kTimeAnomaly, r.last.event_class);
-  r.run(25);  // GNSS time is consistent again, one hour on
+  r.run(35);  // GNSS time is consistent again, one hour on; every event is held at least min_event_s (30 s)
   TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
   TEST_ASSERT_EQUAL(2, r.changes);
 }
@@ -383,6 +430,9 @@ int main() {
   UNITY_BEGIN();
   RUN_TEST(test_ten_minutes_of_normal_operation_raise_nothing);
   RUN_TEST(test_a_cn0_drop_is_jamming_within_three_epochs_and_clears);
+  RUN_TEST(test_a_signal_hovering_at_the_threshold_gives_one_event);
+  RUN_TEST(test_an_event_is_held_while_the_drop_is_above_the_clear_level);
+  RUN_TEST(test_a_short_event_is_held_for_its_minimum_length);
   RUN_TEST(test_a_drop_does_not_move_the_baseline);
   RUN_TEST(test_total_loss_of_signals_is_jamming);
   RUN_TEST(test_a_slow_decline_is_not_absorbed_into_the_baseline);

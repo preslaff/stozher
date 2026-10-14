@@ -39,7 +39,10 @@ void Detector::count_rules(const Epoch& e, uint8_t& now, float& drop_out) {
   // A receiver that has just started warns and steps its clock while it acquires; its own flags only count once
   // the start-up holdoff is over (a node that boots under real jamming still reports it, just 30 s later).
   bool settled = epochs_seen_ >= cfg_.startup_holdoff_epochs;
-  bool j1_hit = drop >= cfg_.cn0_drop_db || (settled && e.jam_state >= 2);
+  // Hysteresis: an active J1 event is held until the drop is below the lower clear threshold, so a signal that
+  // hovers around the trigger level gives one long event, not a stream of start/stop records.
+  float j1_threshold = (mask_ & kRuleJ1) ? cfg_.cn0_clear_db : cfg_.cn0_drop_db;
+  bool j1_hit = drop >= j1_threshold || (settled && e.jam_state >= 2);
   jam_n_ = j1_hit ? (uint8_t)(jam_n_ < 255 ? jam_n_ + 1 : 255) : 0;
   if (jam_n_ >= cfg_.cn0_drop_epochs || (settled && e.jam_state >= 3)) now |= kRuleJ1;
 
@@ -142,7 +145,8 @@ Verdict Detector::update(const Epoch& e) {
     if (mask_ == 0) onset_mono_ = e.mono_ms;
     mask_ |= now;
     clean_n_ = 0;
-  } else if (mask_ != 0 && ++clean_n_ >= cfg_.clear_epochs) {
+  } else if (mask_ != 0 && ++clean_n_ >= cfg_.clear_epochs &&
+             (uint32_t)(e.mono_ms - onset_mono_) >= cfg_.min_event_ms) {
     mask_ = 0;
     clean_n_ = 0;
   }

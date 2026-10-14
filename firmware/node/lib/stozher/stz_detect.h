@@ -26,6 +26,8 @@ struct DetectConfig {
   uint8_t pos_dev_epochs = 5;        // S1
   float cn0_drop_db = 6.0f;          // J1
   uint8_t cn0_drop_epochs = 3;       // J1
+  float cn0_clear_db = 3.0f;         // J1: once raised, held until the drop is below this (hysteresis); keep it above 0 and below cn0_drop_db
+  uint32_t min_event_ms = 30000;     // an event is held at least this long: a signal hovering at the threshold must not flap
   uint8_t min_sats_uniform = 8;      // S2
   uint8_t uniform_spread_x10 = 8;    // S2: spread at or below 0.8 dB
   uint8_t uniform_epochs = 10;       // S2
