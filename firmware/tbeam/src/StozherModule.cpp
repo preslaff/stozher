@@ -284,6 +284,15 @@ void StozherModule::onEpoch(const stz::Epoch &in)
                  e.fix_ok ? 1 : 0, e.sats_used, e.sats_tracked, e.cn0_mean, e.cn0_spread_x10 / 10, e.cn0_spread_x10 % 10,
                  v.cn0_drop_db, impl->node->detector().has_baseline() ? impl->node->detector().baseline() : -1.0f,
                  e.jam_ind, e.jam_state, v.event_class);
+    if (impl->epochs % STOZHER_EPOCH_LOG_S == 0) {
+        // Each satellite on its own (id:C/N0), the data the per-satellite rule is calibrated on.
+        char sv[200];
+        size_t n = 0;
+        for (uint8_t i = 0; i < e.sv_n && n + 8 < sizeof(sv); i++)
+            n += snprintf(sv + n, sizeof(sv) - n, " %u:%u", (unsigned)(e.sv_key[i] & 0xff), (unsigned)e.sv_cno[i]);
+        sv[n < sizeof(sv) ? n : sizeof(sv) - 1] = 0;
+        LOG_INFO("STOZHER sv:%s suspect=%d", sv, impl->node->detector().suspect() ? 1 : 0);
+    }
 #endif
     if (v.changed && !v.blanked)
         LOG_INFO("STOZHER: class -> %u (rules 0x%02x, confidence %u): record %s", v.event_class, v.rules, v.confidence,

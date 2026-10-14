@@ -27,12 +27,21 @@ struct Pvt {
   uint32_t t_acc_ns = 0;
 };
 
+constexpr uint8_t kMaxSv = 24;
+
 // Over the tracked signals (C/N0 > 0) of one NAV-SAT message.
 struct SatSummary {
   uint32_t itow_ms = 0;
   uint8_t tracked = 0, used = 0;
   uint8_t cno_mean = 0;       // dB-Hz, rounded
   uint8_t cno_spread_x10 = 0; // standard deviation in tenths of dB, rounded
+#ifndef STZ_NO_PER_SV
+  // The tracked signals one by one (first kMaxSv), so a detector can follow each satellite against its own
+  // history and not be fooled when the set of tracked satellites changes. Key: gnssId << 8 | svId.
+  uint8_t sv_n = 0;
+  uint16_t sv_key[kMaxSv] = {};
+  uint8_t sv_cno[kMaxSv] = {};
+#endif
 };
 
 struct Status {
@@ -74,6 +83,11 @@ class Reader {
   // NAV-SAT streaming state
   uint8_t sv_[12];
   uint8_t n_ = 0, used_ = 0;
+#ifndef STZ_NO_PER_SV
+  uint8_t svn_ = 0;
+  uint16_t svk_[kMaxSv];
+  uint8_t svc_[kMaxSv];
+#endif
   uint32_t sum_ = 0, sumsq_ = 0, sat_itow_ = 0;
 
   Pvt pvt_;

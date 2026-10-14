@@ -23,6 +23,13 @@ bool EpochBuilder::flush(uint32_t now_ms, Epoch& out) {
     e.sats_used = sat_.used;
     e.cn0_mean = sat_.cno_mean;
     e.cn0_spread_x10 = sat_.cno_spread_x10;
+#ifndef STZ_NO_PER_SV
+    e.sv_n = sat_.sv_n;
+    for (uint8_t i = 0; i < sat_.sv_n; i++) {
+      e.sv_key[i] = sat_.sv_key[i];
+      e.sv_cno[i] = sat_.sv_cno[i];
+    }
+#endif
   } else {
     e.sat_missing = true;
   }

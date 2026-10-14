@@ -22,6 +22,9 @@ void Reader::begin_frame() {
   ck_a_ = ck_b_ = 0;
   pos_ = 0;
   n_ = used_ = 0;
+#ifndef STZ_NO_PER_SV
+  svn_ = 0;
+#endif
   sum_ = sumsq_ = 0;
 }
 
@@ -42,6 +45,12 @@ void Reader::on_payload_byte(uint8_t b) {
           sum_ += cno;
           sumsq_ += (uint32_t)cno * cno;
           if (used) used_++;
+#ifndef STZ_NO_PER_SV
+          if (svn_ < kMaxSv) {
+            svk_[svn_] = sat ? (uint16_t)(sv_[0] << 8 | sv_[1]) : (uint16_t)sv_[1];
+            svc_[svn_++] = cno;
+          }
+#endif
         }
       }
     }
@@ -132,6 +141,13 @@ Kind Reader::finish() {
       float sd10 = 10.0f * sqrtf(var > 0 ? var : 0);
       s.cno_spread_x10 = sd10 >= 254.5f ? 255 : (uint8_t)(sd10 + 0.5f);
     }
+#ifndef STZ_NO_PER_SV
+    s.sv_n = svn_;
+    for (uint8_t i = 0; i < svn_; i++) {
+      s.sv_key[i] = svk_[i];
+      s.sv_cno[i] = svc_[i];
+    }
+#endif
     sat_ = s;
     return Kind::Sat;
   }

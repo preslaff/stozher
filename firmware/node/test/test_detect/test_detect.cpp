@@ -101,9 +101,11 @@ void test_a_signal_hovering_at_the_threshold_gives_one_event() {
   Recorder r(fixed_cfg());
   r.run(60, 0);
   for (int k = 0; k < 8; k++) {
-    r.tmpl.cn0_mean = 34;  // 8 dB below the baseline: raises it
+    r.tmpl.cn0_mean = 34;  // 8 dB below the baseline, and satellites lost: raises it
+    r.tmpl.sats_tracked = 9;
     r.run(20, 0);
     r.tmpl.cn0_mean = 37;  // 5 dB below: under the trigger level, over the clear level
+    r.tmpl.sats_tracked = 12;
     r.run(20, 0);
   }
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
@@ -172,7 +174,8 @@ void test_a_slow_decline_is_not_absorbed_into_the_baseline() {
     if (r.last.event_class == kJamming) detected = i;
   }
   TEST_ASSERT_TRUE(detected > 0);
-  TEST_ASSERT_TRUE(detected < 120);  // well before the signal has lost 12 dB
+  // A modest drop alone is only a suspicion (see the corroboration tests); it is an event once it is large.
+  TEST_ASSERT_TRUE(detected < 150);  // the baseline did not follow the signal down
 }
 
 void test_the_receiver_jamming_flag_alone_is_enough() {
@@ -347,6 +350,81 @@ void test_blanked_epochs_inside_an_event_keep_the_event() {
   TEST_ASSERT_FALSE(r.last.changed);
 }
 
+// --- J1 per satellite, and corroboration ---------------------------------------------------------------------
+
+// `n` satellites with keys first_key.. all at `cn0`.
+static void set_svs(Epoch& e, uint8_t n, uint16_t first_key, uint8_t cn0, uint8_t at = 0) {
+  for (uint8_t i = 0; i < n; i++) {
+    e.sv_key[at + i] = (uint16_t)(first_key + i);
+    e.sv_cno[at + i] = cn0;
+  }
+  e.sv_n = (uint8_t)(at + n);
+}
+
+// Six strong satellites set and six weak low ones rise: the mean C/N0 falls 7 dB with no jamming at all.
+void test_a_change_of_the_tracked_satellites_is_not_a_drop() {
+  Recorder r(fixed_cfg());
+  set_svs(r.tmpl, 6, 1, 45);
+  set_svs(r.tmpl, 6, 20, 39, 6);
+  r.tmpl.cn0_mean = 42;
+  r.run(120, 0);
+  TEST_ASSERT_EQUAL(0, r.changes);
+  set_svs(r.tmpl, 6, 20, 39);  // the strong ones are gone ...
+  set_svs(r.tmpl, 6, 40, 30, 6);  // ... new ones come in low
+  r.tmpl.cn0_mean = 34;  // the mean is 8 dB down
+  r.run(120, 0);
+  TEST_ASSERT_EQUAL(0, r.changes);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+}
+
+// Every satellite falls together: that is jamming, whatever the mean says.
+void test_every_satellite_falling_together_is_jamming() {
+  Recorder r(fixed_cfg());
+  set_svs(r.tmpl, 12, 1, 42);
+  r.run(120, 0);
+  set_svs(r.tmpl, 12, 1, 22);
+  r.tmpl.cn0_mean = 22;
+  r.run(10, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+}
+
+// A drop past the trigger but not large, with nothing else changing, starts no event; the node knows it is suspicious.
+void test_a_modest_drop_alone_starts_no_event() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 33;  // 9 dB down; the same number of satellites, the receiver content
+  r.run(30, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+  TEST_ASSERT_EQUAL(0, r.changes);
+  TEST_ASSERT_TRUE(r.det.suspect());
+}
+
+void test_a_modest_drop_with_lost_satellites_is_jamming() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 33;
+  r.tmpl.sats_tracked = 8;
+  r.run(10, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+}
+
+void test_a_modest_drop_with_the_receiver_warning_is_jamming() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 33;
+  r.tmpl.jam_state = 2;
+  r.run(10, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+}
+
+void test_a_large_drop_stands_alone() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 24;  // 18 dB
+  r.run(10, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+}
+
 void test_the_same_recording_always_gives_the_same_verdicts() {
   Verdict a[200], b[200];
   for (int pass = 0; pass < 2; pass++) {
@@ -454,6 +532,12 @@ int main() {
   RUN_TEST(test_a_cold_receiver_may_warn_and_step_its_clock_without_raising_anything);
   RUN_TEST(test_a_flag_that_persists_past_the_holdoff_is_still_reported);
   RUN_TEST(test_time_without_a_fix_is_not_a_reference_for_the_clock_rule);
+  RUN_TEST(test_a_change_of_the_tracked_satellites_is_not_a_drop);
+  RUN_TEST(test_every_satellite_falling_together_is_jamming);
+  RUN_TEST(test_a_modest_drop_alone_starts_no_event);
+  RUN_TEST(test_a_modest_drop_with_lost_satellites_is_jamming);
+  RUN_TEST(test_a_modest_drop_with_the_receiver_warning_is_jamming);
+  RUN_TEST(test_a_large_drop_stands_alone);
   RUN_TEST(test_the_same_recording_always_gives_the_same_verdicts);
   RUN_TEST(test_a_verdict_becomes_a_record_the_codec_round_trips);
   return UNITY_END();

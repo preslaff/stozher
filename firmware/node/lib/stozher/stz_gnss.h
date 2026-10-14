@@ -19,6 +19,11 @@ struct Epoch {
   uint8_t cn0_mean = 0, cn0_spread_x10 = 0;
   uint8_t jam_state = 0, jam_ind = 0;
   uint8_t spoof_state = 0;
+#ifndef STZ_NO_PER_SV
+  uint8_t sv_n = 0;  // tracked signals one by one, as in ubx::SatSummary
+  uint16_t sv_key[ubx::kMaxSv] = {};
+  uint8_t sv_cno[ubx::kMaxSv] = {};
+#endif
   bool sat_missing = false;  // no NAV-SAT of this epoch arrived: the C/N0 features are not trustworthy
   // From the node, not the receiver:
   bool blanked = false;       // own transmission in progress or just finished

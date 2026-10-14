@@ -25,24 +25,101 @@ static uint8_t popcount8(uint8_t v) {
   return n;
 }
 
+// How far the signals are down against what they were. With per-satellite history it is the median over the
+// satellites seen now and before of (their own baseline - now), so a satellite rising or setting does not move
+// it. Otherwise the drop of the mean C/N0 against the mean baseline.
+float Detector::drop_of(const Epoch& e) const {
+  if (!baseline_ready_ || e.sat_missing) return 0.0f;
+  float mean = e.sats_tracked > 0 ? (float)e.cn0_mean : 0.0f;  // all signals gone counts as the full drop
+  float drop = baseline_ - mean;
+#ifndef STZ_NO_PER_SV
+  if (e.sats_tracked > 0) {
+    float d[ubx::kMaxSv];
+    uint8_t n = 0;
+    for (uint8_t i = 0; i < e.sv_n; i++)
+      for (uint8_t j = 0; j < svb_n_; j++)
+        if (svb_key_[j] == e.sv_key[i]) {
+          d[n++] = svb_[j] - (float)e.sv_cno[i];
+          break;
+        }
+    if (n >= cfg_.min_sv_match) {
+      for (uint8_t i = 1; i < n; i++) {  // insertion sort, n <= 24
+        float v = d[i];
+        uint8_t k = i;
+        for (; k > 0 && d[k - 1] > v; k--) d[k] = d[k - 1];
+        d[k] = v;
+      }
+      drop = (n & 1) ? d[n / 2] : 0.5f * (d[n / 2 - 1] + d[n / 2]);
+    }
+  }
+#endif
+  return drop < 0 ? 0.0f : drop;
+}
+
+#ifndef STZ_NO_PER_SV
+// A second sign besides the C/N0 drop: the receiver says so, the fix is gone, satellites were lost, or the
+// jamming indicator is up.
+bool Detector::corroborated(const Epoch& e) const {
+  if (e.jam_state >= 2 || !e.fix_ok) return true;
+  if (!aux_ready_) return false;
+  return tracked_base_ - (float)e.sats_tracked >= cfg_.sat_loss || (float)e.jam_ind - jam_ind_base_ >= cfg_.jam_ind_rise;
+}
+
+void Detector::update_sv_baseline(const Epoch& e) {
+  for (uint8_t j = 0; j < svb_n_; j++) svb_age_[j] = svb_age_[j] < 65535 ? svb_age_[j] + 1 : 65535;
+  for (uint8_t i = 0; i < e.sv_n; i++) {
+    uint8_t at = svb_n_;
+    for (uint8_t j = 0; j < svb_n_; j++)
+      if (svb_key_[j] == e.sv_key[i]) { at = j; break; }
+    if (at == svb_n_) {  // new satellite: take a free slot, or the one not seen for longest
+      if (svb_n_ < ubx::kMaxSv) {
+        svb_n_++;
+      } else {
+        at = 0;
+        for (uint8_t j = 1; j < svb_n_; j++)
+          if (svb_age_[j] > svb_age_[at]) at = j;
+      }
+      svb_key_[at] = e.sv_key[i];
+      svb_[at] = (float)e.sv_cno[i];
+    } else if (svb_[at] - (float)e.sv_cno[i] <= 3.0f) {  // a satellite going down is not learnt
+      svb_[at] += ((float)e.sv_cno[i] - svb_[at]) * (1.0f / 32.0f);
+    }
+    svb_age_[at] = 0;
+  }
+  if (!aux_ready_) {
+    tracked_base_ = (float)e.sats_tracked;
+    jam_ind_base_ = (float)e.jam_ind;
+    aux_ready_ = true;
+  } else {
+    tracked_base_ += ((float)e.sats_tracked - tracked_base_) * (1.0f / 32.0f);
+    jam_ind_base_ += ((float)e.jam_ind - jam_ind_base_) * (1.0f / 32.0f);
+  }
+}
+#endif
+
 // Updates the consecutive-epoch counters for this epoch and returns the rules that fire now.
 void Detector::count_rules(const Epoch& e, uint8_t& now, float& drop_out) {
   now = 0;
   // J1: C/N0 against the baseline, or the receiver's own jamming indicator.
-  float drop = 0.0f;
-  if (baseline_ready_ && !e.sat_missing) {
-    float mean = e.sats_tracked > 0 ? (float)e.cn0_mean : 0.0f;  // all signals gone counts as the full drop
-    drop = baseline_ - mean;
-    if (drop < 0) drop = 0;
-  }
+  float drop = drop_of(e);
   drop_out = drop;
   // A receiver that has just started warns and steps its clock while it acquires; its own flags only count once
   // the start-up holdoff is over (a node that boots under real jamming still reports it, just 30 s later).
   bool settled = epochs_seen_ >= cfg_.startup_holdoff_epochs;
   // Hysteresis: an active J1 event is held until the drop is below the lower clear threshold, so a signal that
   // hovers around the trigger level gives one long event, not a stream of start/stop records.
-  float j1_threshold = (mask_ & kRuleJ1) ? cfg_.cn0_clear_db : cfg_.cn0_drop_db;
-  bool j1_hit = drop >= j1_threshold || (settled && e.jam_state >= 2);
+  bool j1_active = (mask_ & kRuleJ1) != 0;
+  float j1_threshold = j1_active ? cfg_.cn0_clear_db : cfg_.cn0_drop_db;
+  bool cn0_hit = drop >= j1_threshold;
+  suspect_ = false;
+#ifndef STZ_NO_PER_SV
+  // Starting an event on a modest drop alone is how a satellite changing looks like jamming: it needs a second sign.
+  if (cn0_hit && !j1_active && drop < cfg_.cn0_drop_strong_db && !corroborated(e)) {
+    cn0_hit = false;
+    suspect_ = true;
+  }
+#endif
+  bool j1_hit = cn0_hit || (settled && e.jam_state >= 2);
   jam_n_ = j1_hit ? (uint8_t)(jam_n_ < 255 ? jam_n_ + 1 : 255) : 0;
   if (jam_n_ >= cfg_.cn0_drop_epochs || (settled && e.jam_state >= 3)) now |= kRuleJ1;
 
@@ -111,6 +188,9 @@ void Detector::update_baseline(const Epoch& e, float drop, bool any_rule) {
   // The baseline follows only clean, healthy epochs, and never drifts down with a developing attack.
   if (any_rule || e.sat_missing || e.sats_tracked < cfg_.min_sats_baseline || !e.fix_ok) return;
   float mean = (float)e.cn0_mean;
+#ifndef STZ_NO_PER_SV
+  update_sv_baseline(e);
+#endif
   if (!baseline_ready_) {
     warm_sum_ += mean;
     if (++warm_n_ >= cfg_.warmup_epochs) {

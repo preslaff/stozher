@@ -27,6 +27,10 @@ struct DetectConfig {
   float cn0_drop_db = 6.0f;          // J1
   uint8_t cn0_drop_epochs = 3;       // J1
   float cn0_clear_db = 3.0f;         // J1: once raised, held until the drop is below this (hysteresis); keep it above 0 and below cn0_drop_db
+  float cn0_drop_strong_db = 12.0f;  // J1: a drop this large stands alone; a smaller one needs a second indicator to start an event
+  float sat_loss = 2.0f;             // J1 second indicator: tracked satellites lost against the baseline
+  float jam_ind_rise = 10.0f;        // J1 second indicator: the receiver's jamming indicator above its baseline
+  uint8_t min_sv_match = 3;          // satellites seen now and in the baseline needed to judge each one against its own history
   uint32_t min_event_ms = 30000;     // an event is held at least this long: a signal hovering at the threshold must not flap
   uint8_t min_sats_uniform = 8;      // S2
   uint8_t uniform_spread_x10 = 8;    // S2: spread at or below 0.8 dB
@@ -60,14 +64,32 @@ class Detector {
   explicit Detector(const DetectConfig& cfg) : cfg_(cfg) {}
   Verdict update(const Epoch& e);
   bool has_baseline() const { return baseline_ready_; }
+  // A drop past the trigger that no second indicator backs (the node stays quiet: a satellite changing, not jamming).
+  bool suspect() const { return suspect_; }
   float baseline() const { return baseline_; }
 
  private:
   void count_rules(const Epoch& e, uint8_t& now, float& drop);
   void update_baseline(const Epoch& e, float drop, bool any_rule);
 
+  float drop_of(const Epoch& e) const;
+#ifndef STZ_NO_PER_SV
+  void update_sv_baseline(const Epoch& e);
+  bool corroborated(const Epoch& e) const;
+#endif
+
   DetectConfig cfg_;
   uint16_t epochs_seen_ = 0;
+  bool suspect_ = false;
+#ifndef STZ_NO_PER_SV
+  // Each tracked satellite against its own history, plus the usual number tracked and the jamming indicator.
+  uint8_t svb_n_ = 0;
+  uint16_t svb_key_[ubx::kMaxSv] = {};
+  float svb_[ubx::kMaxSv] = {};
+  uint16_t svb_age_[ubx::kMaxSv] = {};
+  bool aux_ready_ = false;
+  float tracked_base_ = 0.0f, jam_ind_base_ = 0.0f;
+#endif
   // baseline
   bool baseline_ready_ = false;
   float baseline_ = 0.0f;
