@@ -5,6 +5,7 @@
 #include "Channels.h"
 #include "MeshService.h"
 #include "NodeDB.h"
+#include "mesh/generated/meshtastic/module_config.pb.h"
 #include "mesh/RadioTxHook.h"
 
 #include <Preferences.h>
@@ -23,6 +24,33 @@
 #endif
 #ifndef STOZHER_SELFTEST_AT_S
 #define STOZHER_SELFTEST_AT_S 0 // >0: that many seconds after boot, feed a synthetic jamming episode (records are type `test`)
+#endif
+
+// -D STOZHER_KIM1=1 adds the Kinéis KIM1 on UART2 (the satellite path). Without it the pins are never touched.
+// The pin numbers are PLACEHOLDERS: they were picked from the Meshtastic variant file (pins it does not use) and have NOT
+// been checked against the board, so confirm each one is broken out and free before wiring (GPIO 34-39 are input-only
+// and have no internal pull-up or pull-down; GPIO 2, 12 and 15 are boot-strapping pins). The KIM1 needs a 5 V supply
+// of its own with a bulk capacitor and a common ground; its UART is 3.3 V TTL, which matches the ESP32.
+#ifdef STOZHER_KIM1
+#ifndef STOZHER_KIM1_RX_PIN
+#define STOZHER_KIM1_RX_PIN 36 // ESP32 RX <- KIM1 UART_Tx (input-only pin is fine for a receive line)
+#endif
+#ifndef STOZHER_KIM1_TX_PIN
+#define STOZHER_KIM1_TX_PIN 14 // ESP32 TX -> KIM1 UART_Rx
+#endif
+#ifndef STOZHER_KIM1_STATUS_PIN
+#define STOZHER_KIM1_STATUS_PIN 25 // KIM1 pin 11 (Tx_STATUS), needs an internal pull-down, so not an input-only pin
+#endif
+// Band, frequency and power come from the organisers; these are placeholders that the library accepts.
+#ifndef STOZHER_KIM1_BAND
+#define STOZHER_KIM1_BAND "B1"
+#endif
+#ifndef STOZHER_KIM1_FREQ
+#define STOZHER_KIM1_FREQ 300
+#endif
+#ifndef STOZHER_KIM1_POWER_MW
+#define STOZHER_KIM1_POWER_MW 500
+#endif
 #endif
 
 StozherModule *stozherModule = nullptr;
@@ -55,6 +83,22 @@ class PrefsSeqStore : public stz::SeqStore
   private:
     static void name(uint8_t keyId, char *out) { snprintf(out, 8, "seq%u", (unsigned)(keyId & 15)); }
 };
+
+#ifdef STOZHER_KIM1
+// The KIM1 on UART2: 4800 8N1, never blocks (the library polls it every 200 ms).
+class Uart2Kim1 : public stz::kim1::Port
+{
+  public:
+    void begin()
+    {
+        pinMode(STOZHER_KIM1_STATUS_PIN, INPUT_PULLDOWN); // an unplugged KIM1 reads "not transmitting", not noise
+        Serial2.begin(4800, SERIAL_8N1, STOZHER_KIM1_RX_PIN, STOZHER_KIM1_TX_PIN);
+    }
+    size_t write(const uint8_t *d, size_t n) override { return Serial2.write(d, n); }
+    int read() override { return Serial2.available() ? Serial2.read() : -1; }
+    bool tx_status() override { return digitalRead(STOZHER_KIM1_STATUS_PIN) == HIGH; }
+};
+#endif
 
 } // namespace
 
@@ -111,6 +155,9 @@ struct StozherModule::Impl {
     Port port;
     TxHook hook;
     stz::kim1::NullPort nullKim;
+#ifdef STOZHER_KIM1
+    Uart2Kim1 uartKim;
+#endif
     PrefsSeqStore store;
     stz::Keys keys;
     stz::CloudKey cloud[1];
@@ -119,6 +166,7 @@ struct StozherModule::Impl {
     stz::Node *node = nullptr;
     uint32_t bootMs = 0;
     uint32_t acksSeen = 0;
+    uint32_t satelliteSeen = 0;
     uint32_t epochs = 0;
     uint32_t lastStatsMs = 0;
 };
@@ -133,11 +181,26 @@ StozherModule::StozherModule() : SinglePortModule("stozher", meshtastic_PortNum_
     for (int i = 0; i < 16; i++)
         master[i] = (uint8_t)i; // PUBLIC test key
     stz::TxConfig tc;
+#ifdef STOZHER_KIM1
+    // The Serial module also wants a UART; if someone has configured it with pins, leave the KIM1 alone.
+    bool serialBusy = moduleConfig.serial.enabled && moduleConfig.serial.rxd && moduleConfig.serial.txd;
+    tc.satellite_enabled = !serialBusy;
+    if (serialBusy)
+        LOG_WARN("STOZHER: the Serial module is configured with pins; KIM1 support stays off (disable that module)");
+    memcpy(tc.radio.band, STOZHER_KIM1_BAND, 3);
+    tc.radio.freq = STOZHER_KIM1_FREQ;
+    tc.radio.power_mw = STOZHER_KIM1_POWER_MW;
+    if (tc.satellite_enabled)
+        impl->uartKim.begin();
+    stz::kim1::Port &kimPort = impl->uartKim;
+#else
     tc.satellite_enabled = false;
+    stz::kim1::Port &kimPort = impl->nullKim;
+#endif
     tc.node_id = STOZHER_NODE_ID;
     tc.key_id = 0;
     stz::derive_keys(master, tc.node_id, tc.key_id, impl->keys);
-    impl->tx = new stz::Tx(tc, impl->keys, impl->nullKim, impl->store);
+    impl->tx = new stz::Tx(tc, impl->keys, kimPort, impl->store);
 
     impl->cloud[0].id = 1;
     size_t n = 0;
@@ -145,7 +208,8 @@ StozherModule::StozherModule() : SinglePortModule("stozher", meshtastic_PortNum_
     impl->link = new stz::mesh::Link(stz::mesh::MeshConfig{}, impl->port, impl->cloud, 1);
     impl->node = new stz::Node(stz::DetectConfig{}, *impl->tx, impl->link);
 
-    LOG_WARN("STOZHER: node id %u with the PUBLIC TEST KEY, mesh uplink only (no KIM1). Not a real node.", (unsigned)tc.node_id);
+    LOG_WARN("STOZHER: node id %u with the PUBLIC TEST KEY, uplink: mesh%s. Not a real node.", (unsigned)tc.node_id,
+             tc.satellite_enabled ? " + KIM1 (untested on hardware)" : " only (no KIM1)");
     stozherModule = this;
 }
 
@@ -222,6 +286,11 @@ int32_t StozherModule::runOnce()
     if (impl->tx->acks_applied() != impl->acksSeen) {
         impl->acksSeen = impl->tx->acks_applied();
         LOG_INFO("STOZHER: signed acknowledgement verified and applied (%u so far)", (unsigned)impl->acksSeen);
+    }
+    if (impl->tx->transmissions() != impl->satelliteSeen) {
+        impl->satelliteSeen = impl->tx->transmissions();
+        LOG_INFO("STOZHER: KIM1 transmissions finished: %u (the module said done or failed, not that a satellite heard it)",
+                 (unsigned)impl->satelliteSeen);
     }
     if ((uint32_t)(now - impl->lastStatsMs) > 60000) {
         impl->lastStatsMs = now;

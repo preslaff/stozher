@@ -1,8 +1,8 @@
 # STOZHER on the T-Beam (Meshtastic fork, experiment)
 
 Instead of a separate XIAO node plus a stock-Meshtastic T-Beam, run the STOZHER logic inside the T-Beam's own
-Meshtastic firmware. Analysis and plan: `docs/firmware.md`, section "T-Beam fork". Status: **step 2 only**, built,
-not yet flashed.
+Meshtastic firmware. Analysis and plan: `docs/firmware.md`, section "T-Beam fork". Status: GPS tap and mesh module flashed and
+run on a real T-Beam; the KIM1 option (below) only compiled.
 
 What is here (the Meshtastic checkout itself is not vendored; it is GPL-3.0 and lives in its own git worktree):
 
@@ -22,3 +22,17 @@ cd ../Meshtastic-firmware-stozher && pio run -e tbeam-stozher
 
 Flashing a board is a separate, deliberate step (back up the flash first, see docs/firmware.md). The stock firmware
 binaries in `firmware/node/` restore a board.
+
+## Build options (all `-D` flags, e.g. `PLATFORMIO_BUILD_FLAGS="-DSTOZHER_NODE_ID=4242" pio run -e tbeam-stozher`)
+
+| Flag | Meaning |
+|---|---|
+| `STOZHER_NODE_ID` | the node id registered in the backend (default 1); the master key is the PUBLIC test key until provisioning exists |
+| `STOZHER_SELFTEST_AT_S=N` | N seconds after boot, feed a synthetic jamming episode; every record built from it is type `test` |
+| `STOZHER_KIM1=1` | add the Kinéis KIM1 on UART2 (satellite path). **Never run on hardware yet.** Off: the pins are not touched |
+| `STOZHER_KIM1_RX_PIN` / `_TX_PIN` / `_STATUS_PIN` | defaults 36 / 14 / 25. **Placeholders, not checked against the board** |
+| `STOZHER_KIM1_BAND` / `_FREQ` / `_POWER_MW` | `AT+TX` parameters; placeholders `B1`, 300, 500 until the organisers give the real values |
+
+KIM1 wiring notes: 5 V supply of its own with a bulk capacitor (the T-Beam's rail is not enough for a 1.5 W burst) and a
+common ground; its UART is 3.3 V TTL like the ESP32, no level shifter. The Serial module of Meshtastic must not be
+configured with pins (the module checks and leaves the KIM1 off if it is).

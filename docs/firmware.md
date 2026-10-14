@@ -214,3 +214,13 @@ Found on the way:
 - **Port names move.** Moving a board re-enumerated both: `ttyUSB0` became the other board, and a bridge started with
   `--port /dev/ttyUSB0` then reconnected to the wrong radio. Use `/dev/serial/by-id/...` paths. A serial client that
   connects to a board leaves it in protobuf mode (binary frames instead of the text log) until it reboots.
+
+**KIM1 in the T-Beam fork (Oct 2026).** `-DSTOZHER_KIM1=1` adds `Uart2Kim1` (UART2, 4800 8N1, TX_STATUS on a pin with an
+internal pull-down, so an unplugged KIM1 reads "idle") and turns the satellite path on in the same library that the XIAO
+build uses: sequence numbers, repeats, daily budget, retries, blanking while TX_STATUS is high plus a guard, `+TX_INFO`
+handling. Both flavours build (default 2,082,799 bytes, with KIM1 2,083,335, 85.9% of the partition). What is NOT done:
+no KIM1 has been connected, so the exchange with the real module is untested (see the assumptions listed under step 4);
+the default pins 36 / 14 / 25 were picked from the Meshtastic variant file and **not verified against the T-Beam**
+(I could not find a trustworthy header pinout), and I have deliberately not flashed this flavour to "abac" with nothing
+wired, because driving a pin that turns out to be connected to something on the board is a risk with no benefit.
+Before wiring: confirm each pin is broken out and free on the board in hand.
