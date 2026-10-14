@@ -347,6 +347,38 @@ void test_a_verdict_becomes_a_record_the_codec_round_trips() {
   TEST_ASSERT_EQUAL_INT32(kLat, back.lat_e7);
 }
 
+void test_a_cold_receiver_may_warn_and_step_its_clock_without_raising_anything() {
+  Recorder r(fixed_cfg());
+  r.tmpl.jam_state = 2;   // warning while it acquires
+  r.tmpl.spoof_state = 2;
+  r.tmpl.fix_ok = false;
+  r.run(10);
+  r.tmpl.fix_ok = true;
+  r.utc_offset = 7200;    // the first fix corrects the time by two hours
+  TEST_ASSERT_EQUAL(-1, r.run(15));
+  TEST_ASSERT_EQUAL(0, r.changes);
+}
+
+void test_a_flag_that_persists_past_the_holdoff_is_still_reported() {
+  Recorder r(fixed_cfg());
+  r.tmpl.jam_state = 2;  // booted into real jamming
+  int first = r.run(60);
+  TEST_ASSERT_TRUE(first >= 30);   // not during acquisition
+  TEST_ASSERT_TRUE(first <= 34);   // but soon after it
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+}
+
+void test_time_without_a_fix_is_not_a_reference_for_the_clock_rule() {
+  Recorder r(fixed_cfg());
+  r.run(40);
+  r.tmpl.fix_ok = false;   // fix lost
+  r.utc_offset = 5000;     // the receiver's RTC drifts or is reset while it has no fix
+  r.run(5);
+  r.tmpl.fix_ok = true;    // fix returns with the old, correct time
+  r.utc_offset = 0;
+  TEST_ASSERT_EQUAL(-1, r.run(20));
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_ten_minutes_of_normal_operation_raise_nothing);
@@ -369,6 +401,9 @@ int main() {
   RUN_TEST(test_blanked_epochs_are_not_evidence_and_change_nothing);
   RUN_TEST(test_a_real_attack_during_blanking_is_seen_once_blanking_ends);
   RUN_TEST(test_blanked_epochs_inside_an_event_keep_the_event);
+  RUN_TEST(test_a_cold_receiver_may_warn_and_step_its_clock_without_raising_anything);
+  RUN_TEST(test_a_flag_that_persists_past_the_holdoff_is_still_reported);
+  RUN_TEST(test_time_without_a_fix_is_not_a_reference_for_the_clock_rule);
   RUN_TEST(test_the_same_recording_always_gives_the_same_verdicts);
   RUN_TEST(test_a_verdict_becomes_a_record_the_codec_round_trips);
   return UNITY_END();

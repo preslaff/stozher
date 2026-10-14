@@ -224,3 +224,14 @@ the default pins 36 / 14 / 25 were picked from the Meshtastic variant file and *
 (I could not find a trustworthy header pinout), and I have deliberately not flashed this flavour to "abac" with nothing
 wired, because driving a pin that turns out to be connected to something on the board is a risk with no benefit.
 Before wiring: confirm each pin is broken out and free on the board in hand.
+
+**First run through the whole stack with real hardware (Oct 2026): two false alarms found and fixed.** With the worker and
+dashboard running, "abac" showed up as a live node, and the dashboard drew a jamming hotspot and a degraded trust area
+at the board's position ("1 witness, 1 report"). The cause was real, not simulated: right after a boot the NEO-6M
+reports `jammingState` 2 (warning) and steps its clock when it first gets a fix, so the node raised a `jamming` event
+(receiver flag, confidence 18) and a `time_anomaly` event (confidence 12) a few seconds after boot. Fixes in
+`stz_detect`: a **start-up holdoff** (`startup_holdoff_epochs`, 30 s) during which the receiver's own jamming and
+spoofing flags and clock steps are not judged (a node that boots under real jamming still reports it about 30 s
+later), and **GNSS time only counts as a reference while there is a fix**. Three new host tests cover this
+(a cold receiver warning and stepping its clock stays quiet, a flag that persists past the holdoff is reported, time
+without a fix is ignored). The `type: test` self-test records are, correctly, not analysed by the worker.

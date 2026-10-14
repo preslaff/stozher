@@ -37,6 +37,7 @@ struct DetectConfig {
   int32_t stationary_speed_mm_s = 3000;  // S5: moving this fast while the accelerometer is still
   uint8_t motion_mismatch_epochs = 5;    // S5
   uint8_t warmup_epochs = 10;        // clean epochs before a baseline exists
+  uint8_t startup_holdoff_epochs = 30;  // after boot, receiver flags and time steps are not judged: a cold receiver warns and steps
   uint8_t min_sats_baseline = 4;
   uint8_t clear_epochs = 10;         // clean epochs before an event ends
   uint8_t blank_guard_epochs = 0;    // reserved: the caller decides `blanked`
@@ -64,6 +65,7 @@ class Detector {
   void update_baseline(const Epoch& e, float drop, bool any_rule);
 
   DetectConfig cfg_;
+  uint16_t epochs_seen_ = 0;
   // baseline
   bool baseline_ready_ = false;
   float baseline_ = 0.0f;

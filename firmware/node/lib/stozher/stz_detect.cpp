@@ -36,12 +36,15 @@ void Detector::count_rules(const Epoch& e, uint8_t& now, float& drop_out) {
     if (drop < 0) drop = 0;
   }
   drop_out = drop;
-  bool j1_hit = drop >= cfg_.cn0_drop_db || e.jam_state >= 2;
+  // A receiver that has just started warns and steps its clock while it acquires; its own flags only count once
+  // the start-up holdoff is over (a node that boots under real jamming still reports it, just 30 s later).
+  bool settled = epochs_seen_ >= cfg_.startup_holdoff_epochs;
+  bool j1_hit = drop >= cfg_.cn0_drop_db || (settled && e.jam_state >= 2);
   jam_n_ = j1_hit ? (uint8_t)(jam_n_ < 255 ? jam_n_ + 1 : 255) : 0;
-  if (jam_n_ >= cfg_.cn0_drop_epochs || (e.jam_state >= 3)) now |= kRuleJ1;
+  if (jam_n_ >= cfg_.cn0_drop_epochs || (settled && e.jam_state >= 3)) now |= kRuleJ1;
 
   // S3: receiver spoofing indicator.
-  flag_n_ = e.spoof_state >= 2 ? (uint8_t)(flag_n_ < 255 ? flag_n_ + 1 : 255) : 0;
+  flag_n_ = (settled && e.spoof_state >= 2) ? (uint8_t)(flag_n_ < 255 ? flag_n_ + 1 : 255) : 0;
   if (flag_n_ >= cfg_.spoof_flag_epochs) now |= kRuleS3;
 
   // S1: fixed node away from its surveyed position while the accelerometer says stationary.
@@ -58,7 +61,7 @@ void Detector::count_rules(const Epoch& e, uint8_t& now, float& drop_out) {
   if (uni_n_ >= cfg_.uniform_epochs) now |= kRuleS2;
 
   // S4: GNSS time against the node's own clock.
-  if (e.utc_s != 0 && have_last_ && last_utc_ != 0) {
+  if (settled && e.fix_ok && e.utc_s != 0 && have_last_ && last_utc_ != 0) {
     int64_t d_utc = ((int64_t)e.utc_s - (int64_t)last_utc_) * 1000;
     int64_t d_mono = (int64_t)(uint32_t)(e.mono_ms - last_mono_);
     int64_t diff = d_utc - d_mono;
@@ -94,7 +97,7 @@ void Detector::count_rules(const Epoch& e, uint8_t& now, float& drop_out) {
   // T1: tamper sensor.
   if (e.sensor_tamper) now |= kRuleT1;
 
-  if (e.utc_s != 0) {
+  if (e.utc_s != 0 && e.fix_ok) {  // time without a fix is the receiver's RTC guess, not a reference
     last_utc_ = e.utc_s;
     last_mono_ = e.mono_ms;
     have_last_ = true;
@@ -128,6 +131,7 @@ Verdict Detector::update(const Epoch& e) {
     v.duration_s = cls_ == kNormal ? 0 : (uint16_t)((uint32_t)(e.mono_ms - onset_mono_) / 1000);
     return v;
   }
+  if (epochs_seen_ < 0xFFFF) epochs_seen_++;
   uint8_t now;
   float drop;
   count_rules(e, now, drop);
