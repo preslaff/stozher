@@ -23,7 +23,12 @@ Every library, tool, model and dataset used, with licence. Add a row when you ad
 | React, React DOM | libraries | MIT | web/dashboard | |
 | MapLibre GL JS | library | BSD-3 | web/dashboard | map rendering |
 | Vite, Vitest, TypeScript, ESLint (typescript-eslint, react-hooks), Prettier | tooling | MIT / Apache-2.0 | web/dashboard | |
-| OpenStreetMap raster tiles | dataset | ODbL (© OpenStreetMap contributors) | web/dashboard | dev default only, subject to the OSM tile usage policy; the field kit uses a local PMTiles extract |
+| OpenStreetMap raster tiles | dataset | ODbL (© OpenStreetMap contributors) | web/dashboard | explicit online option only (`VITE_TILE_URL`), subject to the OSM tile usage policy; the default base map is the local extract below |
+| pmtiles (JavaScript) | library | BSD-3 | web/dashboard | reads the offline base map from one file with HTTP range requests |
+| @protomaps/basemaps | library | BSD-3 | web/dashboard | style layers (dark flavor) for the Protomaps vector tiles |
+| Protomaps basemap build, Bulgaria extract | dataset | ODbL (© OpenStreetMap contributors, Protomaps) | data/basemap (git-ignored), tools/basemap/fetch.sh | vector tiles, zoom 0-14, extracted once from the public daily build with the pmtiles CLI |
+| go-pmtiles CLI 1.31.2 | tool | BSD-3 | tools/basemap/fetch.sh | cuts the extract; used on the developer machine only |
+| protomaps/basemaps-assets: Noto Sans (Regular, Medium, Italic) glyphs, dark sprites | dataset | SIL OFL 1.1 (fonts), BSD-3 (sprites) | web/dashboard/public/basemap (git-ignored) | map labels and icons served locally, so no font or sprite is fetched online |
 | Meshtastic Python library (+ pypubsub) | library | GPL-3.0 | services/mesh_bridge (optional `radio` extra) | bridge is GPL-3.0-or-later and isolated, HTTP only |
 | httpx | library | BSD-3 | simulator, mesh_bridge, tests | |
 | Ed25519 via `cryptography` | library feature | Apache-2.0 / BSD | stozher_core.control, services/api | acknowledgement signatures; golden vectors cross-checked with the OpenSSL CLI |

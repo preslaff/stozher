@@ -21,3 +21,6 @@ dist/
 
 # Firmware
 .pio/
+
+# Offline base map (built by tools/basemap/fetch.sh)
+web/dashboard/public/basemap/

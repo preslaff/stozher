@@ -1,9 +1,11 @@
 import * as maplibregl from 'maplibre-gl'
-import type { GeoJSONSource, StyleSpecification } from 'maplibre-gl'
+import type { GeoJSONSource } from 'maplibre-gl'
+import { Protocol } from 'pmtiles'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useRef, useState } from 'react'
 import type { Bbox } from '../api'
 import type { View } from '../useDashboard'
+import { baseStyle } from '../basemap'
 import { TIER_COLOR } from '../hazards'
 import { TRUST_COLOR } from '../style'
 import { bboxOf, unionBbox } from '../geo'
@@ -11,29 +13,13 @@ import type { Hotspot, NodeInfo, TrustProps } from '../types'
 import type { Waypoint } from '../route'
 import type { FeatureCollection, LineString, Polygon } from 'geojson'
 
-const TILE_URL: string =
-  import.meta.env.VITE_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-
-const STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    base: {
-      type: 'raster',
-      tiles: [TILE_URL],
-      tileSize: 256,
-      attribution: '© OpenStreetMap contributors',
-    },
-  },
-  layers: [
-    { id: 'bg', type: 'background', paint: { 'background-color': '#0f151b' } },
-    {
-      id: 'base',
-      type: 'raster',
-      source: 'base',
-      paint: { 'raster-opacity': 0.65, 'raster-saturation': -0.7, 'raster-brightness-max': 0.65 },
-    },
-  ],
-}
+// The base map: a local PMTiles file by default (works offline); VITE_TILE_URL is an explicit online option.
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '')
+const ASSET_BASE = new URL(`${BASE}/basemap`, window.location.href).href
+const PMTILES_URL: string = import.meta.env.VITE_BASEMAP_URL ?? `${ASSET_BASE}/bulgaria.pmtiles`
+const RASTER_URL: string | undefined = import.meta.env.VITE_TILE_URL || undefined
+const STYLE = baseStyle({ pmtilesUrl: PMTILES_URL, rasterUrl: RASTER_URL, assetBase: ASSET_BASE })
+let pmtilesRegistered = false
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] }
 const stateColor: maplibregl.ExpressionSpecification = [
@@ -124,6 +110,10 @@ export function MapView({
 
   useEffect(() => {
     if (!box.current) return
+    if (!pmtilesRegistered) {
+      maplibregl.addProtocol('pmtiles', new Protocol().tile)
+      pmtilesRegistered = true
+    }
     const map = new maplibregl.Map({
       container: box.current,
       style: STYLE,
