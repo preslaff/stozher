@@ -6,8 +6,7 @@
 static const char kMaster[] = "000102030405060708090a0b0c0d0e0f";
 static const char kHex[] = "11000100afde173f05165b66b678f4cad06f8b5fc667c293ae03d96e";
 
-void setup() {
-  Serial.begin(115200);
+static void selftest() {
   uint8_t master[16], raw[stz::kMaxLen];
   size_t n = 0, len = 0;
   stz::from_hex(kMaster, strlen(kMaster), master, sizeof master, n);
@@ -18,4 +17,10 @@ void setup() {
   Serial.println(stz::reason(s));
 }
 
-void loop() { delay(1000); }
+// USB serial on the Leonardo opens after boot, so repeat the result instead of printing it once.
+void setup() { Serial.begin(115200); }
+
+void loop() {
+  selftest();
+  delay(2000);
+}

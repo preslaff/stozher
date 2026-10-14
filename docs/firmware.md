@@ -50,3 +50,6 @@ before the stack is counted. Acknowledgements are optional, so a Leonardo node s
 policy. The 512 B of SHA/AES tables could move to `PROGMEM` if RAM gets tight. `log2f` is missing in avr-libc,
 so the jump-code scaling uses `logf`. The Leonardo's I/O is 5 V: level-shift the lines to the 3.3 V GNSS module
 and KIM1 (see CLAUDE.md section 12).
+
+Flashed and run on a real Leonardo (Oct 2026): the self-test decodes golden vector `core_event_jamming` and prints
+`STOZHER codec self-test: ok` over USB serial.
