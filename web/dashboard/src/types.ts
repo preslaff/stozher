@@ -1,4 +1,4 @@
-import type { LineString, Point, Polygon } from 'geojson'
+import type { Geometry, LineString, Point, Polygon } from 'geojson'
 
 export type TrustState = 'TRUSTED' | 'DEGRADED' | 'JAMMED' | 'SPOOFED' | 'UNKNOWN'
 export type AlertLevel = 'info' | 'warning' | 'critical'
@@ -101,4 +101,47 @@ export interface WatchedRouteItem {
   created_at: string
   expires_at: string
   geometry: LineString
+}
+
+export type HazardTier = 'unverified' | 'corroborated' | 'confirmed'
+export type HazardKind =
+  | 'flood'
+  | 'landslide'
+  | 'debris'
+  | 'road_collapse'
+  | 'bridge_damage'
+  | 'fire_near_road'
+  | 'snow_ice'
+  | 'closed_by_authority'
+export type Passability = 'blocked' | 'restricted' | 'passable_with_care' | 'reported_clear'
+
+/** A road hazard. Public and reporter callers get the coarse view: no sources, evidence or decisions. */
+export interface Hazard {
+  id: string
+  kind: HazardKind
+  passability: Passability
+  tier: HazardTier
+  status: 'active' | 'closed' | 'expired' | 'dismissed'
+  geometry: Geometry | null
+  valid_until: string
+  sim: boolean
+  data_age_s: number | null
+  blur_m?: number
+  sources?: string[]
+  evidence?: { reports: number; clear_reports: number; independent_teams: number }
+  decision?: string | null
+  decision_reason?: string | null
+  last_confirmed?: string | null
+}
+
+export interface RouteHazard extends Hazard {
+  at_m: number
+  distance_m: number
+}
+
+export interface HazardRoute {
+  items: RouteHazard[]
+  count: number
+  length_m: number | null
+  data_age_s: number | null
 }

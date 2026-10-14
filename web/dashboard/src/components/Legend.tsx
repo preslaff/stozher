@@ -1,3 +1,4 @@
+import { TIER_COLOR } from '../hazards'
 import { TRUST_COLOR } from '../style'
 import type { TrustState } from '../types'
 
@@ -22,6 +23,13 @@ export function Legend({ note }: { note: string | null }) {
           </span>
         ))}
       <span className="muted small">Uncoloured: {LABEL.UNKNOWN.toLowerCase()}</span>
+      <strong className="gap">Road hazards</strong>
+      {(['unverified', 'corroborated', 'confirmed'] as const).map((t) => (
+        <span key={t}>
+          <i className="dotkey" style={{ background: TIER_COLOR[t] }} />
+          {t.charAt(0).toUpperCase() + t.slice(1)}
+        </span>
+      ))}
       {note && <span className="note">{note}</span>}
     </div>
   )

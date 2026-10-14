@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { kmText, rangeText, verdict } from '../route'
 import { ageText, TRUST_COLOR } from '../style'
-import type { MinLevel, RouteTrust } from '../types'
+import { KIND_LABEL, PASSABILITY_LABEL, TIER_COLOR } from '../hazards'
+import type { HazardRoute, HazardTier, MinLevel, RouteTrust } from '../types'
 
 interface Props {
   waypoints: number
   drawing: boolean
   result: RouteTrust | null
+  hazards: HazardRoute | null
+  hazardNote: string | null
   error: string | null
   bufferM: number
   canWatch: boolean
@@ -14,7 +17,12 @@ interface Props {
   onDrawing: (on: boolean) => void
   onUndo: () => void
   onClear: () => void
-  onWatch: (w: { name: string; minLevel: MinLevel; hours: number }) => Promise<void>
+  onWatch: (w: {
+    name: string
+    minLevel: MinLevel
+    hazardMinTier: HazardTier
+    hours: number
+  }) => Promise<void>
 }
 
 const LEVELS: { value: MinLevel; label: string }[] = [
@@ -27,6 +35,7 @@ export function RoutePanel(p: Props) {
   const [name, setName] = useState('')
   const [level, setLevel] = useState<MinLevel>('degraded')
   const [hours, setHours] = useState(24)
+  const [tier, setTier] = useState<HazardTier>('corroborated')
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const r = p.result
@@ -36,7 +45,7 @@ export function RoutePanel(p: Props) {
     setBusy(true)
     setNote(null)
     try {
-      await p.onWatch({ name: name.trim(), minLevel: level, hours })
+      await p.onWatch({ name: name.trim(), minLevel: level, hazardMinTier: tier, hours })
       setNote(`Watching “${name.trim()}”. You will get an alert if its trust worsens.`)
       setName('')
     } catch (err) {
@@ -106,6 +115,34 @@ export function RoutePanel(p: Props) {
               No recent evidence is not the same as safe: those stretches are unchecked.
             </p>
           )}
+          <div className="hazardcheck" aria-label="Road hazards on this route">
+            <h3>Road hazards</h3>
+            {p.hazardNote && <p className="muted small">{p.hazardNote}</p>}
+            {p.hazards && p.hazards.count === 0 && (
+              <p className="muted small">
+                No reported hazards on this route. That is not a guarantee: roads nobody has
+                reported are unchecked.
+              </p>
+            )}
+            <ul className="hazlist">
+              {p.hazards?.items.map((h) => (
+                <li key={h.id}>
+                  <i style={{ background: TIER_COLOR[h.tier] }} />
+                  <span>
+                    km {(h.at_m / 1000).toFixed(1)} · {KIND_LABEL[h.kind]}
+                    {h.sim && <span className="chip sim">SIM</span>}
+                  </span>
+                  <span className="muted">
+                    {PASSABILITY_LABEL[h.passability].toLowerCase()} · {h.tier} ·{' '}
+                    {ageText(h.data_age_s)}
+                    {h.evidence &&
+                      ` · ${h.evidence.reports} report${h.evidence.reports === 1 ? '' : 's'}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="muted small">Shown separately: hazards do not change the GNSS verdict.</p>
+          </div>
           {p.canWatch ? (
             <form className="watchform" onSubmit={watch}>
               <input
@@ -139,6 +176,15 @@ export function RoutePanel(p: Props) {
                   ))}
                 </select>
               </div>
+              <select
+                value={tier}
+                onChange={(e) => setTier(e.target.value as HazardTier)}
+                aria-label="Alert on hazards that are"
+              >
+                <option value="corroborated">Hazards: corroborated or better</option>
+                <option value="confirmed">Hazards: confirmed only</option>
+                <option value="unverified">Hazards: also unverified</option>
+              </select>
               <button type="submit" disabled={busy || !name.trim()}>
                 Watch this route
               </button>

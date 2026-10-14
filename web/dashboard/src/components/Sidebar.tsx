@@ -1,9 +1,13 @@
-import { LEVEL_COLOR, sinceText, TRUST_COLOR } from '../style'
-import type { Alert, Hotspot, WatchedRouteItem } from '../types'
+import { ageText, LEVEL_COLOR, sinceText, TRUST_COLOR } from '../style'
+import { KIND_LABEL, PASSABILITY_LABEL, TIER_COLOR, tierCounts } from '../hazards'
+import type { Alert, Hazard, Hotspot, WatchedRouteItem } from '../types'
 
 interface Props {
   alerts: Alert[]
   hotspots: Hotspot[]
+  hazards: Hazard[]
+  selectedHazardId: string | null
+  onPickHazard: (h: Hazard) => void
   watched: WatchedRouteItem[]
   selectedId: string | null
   now: number
@@ -16,6 +20,9 @@ interface Props {
 export function Sidebar({
   alerts,
   hotspots,
+  hazards,
+  selectedHazardId,
+  onPickHazard,
   watched,
   selectedId,
   now,
@@ -88,6 +95,41 @@ export function Sidebar({
               </button>
             </li>
           ))}
+        </ul>
+      </section>
+      <section>
+        <h2>
+          Road hazards{' '}
+          <span className="count">
+            {tierCounts(hazards).confirmed} confirmed · {tierCounts(hazards).corroborated}{' '}
+            corroborated · {tierCounts(hazards).unverified} unverified
+          </span>
+        </h2>
+        {hazards.filter((h) => h.status === 'active').length === 0 && (
+          <p className="empty">No active hazards reported.</p>
+        )}
+        <ul className="list">
+          {hazards
+            .filter((h) => h.status === 'active')
+            .map((h) => (
+              <li key={h.id}>
+                <button
+                  className={`item ${h.id === selectedHazardId ? 'selected' : ''}`}
+                  onClick={() => onPickHazard(h)}
+                >
+                  <span className="dot" style={{ background: TIER_COLOR[h.tier] }} />
+                  <span className="body">
+                    <span className="msg">
+                      {KIND_LABEL[h.kind]} · {PASSABILITY_LABEL[h.passability].toLowerCase()}
+                    </span>
+                    <span className="meta">
+                      {h.tier} · last report {ageText(h.data_age_s)}
+                      {h.sim && <span className="chip sim">SIM</span>}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
         </ul>
       </section>
       <section>

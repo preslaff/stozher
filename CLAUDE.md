@@ -16,8 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 >
 > **Partly built:** community hazard reports (`docs/hazards.md`): the `reporter` role, `POST /v1/reports`, worker
 > merging into hazards with tiers (independence by team label), operator confirm/close/dismiss, expiry and
-> retention, public/reporter coarse views, `along-route`, watched-route hazard alerts. Still to do: the dashboard
-> tool and the simulator scenario. Access phase A (organisations, named staff, two-person rule) is built.
+> retention, public/reporter coarse views, `along-route`, watched-route hazard alerts. The simulator hazard scenario and the dashboard (report tool, hazard layer, route panel) are built. Still to do: EO/OSM hazard sources and the mesh report contract. Access phase A (organisations, named staff, two-person rule) is built.
 >
 > **Not built yet:** `situation`, webhooks, Kinéis adapter, assistant, firmware (waiting for the KIM1),
 > offline field-kit sync, a dashboard UI for key management (use the admin API or

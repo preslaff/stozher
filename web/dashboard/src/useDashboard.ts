@@ -5,6 +5,7 @@ import { connectStream, type SseEvent, type StreamState } from './sse'
 import { MIN_GRID_ZOOM } from './style'
 import type {
   Alert,
+  Hazard,
   Health,
   Hotspot,
   HotspotDetail,
@@ -28,6 +29,8 @@ export function useDashboard(key: string | null) {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [nodes, setNodes] = useState<NodeInfo[]>([])
   const [watched, setWatched] = useState<WatchedRouteItem[]>([])
+  const [hazards, setHazards] = useState<Hazard[]>([])
+  const [selectedHazardId, setSelectedHazardId] = useState<string | null>(null)
   const [grid, setGrid] = useState<Grid | null>(null)
   const [gridError, setGridError] = useState<string | null>(null)
   const [stream, setStream] = useState<StreamState>('connecting')
@@ -40,12 +43,13 @@ export function useDashboard(key: string | null) {
 
   const loadState = useCallback(async () => {
     if (!api) return
-    const [h, hs, al, ns, wr] = await Promise.allSettled([
+    const [h, hs, al, ns, wr, hz] = await Promise.allSettled([
       api.health(),
       api.hotspots(),
       api.alerts(),
       api.nodes(),
       api.watchedRoutes(),
+      api.hazards(),
     ])
     if (h.status === 'fulfilled') setHealth(h.value)
     if (hs.status === 'fulfilled') setHotspots(hs.value.items)
@@ -53,6 +57,7 @@ export function useDashboard(key: string | null) {
     if (al.status === 'fulfilled') setAlerts(al.value.items)
     setNodes(ns.status === 'fulfilled' ? ns.value : []) // operators only; absent otherwise
     setWatched(wr.status === 'fulfilled' ? wr.value.items : []) // responders and above
+    setHazards(hz.status === 'fulfilled' ? hz.value.items : []) // optional module: absent is fine
     if (hs.status === 'fulfilled') {
       setError(null)
       setLastLoad(Date.now())
@@ -74,6 +79,7 @@ export function useDashboard(key: string | null) {
       if (e.event === 'alert') {
         const a = JSON.parse(e.data) as Alert
         setAlerts((prev) => (prev.some((p) => p.id === a.id) ? prev : [a, ...prev].slice(0, 100)))
+        if (a.kind.startsWith('route_hazard')) void loadState() // hazards changed
       } else if (e.event === 'refresh') {
         void loadState()
         setGridVersion((v) => v + 1)
@@ -145,8 +151,33 @@ export function useDashboard(key: string | null) {
     [api, loadState],
   )
 
+  const decide = useCallback(
+    async (id: string, action: 'confirm' | 'close' | 'dismiss', reason: string) => {
+      if (!api) return
+      await api.decide(id, action, reason)
+      await loadState()
+      setGridVersion((v) => v + 1) // route checks run again
+    },
+    [api, loadState],
+  )
+  const submitReport = useCallback(
+    async (r: Parameters<NonNullable<typeof api>['report']>[0]) => {
+      if (!api) return
+      await api.report(r)
+      // the worker merges it into a hazard within seconds; look again shortly
+      setTimeout(() => void loadState(), 3000)
+    },
+    [api, loadState],
+  )
+  const selectedHazard = hazards.find((x) => x.id === selectedHazardId) ?? null
+
   return {
     api,
+    hazards,
+    selectedHazard,
+    setSelectedHazardId,
+    decide,
+    submitReport,
     gridVersion,
     watched,
     createWatch,

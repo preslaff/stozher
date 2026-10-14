@@ -4,6 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useRef, useState } from 'react'
 import type { Bbox } from '../api'
 import type { View } from '../useDashboard'
+import { TIER_COLOR } from '../hazards'
 import { TRUST_COLOR } from '../style'
 import { bboxOf, unionBbox } from '../geo'
 import type { Hotspot, NodeInfo, TrustProps } from '../types'
@@ -48,6 +49,15 @@ const stateColor: maplibregl.ExpressionSpecification = [
   TRUST_COLOR.SPOOFED,
   TRUST_COLOR.UNKNOWN,
 ]
+const tierColor: maplibregl.ExpressionSpecification = [
+  'match',
+  ['get', 'tier'],
+  'confirmed',
+  TIER_COLOR.confirmed,
+  'corroborated',
+  TIER_COLOR.corroborated,
+  TIER_COLOR.unverified,
+]
 const kindColor: maplibregl.ExpressionSpecification = [
   'match',
   ['get', 'kind'],
@@ -63,6 +73,13 @@ interface Props {
   selectedId: string | null
   routeFc: FeatureCollection<LineString>
   watchedFc: FeatureCollection<LineString>
+  hazardMarkers: FeatureCollection
+  hazardShapes: FeatureCollection
+  selectedHazardId: string | null
+  onSelectHazard: (id: string | null) => void
+  placing: boolean
+  reportPoint: Waypoint | null
+  onPlace: (p: Waypoint) => void
   waypoints: Waypoint[]
   drawing: boolean
   onAddWaypoint: (p: Waypoint) => void
@@ -78,6 +95,13 @@ export function MapView({
   selectedId,
   routeFc,
   watchedFc,
+  hazardMarkers,
+  hazardShapes,
+  selectedHazardId,
+  onSelectHazard,
+  placing,
+  reportPoint,
+  onPlace,
   waypoints,
   drawing,
   onAddWaypoint,
@@ -88,11 +112,13 @@ export function MapView({
   const box = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const [ready, setReady] = useState(false)
-  const cb = useRef({ onSelect, onView, onAddWaypoint })
+  const cb = useRef({ onSelect, onView, onAddWaypoint, onSelectHazard, onPlace })
   const drawingRef = useRef(drawing)
+  const placingRef = useRef(placing)
   useEffect(() => {
-    cb.current = { onSelect, onView, onAddWaypoint }
+    cb.current = { onSelect, onView, onAddWaypoint, onSelectHazard, onPlace }
     drawingRef.current = drawing
+    placingRef.current = placing
   })
   const fitted = useRef(false)
 
@@ -122,6 +148,9 @@ export function MapView({
       map.addSource('watched', { type: 'geojson', data: EMPTY })
       map.addSource('route', { type: 'geojson', data: EMPTY })
       map.addSource('draft', { type: 'geojson', data: EMPTY })
+      map.addSource('hazard-shapes', { type: 'geojson', data: EMPTY })
+      map.addSource('hazard-markers', { type: 'geojson', data: EMPTY })
+      map.addSource('report-point', { type: 'geojson', data: EMPTY })
       map.addLayer({
         id: 'trust-fill',
         type: 'fill',
@@ -219,6 +248,54 @@ export function MapView({
         },
       })
       map.addLayer({
+        id: 'hazard-shape-fill',
+        type: 'fill',
+        source: 'hazard-shapes',
+        filter: ['==', ['geometry-type'], 'Polygon'],
+        paint: { 'fill-color': tierColor, 'fill-opacity': 0.14 },
+      })
+      map.addLayer({
+        id: 'hazard-shape-line',
+        type: 'line',
+        source: 'hazard-shapes',
+        paint: { 'line-color': tierColor, 'line-width': 2, 'line-dasharray': [3, 2] },
+      })
+      map.addLayer({
+        id: 'hazard-selected',
+        type: 'circle',
+        source: 'hazard-markers',
+        filter: ['==', ['get', 'id'], ''],
+        paint: {
+          'circle-radius': 15,
+          'circle-color': 'rgba(0,0,0,0)',
+          'circle-stroke-width': 3,
+          'circle-stroke-color': '#ffffff',
+        },
+      })
+      map.addLayer({
+        id: 'hazard-markers',
+        type: 'circle',
+        source: 'hazard-markers',
+        paint: {
+          'circle-radius': ['match', ['get', 'tier'], 'confirmed', 9, 'corroborated', 8, 7],
+          'circle-color': tierColor,
+          'circle-opacity': ['match', ['get', 'tier'], 'unverified', 0.35, 1],
+          'circle-stroke-width': 3,
+          'circle-stroke-color': tierColor,
+        },
+      })
+      map.addLayer({
+        id: 'report-point',
+        type: 'circle',
+        source: 'report-point',
+        paint: {
+          'circle-radius': 8,
+          'circle-color': '#ffffff',
+          'circle-stroke-width': 3,
+          'circle-stroke-color': '#5b8def',
+        },
+      })
+      map.addLayer({
         id: 'nodes',
         type: 'circle',
         source: 'nodes',
@@ -230,8 +307,16 @@ export function MapView({
         },
       })
       map.on('click', (e) => {
-        if (drawingRef.current) cb.current.onAddWaypoint([e.lngLat.lng, e.lngLat.lat])
+        if (placingRef.current) cb.current.onPlace([e.lngLat.lng, e.lngLat.lat])
+        else if (drawingRef.current) cb.current.onAddWaypoint([e.lngLat.lng, e.lngLat.lat])
       })
+      map.on('click', 'hazard-markers', (e) => {
+        if (drawingRef.current || placingRef.current) return
+        const id = e.features?.[0]?.properties?.id as string | undefined
+        if (id) cb.current.onSelectHazard(id)
+      })
+      map.on('mouseenter', 'hazard-markers', () => (map.getCanvas().style.cursor = 'pointer'))
+      map.on('mouseleave', 'hazard-markers', () => (map.getCanvas().style.cursor = ''))
       map.on('click', 'hotspot-fill', (e) => {
         if (drawingRef.current) return
         const id = e.features?.[0]?.properties?.id as string | undefined
@@ -337,8 +422,40 @@ export function MapView({
 
   useEffect(() => {
     const map = mapRef.current
-    if (map) map.getCanvas().style.cursor = drawing ? 'crosshair' : ''
-  }, [drawing])
+    if (!map || !ready) return
+    ;(map.getSource('hazard-markers') as GeoJSONSource).setData(hazardMarkers)
+    ;(map.getSource('hazard-shapes') as GeoJSONSource).setData(hazardShapes)
+  }, [hazardMarkers, hazardShapes, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (map && ready)
+      map.setFilter('hazard-selected', ['==', ['get', 'id'], selectedHazardId ?? ''])
+  }, [selectedHazardId, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    ;(map.getSource('report-point') as GeoJSONSource).setData(
+      reportPoint
+        ? {
+            type: 'FeatureCollection',
+            features: [
+              {
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: reportPoint },
+                properties: {},
+              },
+            ],
+          }
+        : EMPTY,
+    )
+  }, [reportPoint, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (map) map.getCanvas().style.cursor = drawing || placing ? 'crosshair' : ''
+  }, [drawing, placing])
 
   useEffect(() => {
     const map = mapRef.current

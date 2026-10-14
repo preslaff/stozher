@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Bbox } from './api'
 import { Detail } from './components/Detail'
+import { HazardDetail } from './components/HazardDetail'
+import { ReportPanel } from './components/ReportPanel'
 import { KeyGate } from './components/KeyGate'
 import { Legend } from './components/Legend'
 import { MapView } from './components/MapView'
@@ -8,8 +10,9 @@ import { RoutePanel } from './components/RoutePanel'
 import { Sidebar } from './components/Sidebar'
 import { StatusBar } from './components/StatusBar'
 import { bboxOf } from './geo'
-import { segmentFeatures } from './route'
-import type { Alert, Hotspot, WatchedRouteItem } from './types'
+import { hazardFeatures } from './hazards'
+import { segmentFeatures, type Waypoint } from './route'
+import type { Alert, Hazard, Hotspot, WatchedRouteItem } from './types'
 import { usePlanner } from './usePlanner'
 import { useDashboard } from './useDashboard'
 
@@ -31,6 +34,8 @@ export default function App() {
   const d = useDashboard(key)
   const planner = usePlanner(d.api, d.gridVersion)
   const [now, setNow] = useState(() => Date.now())
+  const [placing, setPlacing] = useState(false)
+  const [reportPoint, setReportPoint] = useState<Waypoint | null>(null)
   const [focus, setFocus] = useState<{ bbox: Bbox; n: number } | null>(null)
 
   useEffect(() => {
@@ -53,19 +58,29 @@ export default function App() {
     [d.watched],
   )
 
+  const hz = useMemo(() => hazardFeatures(d.hazards), [d.hazards])
+  const canReport = d.role !== null && d.role !== 'public' && d.role !== 'system'
+  const canDecide = d.role === 'operator' || d.role === 'admin'
+
   const hasSim = useMemo(
     () =>
       d.hotspots.some((h) => h.sim) ||
+      d.hazards.some((h) => h.sim) ||
       d.alerts.some((a) => a.sim) ||
       !!d.grid?.sim ||
       !!planner.result?.sim ||
       d.nodes.some((n) => n.sim),
-    [d.hotspots, d.alerts, d.grid, d.nodes, planner.result?.sim],
+    [d.hotspots, d.hazards, d.alerts, d.grid, d.nodes, planner.result?.sim],
   )
 
   const pickHotspot = (h: Hotspot) => {
     d.setSelectedId(h.id)
     fly(bboxOf(h.source_ellipse))
+  }
+  const pickHazard = (h: Hazard) => {
+    d.setSelectedHazardId(h.id)
+    const b = bboxOf(h.geometry)
+    if (b) fly([b[0] - 0.004, b[1] - 0.003, b[2] + 0.004, b[3] + 0.003])
   }
   const pickRoute = (w: WatchedRouteItem) => fly(bboxOf(w.geometry))
   const pickAlert = (a: Alert) => {
@@ -111,6 +126,9 @@ export default function App() {
       <Sidebar
         alerts={d.alerts}
         hotspots={d.hotspots}
+        hazards={d.hazards}
+        selectedHazardId={d.selectedHazard?.id ?? null}
+        onPickHazard={pickHazard}
         watched={d.watched}
         selectedId={d.selectedId}
         now={now}
@@ -127,6 +145,16 @@ export default function App() {
           selectedId={d.selectedId}
           routeFc={routeFc}
           watchedFc={watchedFc}
+          hazardMarkers={hz.markers}
+          hazardShapes={hz.shapes}
+          selectedHazardId={d.selectedHazard?.id ?? null}
+          onSelectHazard={d.setSelectedHazardId}
+          placing={placing}
+          reportPoint={reportPoint}
+          onPlace={(p) => {
+            setReportPoint(p)
+            setPlacing(false)
+          }}
           waypoints={planner.waypoints}
           drawing={planner.drawing}
           onAddWaypoint={planner.add}
@@ -143,20 +171,53 @@ export default function App() {
           waypoints={planner.waypoints.length}
           drawing={planner.drawing}
           result={planner.result}
+          hazards={planner.hazardResult}
+          hazardNote={planner.hazardNote}
           error={planner.error}
           bufferM={planner.bufferM}
           canWatch={d.role !== null && d.role !== 'public'}
           onBuffer={planner.setBufferM}
-          onDrawing={planner.setDrawing}
+          onDrawing={(on) => {
+            if (on) setPlacing(false)
+            planner.setDrawing(on)
+          }}
           onUndo={planner.undo}
           onClear={planner.clear}
           onWatch={async (w) => {
             await d.createWatch({ ...w, coordinates: planner.waypoints, bufferM: planner.bufferM })
           }}
         />
+        {canReport && (
+          <ReportPanel
+            placing={placing}
+            point={reportPoint}
+            onPlacing={(on) => {
+              if (on) planner.setDrawing(false)
+              setPlacing(on)
+            }}
+            onClear={() => {
+              setReportPoint(null)
+              setPlacing(false)
+            }}
+            onSubmit={d.submitReport}
+          />
+        )}
         <Legend note={d.gridNote} />
         {hasSim && <div className="simbadge">SIMULATED DATA</div>}
-        {d.detail && <Detail h={d.detail} now={now} onClose={() => d.setSelectedId(null)} />}
+        {d.selectedHazard && (
+          <HazardDetail
+            key={d.selectedHazard.id}
+            h={d.selectedHazard}
+            canDecide={canDecide}
+            onDecide={async (a, r) => {
+              await d.decide(d.selectedHazard!.id, a, r)
+            }}
+            onClose={() => d.setSelectedHazardId(null)}
+          />
+        )}
+        {d.detail && !d.selectedHazard && (
+          <Detail h={d.detail} now={now} onClose={() => d.setSelectedId(null)} />
+        )}
       </div>
     </div>
   )

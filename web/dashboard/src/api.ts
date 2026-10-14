@@ -1,11 +1,16 @@
 import type { FeatureCollection, Polygon } from 'geojson'
 import type {
   Alert,
+  Hazard,
+  HazardKind,
+  HazardRoute,
+  HazardTier,
   Health,
   Hotspot,
   HotspotDetail,
   MinLevel,
   NodeInfo,
+  Passability,
   RouteTrust,
   TrustProps,
   WatchedRouteItem,
@@ -68,6 +73,7 @@ export function makeApi(key: string, base: string = API_URL) {
       coordinates: number[][]
       bufferM: number
       minLevel: MinLevel
+      hazardMinTier: HazardTier
       hours: number
     }) =>
       send<{ id: string }>('POST', '/v1/watched-routes', {
@@ -75,9 +81,32 @@ export function makeApi(key: string, base: string = API_URL) {
         geometry: { type: 'LineString', coordinates: w.coordinates },
         buffer_m: w.bufferM,
         min_level: w.minLevel,
+        hazard_min_tier: w.hazardMinTier,
         expires_at: new Date(Date.now() + w.hours * 3600_000).toISOString(),
       }),
     deleteWatch: (id: string) => send<void>('DELETE', `/v1/watched-routes/${id}`),
+    hazards: () => get<ListResponse<Hazard>>('/v1/hazards?limit=500'),
+    hazardsAlongRoute: (coordinates: number[][], bufferM: number) =>
+      send<HazardRoute>('POST', `/v1/hazards/along-route?buffer_m=${bufferM}`, {
+        type: 'LineString',
+        coordinates,
+      }),
+    /** The four fields of a report and nothing else: a place, a kind, a passability and a time. */
+    report: (r: {
+      kind: HazardKind
+      passability: Passability
+      lon: number
+      lat: number
+      observedAt: Date
+    }) =>
+      send<{ id: string; tier: HazardTier }>('POST', '/v1/reports', {
+        kind: r.kind,
+        passability: r.passability,
+        geometry: { type: 'Point', coordinates: [r.lon, r.lat] },
+        observed_at: r.observedAt.toISOString(),
+      }),
+    decide: (id: string, action: 'confirm' | 'close' | 'dismiss', reason: string) =>
+      send<Hazard>('POST', `/v1/hazards/${id}/${action}`, { reason }),
     trustGrid: (b: Bbox) =>
       get<FeatureCollection<Polygon, TrustProps> & { sim: boolean }>(
         `/v1/trust/grid?bbox=${b.map((n) => n.toFixed(5)).join(',')}`,

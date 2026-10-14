@@ -254,7 +254,7 @@ Done when:
 2. **Done:** merging and tiers (worker job and operator decisions), expiry, retention.
 3. **Done:** hazards read API with role views; `along-route`; watched-route alerts.
 4. **Done:** simulator scenario (`make sim-hazards`, `simulator/hazards.py`) and an in-process test; the checks cover the lines above except the public view and the reporter-key reads, which `test_hazards.py` / `test_reports.py` cover.
-5. Dashboard: report tool, hazard layer, route panel.
+5. **Done:** dashboard: report tool (reporter and above), hazard layer coloured by tier, hazard list and detail with operator decisions, hazards (separate from GNSS trust) in the route panel, and a hazard tier choice when watching a route. Pure helpers are tested in `web/dashboard/src/hazards.test.ts`.
 6. EO findings and OSM closures as sources.
 7. Mesh report contract with golden vectors.
 
@@ -302,7 +302,8 @@ Where the build is more specific than, or refines, the text above:
   The scenario covers: lone report, duplicate, corroboration with a watch alert, a same-team pair, a dismissed doubtful
   report, refused fields, operator confirmation, two clear reports closing a hazard, and expiry. "Bad history" weighting
   is not modelled because reporter weighting is not built.
-- **Not yet built:** reporter weighting from confirmed and dismissed reports, the dashboard tool, EO and OSM sources.
+- **Step 5 notes.** The report tool sends only kind, passability, the point the user clicked and a time chosen from a fixed list; it never reads device location. Unverified hazards are drawn faint and always labelled with their tier; the detail panel explains that expired is not clear. A public key sees the coarse view; the route hazard check needs a responder key and says so.
+- **Not yet built:** reporter weighting from confirmed and dismissed reports, EO and OSM sources, mesh report contract.
 
 ## 15. References
 

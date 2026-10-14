@@ -373,7 +373,7 @@ button {
   top: 12px;
   left: 12px;
   width: 300px;
-  max-height: calc(100% - 24px);
+  max-height: calc(100% - 300px); /* leaves room for the legend below */
   overflow-y: auto;
   background: color-mix(in srgb, var(--panel) 96%, transparent);
   border: 1px solid var(--line);
@@ -501,4 +501,117 @@ li.withdel .item {
     right: 12px;
     max-height: 45%;
   }
+}
+
+/* Road hazards (docs/hazards.md): tier colours differ from the GNSS trust colours on purpose. */
+.legend .gap {
+  margin-top: 6px;
+}
+.legend i.dotkey {
+  border-radius: 50%;
+}
+.reportopen {
+  position: absolute;
+  right: 56px;
+  bottom: 28px;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.reportopen:hover {
+  border-color: var(--accent);
+}
+.reportpanel {
+  position: absolute;
+  right: 56px;
+  bottom: 28px;
+  width: 280px;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.reportpanel select,
+.reportpanel button:not(.link) {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.reportpanel button.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.reportpanel button:disabled {
+  opacity: 0.45;
+}
+.reportpanel h2 {
+  font-size: 14px;
+}
+.tier {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-left: 4px solid;
+  background: var(--panel2);
+  border-radius: 4px;
+  font-size: 13px;
+}
+.tier strong {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.decide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.decide select,
+.decide button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.hazardcheck h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}
+.hazlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.hazlist li {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 0 8px;
+}
+.hazlist li .muted {
+  grid-column: 2;
+}
+.hazlist i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 4px;
 }
