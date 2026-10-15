@@ -355,11 +355,32 @@ button {
 @media (max-width: 760px) {
   .app {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 38vh minmax(0, 1fr);
+    grid-template-rows: auto 56vh minmax(0, 1fr);
+  }
+  /* the map comes first on a phone; lists scroll below it */
+  .mapwrap {
+    order: 1;
   }
   .side {
+    order: 2;
     border-right: 0;
-    border-bottom: 1px solid var(--line);
+    border-top: 1px solid var(--line);
+  }
+  .status {
+    gap: 6px 10px;
+    padding: 6px 12px;
+  }
+  .chip.module:not(.present) {
+    display: none; /* absent optional modules are noise on a small screen */
+  }
+  .legend {
+    font-size: 11px;
+    padding: 6px 8px;
+    gap: 2px;
+    bottom: 34px;
+  }
+  .reportopen {
+    bottom: 34px;
   }
   .detail {
     width: auto;
