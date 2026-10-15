@@ -28,6 +28,7 @@ from .routes import (
     nodes,
     reports,
     sim,
+    situation,
     system,
     trust,
     watched,
@@ -101,6 +102,7 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     app.include_router(nodes.router)
     app.include_router(events.router)
     app.include_router(hotspots.router)
+    app.include_router(situation.router)
     app.include_router(trust.router)
     app.include_router(sim.router)
     app.include_router(system.router)

@@ -142,7 +142,7 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | Events | `GET /v1/events?bbox&from&to&class&min_confidence` | Filtered events | responder |
 | Events | `GET /v1/events/{id}` | One event with checks, classifier output, agreeing sources | responder |
 | Events | `GET /v1/events/{id}/evidence-pack` | Report for regulators and NIS2 (JSON; PDF optional) | operator |
-| Situation | `GET /v1/situation?bbox` | Active hotspots, affected area, trust summary | responder |
+| Situation | `GET /v1/situation?bbox` | The current picture: `hotspots` (active count, by kind, the top 10 with severity, confidence, independent sources, centroid), `affected_area` (union of active hotspot source ellipses, GeoJSON, null if none), `trust` (evidence cells counted by state), plus `sources`, `data_age_s` (null with no evidence), `confidence` (mean of active hotspots, else of evidence cells) and `sim`. Derived data only: no node identities or records. No evidence is not an all-clear | responder |
 | Hotspots | `GET /v1/hotspots`, `GET /v1/hotspots/{id}` | Hotspots with source ellipse, timeline, track | responder |
 | Hotspots | `GET /v1/hotspots/{id}/eo-changes` | Copernicus areas of interest | operator |
 | Hotspots | `GET /v1/hotspots/{id}/playbook?asset_type=` | Recommended actions and fallbacks | responder |

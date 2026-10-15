@@ -288,3 +288,42 @@ async def test_records_without_a_fix_are_stored_but_never_localised(client):  # 
     await _run_worker(client)
     hs = (await client.get("/v1/hotspots", headers=hdr(client, "responder"))).json()
     assert hs["count"] == 1
+
+
+async def test_situation_summarises_hotspots_area_and_trust_without_raw_records(client):  # type: ignore[no-untyped-def]
+    empty = (await client.get("/v1/situation", headers=hdr(client, "responder"))).json()
+    assert empty["hotspots"]["active"] == 0 and empty["affected_area"] is None
+    assert empty["trust"] == {"cells": 0, "by_state": {}} and empty["data_age_s"] is None
+    assert empty["confidence"] == 0.0 and empty["sources"] == [
+        "witness_nodes"
+    ]  # no evidence is not "clear"
+    for role in ("public", "reporter"):
+        assert (await client.get("/v1/situation", headers=hdr(client, role))).status_code == 403
+    assert (await client.get("/v1/situation")).status_code == 401
+
+    a, b = await _node(client, "a"), await _node(client, "b", "tbeam")
+    await post(client, packet(rec(seq=1, lat_e7=VARNA[0], lon_e7=VARNA[1]), a), ext="a")
+    await post(
+        client, packet(rec(seq=1, lat_e7=VARNA[0] + 90000, lon_e7=VARNA[1] + 90000), b), ext="b"
+    )
+    await _run_worker(client)
+    got = (await client.get("/v1/situation", headers=hdr(client, "responder"))).json()
+    assert got["hotspots"]["active"] == 1 and got["hotspots"]["by_kind"] == {"jamming": 1}
+    item = got["hotspots"]["items"][0]
+    assert item["independent_sources"] == 2 and item["centroid"]["type"] == "Point"
+    assert got["affected_area"]["type"] in ("Polygon", "MultiPolygon")
+    assert got["trust"]["cells"] > 0 and "JAMMED" in got["trust"]["by_state"]
+    assert got["data_age_s"] is not None and got["data_age_s"] < 120 and got["confidence"] > 0
+    assert got["sim"] is False
+    assert "node_id" not in str(got) and "payload" not in str(got)  # derived data only
+
+    inside = (
+        await client.get("/v1/situation?bbox=27.5,43.0,28.3,43.4", headers=hdr(client, "responder"))
+    ).json()
+    assert inside["hotspots"]["active"] == 1 and inside["bbox"] == [27.5, 43.0, 28.3, 43.4]
+    far = (
+        await client.get("/v1/situation?bbox=23.0,42.0,24.0,43.0", headers=hdr(client, "responder"))
+    ).json()
+    assert far["hotspots"]["active"] == 0 and far["affected_area"] is None
+    bad = await client.get("/v1/situation?bbox=1,2,3", headers=hdr(client, "responder"))
+    assert bad.status_code == 422
