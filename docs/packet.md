@@ -40,7 +40,7 @@ Any other length is rejected.
 | 5 | 2 | tamper |
 | 5 | 1 | mesh present |
 | 5 | 0 | reserved, must be 0 |
-| 6–9 | | latitude, int32, units of 1e-7 degrees, range ±900000000 |
+| 6–9 | | latitude, int32, units of 1e-7 degrees, range ±900000000. Latitude and longitude both 0 mean no position (no GNSS fix): the record is stored, but never localised (no hotspot, no trust cell) |
 | 10–13 | | longitude, int32, units of 1e-7 degrees, range ±1800000000 |
 | 14–17 | | timestamp, uint32 Unix seconds, node clock |
 | 18–19 | | duration, uint16 seconds |

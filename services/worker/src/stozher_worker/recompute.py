@@ -22,7 +22,7 @@ from stozher_api.route_trust import CellInfo, evaluate_route
 from .alerts import Previous, derive_alerts
 from .cells import Cell, build_cells
 from .hotspots import HotspotParams, build_hotspots, reuse_ids
-from .points import EventPoint
+from .points import EventPoint, has_fix
 from .route_alerts import derive
 
 HOTSPOT_LOOKBACK = timedelta(hours=6)
@@ -37,6 +37,7 @@ class Summary:
     cells: int
     alerts: int = 0
     route_alerts: int = 0
+    no_fix: int = 0  # analysed-type events in the window with no position: stored, never localised
 
 
 async def load_points(session: AsyncSession, since: datetime) -> list[EventPoint]:
@@ -79,7 +80,9 @@ async def load_points(session: AsyncSession, since: datetime) -> list[EventPoint
 async def recompute(
     session: AsyncSession, now: datetime, params: HotspotParams | None = None
 ) -> Summary:
-    points = await load_points(session, now - HOTSPOT_LOOKBACK)
+    loaded = await load_points(session, now - HOTSPOT_LOOKBACK)
+    points = [p for p in loaded if has_fix(p.lat, p.lon)]
+    no_fix = len(loaded) - len(points)
     old_events: dict[uuid.UUID, set[uuid.UUID]] = defaultdict(set)
     for hid, eid in (
         await session.execute(select(HotspotEvent.hotspot_id, HotspotEvent.event_id))
@@ -156,7 +159,7 @@ async def recompute(
         )
     routes = await _watched_routes(session, cells, now)
     await session.commit()
-    return Summary(len(points), len(hotspots), len(cells), len(new_alerts), routes)
+    return Summary(len(points), len(hotspots), len(cells), len(new_alerts), routes, no_fix)
 
 
 async def _watched_routes(session: AsyncSession, cells: list[Cell], now: datetime) -> int:

@@ -266,3 +266,25 @@ async def test_a_watched_route_alerts_once_when_trouble_arrives_and_clears_when_
     assert (await client.get("/v1/watched-routes", headers=hdr(client, "responder"))).json()[
         "count"
     ] == 0
+
+
+async def test_records_without_a_fix_are_stored_but_never_localised(client):  # type: ignore[no-untyped-def]
+    a, b = await _node(client, "a", "tbeam"), await _node(client, "b", "tbeam")
+    # a node that has no GNSS fix sends latitude and longitude 0
+    await post(client, packet(rec(seq=1, lat_e7=0, lon_e7=0), a), ext="a")
+    await _run_worker(client)
+    hs = (await client.get("/v1/hotspots", headers=hdr(client, "responder"))).json()
+    assert hs["count"] == 0  # no hotspot at (0, 0)
+    ev = (await client.get("/v1/events", headers=hdr(client, "responder"))).json()
+    assert ev["count"] == 1  # the record is still an event
+    cells = (
+        await client.get(
+            "/v1/trust", params={"lat": 0.0, "lon": 0.0}, headers=hdr(client, "public")
+        )
+    ).json()
+    assert cells["state"] == "UNKNOWN"  # and says nothing about the sea at (0, 0)
+    # a record with a fix still works
+    await post(client, packet(rec(seq=1, lat_e7=VARNA[0], lon_e7=VARNA[1]), b), ext="b")
+    await _run_worker(client)
+    hs = (await client.get("/v1/hotspots", headers=hdr(client, "responder"))).json()
+    assert hs["count"] == 1

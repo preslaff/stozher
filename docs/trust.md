@@ -79,3 +79,9 @@ notice jamming but not spoofing. Code: `services/api/src/stozher_api/route_trust
 Watched-route alerts (`services/worker/route_alerts.py`): `route_affected` when the worst state first
 reaches the watch's level (degraded < jammed < spoofed) or worsens while at it; `route_cleared` when it
 falls back below; each transition once. UNKNOWN never alerts.
+
+## Records without a position
+
+A witness record whose latitude and longitude are both 0 has no GNSS fix. It is stored and shown as an event, but the worker
+never localises it: it makes no hotspot, no trust cell and no alert with coordinates (`stozher_worker.points.has_fix`).
+The count is in the recompute summary (`no_fix`).

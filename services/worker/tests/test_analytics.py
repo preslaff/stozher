@@ -7,7 +7,7 @@ from shapely import wkt
 from stozher_core.trust import TrustState
 from stozher_worker.cells import DISK_K, build_cells
 from stozher_worker.hotspots import HotspotParams, build_hotspots, localize, reuse_ids
-from stozher_worker.points import EventPoint
+from stozher_worker.points import EventPoint, has_fix
 
 NOW = datetime(2026, 11, 28, 10, 0, tzinfo=UTC)
 VARNA = (43.20, 27.91)
@@ -66,6 +66,12 @@ def test_loss_of_reception_makes_a_degraded_cell_and_no_hotspot() -> None:
     assert build_hotspots([loss], NOW) == []
     cells = build_cells([loss], NOW)
     assert cells and {c.state for c in cells} == {TrustState.DEGRADED}
+
+
+def test_a_position_of_zero_zero_means_no_fix() -> None:
+    assert not has_fix(0.0, 0.0)
+    assert has_fix(VARNA[0], VARNA[1])
+    assert has_fix(0.0, 27.9) and has_fix(43.2, 0.0)  # only both zero is "no position"
 
 
 def test_state_active_then_closed() -> None:
