@@ -1,16 +1,22 @@
-.PHONY: up down field migrate test lint sim sim-hazards fw fw-test fw-vectors fw-upload worker api bridge
+.PHONY: up down field kit kit-init kit-build kit-stop migrate test lint sim sim-hazards fw fw-test fw-vectors fw-upload worker api bridge
 
-COMPOSE := docker compose -f infra/compose.yml
 S ?= coastal
 
-up:
-	$(COMPOSE) up -d
+# The database is the local PostgreSQL 16 (no containers). The field kit starts the API, worker and mesh bridge on this laptop.
+up down field:
+	@echo "No containers: the database is the local PostgreSQL. Use 'make kit' (docs/field-kit.md)."
 
-down:
-	$(COMPOSE) down
+kit-init:  # first run: fills missing secrets in infra/.env, creates the bridge and relay keys
+	infra/kit/init.sh
 
-field:
-	$(COMPOSE) -f infra/compose.field.yml up -d
+kit-build:  # the dashboard with a relative API URL, served by the API itself
+	cd web/dashboard && VITE_API_URL= pnpm build
+
+kit:  # MESH_PORT=/dev/serial/by-id/<gateway> (or none); serves http://<this laptop>:8000/
+	infra/kit/run.sh
+
+kit-stop:
+	@if [ -f $${XDG_STATE_HOME:-$$HOME/.local/state}/stozher/kit.pid ]; then kill $$(cat $${XDG_STATE_HOME:-$$HOME/.local/state}/stozher/kit.pid) && echo "stopping the kit"; else echo "the kit is not running"; fi
 
 migrate:
 	cd services/api && uv run alembic upgrade head

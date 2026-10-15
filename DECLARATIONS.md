@@ -25,6 +25,7 @@ Every library, tool, model and dataset used, with licence. Add a row when you ad
 | Vite, Vitest, TypeScript, ESLint (typescript-eslint, react-hooks), Prettier | tooling | MIT / Apache-2.0 | web/dashboard | |
 | OpenStreetMap raster tiles | dataset | ODbL (© OpenStreetMap contributors) | web/dashboard | explicit online option only (`VITE_TILE_URL`), subject to the OSM tile usage policy; the default base map is the local extract below |
 | pmtiles (JavaScript) | library | BSD-3 | web/dashboard | reads the offline base map from one file with HTTP range requests |
+| @types/node | library (types only) | MIT | web/dashboard (dev) | type-checks `vite.config.ts`, which copies MapLibre's worker files into the production build |
 | @protomaps/basemaps | library | BSD-3 | web/dashboard | style layers (dark flavor) for the Protomaps vector tiles |
 | Protomaps basemap build, Bulgaria extract | dataset | ODbL (© OpenStreetMap contributors, Protomaps) | data/basemap (git-ignored), tools/basemap/fetch.sh | vector tiles, zoom 0-14, extracted once from the public daily build with the pmtiles CLI |
 | go-pmtiles CLI 1.31.2 | tool | BSD-3 | tools/basemap/fetch.sh | cuts the extract; used on the developer machine only |

@@ -27,8 +27,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > offline field-kit sync, a dashboard UI for key management (use the admin API or
 > `python -m stozher_api.cli create-key`).
 >
-> Run it: `make migrate`, `make api`, `make worker`, `make sim S=coastal`, `make bridge`, and
-> `pnpm dev` in `web/dashboard` (see `docs/scenario.md`, `docs/mesh.md`). The dev database is the
+> Run it: `make kit` (one command, `docs/field-kit.md`), or by hand `make migrate`, `make api`, `make worker`,
+> `make sim S=coastal`, `make bridge`, and `pnpm dev` in `web/dashboard` (see `docs/scenario.md`, `docs/mesh.md`). The dev database is the
 > user's local PostgreSQL 16, not a container. Read the Technical Specification `.md` for detail
 > beyond this file.
 
@@ -132,7 +132,7 @@ web/dashboard/             React + Vite + TypeScript + MapLibre GL
 firmware/node/             PlatformIO, Seeed XIAO ESP32-S3, Arduino framework
 firmware/lotus_fallback/   reduced build for the kit's Seeeduino Lotus
 tests/vectors/             golden packet vectors (JSON) shared by Python and C++
-infra/                     compose.yml, compose.field.yml, .env.example
+infra/                     kit/ (field-kit scripts), .env.example
 data/                      git-ignored datasets, tiles, cached Copernicus layers
 ```
 
@@ -260,8 +260,8 @@ Anything unsigned or invalid is ignored.
 Create these as Makefile targets early on Friday and keep them working:
 
 ```
-make up            # docker compose -f infra/compose.yml up -d
-make field         # adds infra/compose.field.yml (mesh bridge, ollama, assistant)
+make kit-init      # first run: fill missing secrets in infra/.env, create the bridge and relay keys
+make kit           # field kit: API (serving the dashboard and offline map), worker, mesh bridge (MESH_PORT=/dev/serial/by-id/...)
 make migrate       # alembic upgrade head
 make test          # python tests + golden vectors + web lint
 make sim S=coastal # run the coastal crisis scenario against the local API

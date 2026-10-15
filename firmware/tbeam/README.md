@@ -28,7 +28,7 @@ binaries in `firmware/node/` restore a board.
 | Flag | Meaning |
 |---|---|
 | `STOZHER_BUILD` | the git short hash of this repository (`-DSTOZHER_BUILD=$(git rev-parse --short HEAD)`, unquoted); printed at boot with the detector revision (`stz::kDetectorRev`, bumped on every rule or threshold change), so a log says exactly what runs |
-| `STOZHER_NODE_ID` | the node id registered in the backend (default 1); the master key is the PUBLIC test key until provisioning exists |
+| `STOZHER_NODE_ID` | the node id registered in the backend (default 1); the master key is the PUBLIC test key until provisioning exists. After a flash the Meshtastic radio ID may change: re-bind the node (docs/mesh.md, "After reflashing a device") |
 | `STOZHER_SELFTEST_AT_S=N` | N seconds after boot, feed a synthetic jamming episode; every record built from it is type `test` |
 | `MESHTASTIC_EXCLUDE_BLUETOOTH=1` | Meshtastic's own flag (not ours): leave the Bluetooth stack out. Used on the test board after the stack asserted in `ld_acl.c` and rebooted it (Oct 2026). Image 1.86 MB instead of 2.08 MB. We use no phone app |
 | `STOZHER_EPOCH_LOG_S=N` | log the detector's numbers (C/N0, drop, baseline, jamming indicator, class; no position) every N seconds, for tuning the rules on real data |
