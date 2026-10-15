@@ -1,7 +1,7 @@
 """Node registration and listing (operator)."""
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request
@@ -13,6 +13,7 @@ from ..audit import audit
 from ..auth import Principal, require_role
 from ..models import Node, NodeKey, TransportId
 from ..problems import ApiError
+from ..rebind_service import rebind, unrecognised_senders
 from ..secrets_box import KekMissingError, seal
 
 router = APIRouter(prefix="/v1/nodes")
@@ -124,6 +125,75 @@ async def list_nodes(request: Request, _: Principal = Depends(operator)) -> list
     async with request.app.state.sessionmaker() as session:
         nodes = (await session.execute(select(Node).order_by(Node.id))).scalars().all()
         return [await _out(session, n) for n in nodes]
+
+
+class SenderOut(BaseModel):
+    transport: str
+    external_id: str
+    first_seen: datetime
+    last_seen: datetime
+    count: int
+    candidate_node_id: int | None = Field(
+        description="The one node whose key this sender has proved to hold, if any"
+    )
+    candidate_name: str | None
+
+
+@router.get("/unrecognised-senders", response_model=list[SenderOut])
+async def senders(
+    request: Request,
+    transport: Literal["kineis", "mesh", "direct"] = "mesh",
+    _: Principal = Depends(operator),
+) -> list[SenderOut]:
+    """Radio IDs that sent something we could not place (for example after a reflash), and who they prove to be."""
+    s = request.app.state.settings
+    async with request.app.state.sessionmaker() as session:
+        rows = await unrecognised_senders(
+            session,
+            kek=s.stozher_kek,
+            transport=transport,
+            now=datetime.now(UTC),
+            replay_window_s=s.replay_window_s,
+        )
+    return [SenderOut(**r.__dict__) for r in rows]
+
+
+class RebindIn(BaseModel):
+    transport: Literal["kineis", "mesh", "direct"]
+    external_id: str = Field(min_length=1, max_length=64)
+
+
+class RecoveredOut(BaseModel):
+    status: str
+    reason: str | None
+
+
+class RebindOut(BaseModel):
+    node: NodeOut
+    recovered: list[RecoveredOut]
+
+
+@router.post("/{node_id}/transport-ids/rebind", response_model=RebindOut)
+async def rebind_transport(
+    node_id: int, body: RebindIn, request: Request, p: Principal = Depends(operator)
+) -> RebindOut:
+    """Attach a new transport ID to a node, only if a fresh packet from that ID proves it holds the node's key."""
+    s = request.app.state.settings
+    async with request.app.state.sessionmaker() as session:
+        node, results = await rebind(
+            session,
+            p,
+            node_id=node_id,
+            transport=body.transport,
+            external_id=body.external_id,
+            kek=s.stozher_kek,
+            now=datetime.now(UTC),
+            replay_window_s=s.replay_window_s,
+        )
+        return RebindOut(
+            node=await _out(session, node),
+            recovered=[RecoveredOut(status=a, reason=b) for a, b in results],
+        )
 
 
 @router.get("/{node_id}", response_model=NodeOut)

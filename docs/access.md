@@ -115,7 +115,9 @@ updating this table fails the build.
 | `GET /v1/me` | x | x | x | x | x | x |
 | `GET /v1/nodes` |  |  |  | x | x |  |
 | `POST /v1/nodes` |  |  |  | x | x |  |
+| `GET /v1/nodes/unrecognised-senders` |  |  |  | x | x |  |
 | `GET /v1/nodes/{node_id}` |  |  |  | x | x |  |
+| `POST /v1/nodes/{node_id}/transport-ids/rebind` |  |  |  | x | x |  |
 | `GET /v1/reports` |  | x | x | x | x |  |
 | `POST /v1/reports` |  | x | x | x | x |  |
 | `POST /v1/reports/{report_id}/withdraw` |  | x | x | x | x |  |

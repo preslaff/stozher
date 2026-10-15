@@ -135,6 +135,8 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | Ingest | `POST /v1/ingest/direct` | Records over USB, Wi-Fi or mobile | system |
 | Ingest | `POST /v1/ingest/sim` | Simulator records (stored with `kind = sim`) | system |
 | Nodes | `POST /v1/nodes`, `GET /v1/nodes`, `GET /v1/nodes/{id}` | Register (surveyed position, kind, transport IDs); list; status and reliability | operator |
+| Nodes | `GET /v1/nodes/unrecognised-senders?transport=mesh` | Radio IDs that sent something we could not place (for example after a reflash), with the one node each proves to be, if any. No payloads | operator |
+| Nodes | `POST /v1/nodes/{id}/transport-ids/rebind` | Attach a new transport ID to the node, only when a fresh packet from that ID proves, by its tag, that the sender holds the node's key; recovers the packets that proved it. Errors: `no-proof` (409), `id-in-use` (409), `sim-node` (409). Audited (`node.rebind_transport`) | operator |
 | Events | `GET /v1/events?bbox&from&to&class&min_confidence` | Filtered events | responder |
 | Events | `GET /v1/events/{id}` | One event with checks, classifier output, agreeing sources | responder |
 | Events | `GET /v1/events/{id}/evidence-pack` | Report for regulators and NIS2 (JSON; PDF optional) | operator |

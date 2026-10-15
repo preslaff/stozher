@@ -20,6 +20,25 @@ example `!a1b2c3d4`). Register the witness node with transport `mesh` and that `
 The bridge forwards the sender's ID; the API resolves the node and the 4-byte tag proves the sender,
 so a stranger relaying the same bytes is rejected (`unknown_transport_id` or `bad_tag`).
 
+### After reflashing a device
+
+Flashing a board can give it a **new Meshtastic ID** (the a4b0 test board went from `!bdf0a4b0` to `!0b533538`). Its records are then
+rejected as `unknown_transport_id` until the node is attached to the new ID. There is no database edit and no free
+registration for this: the node's key is the proof.
+
+1. Let the device send a packet that reaches the API (the self-test after boot, an event or a heartbeat). It is rejected, but stored.
+2. `GET /v1/nodes/unrecognised-senders` (operator) lists the new ID and, as `candidate_node_id`, the node whose key the packet's tag
+   verifies under. The dashboard shows the same list with a **Bind** button.
+3. `POST /v1/nodes/{id}/transport-ids/rebind` with `{"transport": "mesh", "external_id": "!0b533538"}` replaces the node's old
+   mesh ID, writes an audit entry, and re-ingests the packets that proved it, so they are not lost.
+
+What the API checks, all server side: a named operator (or an operator-role key); a stored packet from that ID whose tag verifies for this
+node's key (a device without the key cannot make one); the packet arrived within the replay window and within 24 hours; its sequence number was not
+already delivered (a copy of an old packet is no proof); the ID does not belong to another node; the node is not simulated.
+Limit: someone who captured a packet that never reached us could replay it from their own radio within the window and make
+that ID a candidate. That only lets them repeat that packet (the sequence rules still apply), and an operator confirms the bind, but check
+that the candidate is what you expect before pressing Bind.
+
 ## Run
 
 ```
