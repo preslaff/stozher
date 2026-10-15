@@ -11,8 +11,10 @@ import type {
   MinLevel,
   NodeInfo,
   Passability,
+  RebindResult,
   RouteTrust,
   TrustProps,
+  UnknownSender,
   WatchedRouteItem,
 } from './types'
 
@@ -62,6 +64,12 @@ export function makeApi(key: string, base: string = API_URL) {
     hotspot: (id: string) => get<HotspotDetail>(`/v1/hotspots/${id}`),
     alerts: () => get<ListResponse<Alert>>('/v1/alerts?limit=50'),
     nodes: () => get<NodeInfo[]>('/v1/nodes'),
+    unknownSenders: () => get<UnknownSender[]>('/v1/nodes/unrecognised-senders?transport=mesh'),
+    rebind: (nodeId: number, transport: string, externalId: string) =>
+      send<RebindResult>('POST', `/v1/nodes/${nodeId}/transport-ids/rebind`, {
+        transport,
+        external_id: externalId,
+      }),
     trustRoute: (coordinates: number[][], bufferM: number) =>
       send<RouteTrust>('POST', `/v1/trust/route?buffer_m=${bufferM}`, {
         type: 'LineString',

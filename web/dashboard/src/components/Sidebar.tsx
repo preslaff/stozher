@@ -1,6 +1,14 @@
 import { ageText, LEVEL_COLOR, sinceText, TRUST_COLOR } from '../style'
 import { KIND_LABEL, PASSABILITY_LABEL, TIER_COLOR, tierCounts } from '../hazards'
-import type { Alert, Hazard, Hotspot, WatchedRouteItem } from '../types'
+import type {
+  Alert,
+  Hazard,
+  Hotspot,
+  RebindResult,
+  UnknownSender,
+  WatchedRouteItem,
+} from '../types'
+import { SendersPanel } from './SendersPanel'
 
 interface Props {
   alerts: Alert[]
@@ -15,6 +23,9 @@ interface Props {
   onPickHotspot: (h: Hotspot) => void
   onPickRoute: (w: WatchedRouteItem) => void
   onDeleteRoute: (w: WatchedRouteItem) => void
+  senders: UnknownSender[]
+  canBind: boolean
+  onBind: (s: UnknownSender) => Promise<RebindResult | null>
 }
 
 export function Sidebar({
@@ -30,11 +41,15 @@ export function Sidebar({
   onPickHotspot,
   onPickRoute,
   onDeleteRoute,
+  senders,
+  canBind,
+  onBind,
 }: Props) {
   const active = hotspots.filter((h) => h.state === 'active')
   const closed = hotspots.filter((h) => h.state === 'closed')
   return (
     <aside className="side">
+      <SendersPanel senders={senders} canBind={canBind} now={now} onBind={onBind} />
       <section>
         <h2>
           Alerts <span className="count">{alerts.length}</span>

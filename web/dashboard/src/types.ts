@@ -46,6 +46,22 @@ export interface NodeInfo {
   position: Point | null
 }
 
+/** A radio ID that sent something we could not place, for example after a reflash (docs/mesh.md). */
+export interface UnknownSender {
+  transport: string
+  external_id: string
+  first_seen: string
+  last_seen: string
+  count: number
+  candidate_node_id: number | null
+  candidate_name: string | null
+}
+
+export interface RebindResult {
+  node: NodeInfo
+  recovered: { status: string; reason: string | null }[]
+}
+
 export interface Health {
   status: string
   db: string

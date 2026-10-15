@@ -11,6 +11,7 @@ import type {
   HotspotDetail,
   NodeInfo,
   TrustProps,
+  UnknownSender,
   WatchedRouteItem,
 } from './types'
 
@@ -28,6 +29,7 @@ export function useDashboard(key: string | null) {
   const [hotspots, setHotspots] = useState<Hotspot[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [nodes, setNodes] = useState<NodeInfo[]>([])
+  const [senders, setSenders] = useState<UnknownSender[]>([])
   const [watched, setWatched] = useState<WatchedRouteItem[]>([])
   const [hazards, setHazards] = useState<Hazard[]>([])
   const [selectedHazardId, setSelectedHazardId] = useState<string | null>(null)
@@ -43,19 +45,21 @@ export function useDashboard(key: string | null) {
 
   const loadState = useCallback(async () => {
     if (!api) return
-    const [h, hs, al, ns, wr, hz] = await Promise.allSettled([
+    const [h, hs, al, ns, wr, hz, us] = await Promise.allSettled([
       api.health(),
       api.hotspots(),
       api.alerts(),
       api.nodes(),
       api.watchedRoutes(),
       api.hazards(),
+      api.unknownSenders(),
     ])
     if (h.status === 'fulfilled') setHealth(h.value)
     if (hs.status === 'fulfilled') setHotspots(hs.value.items)
     else setError(hs.reason instanceof Error ? hs.reason.message : 'cannot load hotspots')
     if (al.status === 'fulfilled') setAlerts(al.value.items)
     setNodes(ns.status === 'fulfilled' ? ns.value : []) // operators only; absent otherwise
+    setSenders(us.status === 'fulfilled' ? us.value : []) // operators only; absent otherwise
     setWatched(wr.status === 'fulfilled' ? wr.value.items : []) // responders and above
     setHazards(hz.status === 'fulfilled' ? hz.value.items : []) // optional module: absent is fine
     if (hs.status === 'fulfilled') {
@@ -160,6 +164,15 @@ export function useDashboard(key: string | null) {
     },
     [api, loadState],
   )
+  const bindSender = useCallback(
+    async (s: UnknownSender) => {
+      if (!api || s.candidate_node_id === null) return null
+      const result = await api.rebind(s.candidate_node_id, s.transport, s.external_id)
+      await loadState()
+      return result
+    },
+    [api, loadState],
+  )
   const submitReport = useCallback(
     async (r: Parameters<NonNullable<typeof api>['report']>[0]) => {
       if (!api) return
@@ -177,6 +190,8 @@ export function useDashboard(key: string | null) {
     selectedHazard,
     setSelectedHazardId,
     decide,
+    senders,
+    bindSender,
     submitReport,
     gridVersion,
     watched,

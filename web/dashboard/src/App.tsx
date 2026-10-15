@@ -136,6 +136,9 @@ export default function App() {
         onPickHotspot={pickHotspot}
         onPickRoute={pickRoute}
         onDeleteRoute={(w) => void d.deleteWatch(w.id)}
+        senders={d.senders}
+        canBind={canDecide}
+        onBind={d.bindSender}
       />
       <div className="mapwrap">
         <MapView
