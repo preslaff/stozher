@@ -422,3 +422,41 @@ class ModuleHeartbeat(Base):
     module: Mapped[str] = mapped_column(String(32), primary_key=True)
     last_seen: Mapped[datetime] = mapped_column(TS, server_default=func.now())
     info: Mapped[Any] = mapped_column(JSONB, nullable=True)
+
+
+class Webhook(Base):
+    """A consumer's push subscription (docs/api.md section 6). The secret is sealed with the KEK and shown once."""
+
+    __tablename__ = "webhooks"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    url: Mapped[str] = mapped_column(Text)
+    events: Mapped[Any] = mapped_column(JSONB)  # alert, hotspot, trust_change, route
+    bbox: Mapped[Any] = mapped_column(JSONB, nullable=True)  # [minLon, minLat, maxLon, maxLat]
+    min_level: Mapped[str] = mapped_column(String(16), default="info")
+    include_sim: Mapped[bool] = mapped_column(Boolean, default=False)
+    secret_enc: Mapped[bytes] = mapped_column(LargeBinary)
+    created_by: Mapped[str] = mapped_column(String(32))
+    last_alert_id: Mapped[int] = mapped_column(
+        BigInteger, default=0
+    )  # alerts up to this id are dealt with
+    created_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+
+
+class WebhookDelivery(Base):
+    """One alert for one webhook, with its retry state. The id is the delivery id the consumer sees."""
+
+    __tablename__ = "webhook_deliveries"
+    __table_args__ = (UniqueConstraint("webhook_id", "alert_id"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    webhook_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("webhooks.id", ondelete="CASCADE"))
+    alert_id: Mapped[int] = mapped_column(BigInteger)
+    event: Mapped[str] = mapped_column(String(16))
+    state: Mapped[str] = mapped_column(String(16), default="pending")  # pending, ok, failed
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(TS)
+    last_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    delivered_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)

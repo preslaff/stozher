@@ -5,10 +5,12 @@ import logging
 import os
 from datetime import UTC, datetime
 
+import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from stozher_api.config import get_settings
 from stozher_api.hazard_service import reconcile
 from stozher_api.heartbeat import beat
+from stozher_api.webhook_service import deliver_due, dispatch
 
 from .hazard_alerts import watch_hazards
 from .queue import Handler, enqueue, run_pending
@@ -17,6 +19,7 @@ from .recompute import recompute
 log = logging.getLogger("stozher.worker")
 PERIOD_S = 60.0
 POLL_S = 1.0
+WEBHOOK_PERIOD_S = 10.0  # new alerts are matched to webhooks and due deliveries are sent this often
 BEAT_S = 15.0  # tells /health the worker is alive even when no job ran lately
 
 
@@ -35,7 +38,20 @@ async def _handle_hazards(session: AsyncSession, now: datetime) -> object:
     return summary
 
 
-HANDLERS: dict[str, Handler] = {"recompute": _handle_recompute, "hazards": _handle_hazards}
+async def _handle_webhooks(session: AsyncSession, now: datetime) -> object:
+    created = await dispatch(session, now)
+    async with httpx.AsyncClient(follow_redirects=False) as client:
+        stats = await deliver_due(session, now, kek=get_settings().stozher_kek, client=client)
+    if created or any(stats.values()):
+        log.info("webhooks: %d new, %s", created, stats)
+    return stats
+
+
+HANDLERS: dict[str, Handler] = {
+    "recompute": _handle_recompute,
+    "hazards": _handle_hazards,
+    "webhooks": _handle_webhooks,
+}
 
 
 async def run() -> None:
@@ -43,6 +59,7 @@ async def run() -> None:
     maker = async_sessionmaker(engine, expire_on_commit=False)
     last_periodic = 0.0
     last_beat = -BEAT_S
+    last_webhooks = -WEBHOOK_PERIOD_S
     loop = asyncio.get_running_loop()
     while True:
         if loop.time() - last_periodic >= PERIOD_S:
@@ -50,6 +67,10 @@ async def run() -> None:
                 await enqueue(session, "recompute", datetime.now(UTC))
                 await enqueue(session, "hazards", datetime.now(UTC))
             last_periodic = loop.time()
+        if loop.time() - last_webhooks >= WEBHOOK_PERIOD_S:
+            async with maker() as session:
+                await enqueue(session, "webhooks", datetime.now(UTC))
+            last_webhooks = loop.time()
         if loop.time() - last_beat >= BEAT_S:
             async with maker() as session:
                 await beat(session, "worker")

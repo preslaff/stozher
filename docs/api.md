@@ -243,8 +243,23 @@ Two ways, both deterministic and independent of the assistant:
   `X-Stozher-Delivery` (unique id) and `X-Stozher-Signature` (HMAC-SHA256 of the raw body
   with the secret, hex). Consumers verify the signature and deduplicate by delivery id.
   Failed deliveries retry with exponential backoff for up to 24 h; the outcome per
-  channel is recorded in `alerts.delivered`. Webhook targets must be https and must not
+  channel is recorded in `alerts.delivered` (`webhook:<id>`: `pending`, `ok`, `failed`). Webhook targets must be https and must not
   resolve to private address ranges.
+
+  Details of the implementation (`webhook_logic.py`, `webhook_service.py`, run by the worker every 10 s):
+  - **Registration** (`POST /v1/webhooks`, operator, audited): `url`, `events` (`alert` = every alert; `hotspot` = `hotspot_*` alerts;
+    `route` = route and route-hazard alerts; `trust_change` is reserved, nothing raises it yet), optional `bbox` (an alert is sent if its
+    area touches the box), `min_level` (`info`, `warning`, `critical`), `include_sim` (default false: simulated alerts are not sent;
+    when sent they carry `sim: true`). The `secret` (`whsec_...`) is shown once; only a sealed copy is stored. Limit 50 webhooks.
+    `GET` lists them (never the secret) with delivery counts; `DELETE` removes one and its pending deliveries.
+  - **Only new alerts:** a webhook gets alerts raised after it was registered, not a backlog.
+  - **Delivery:** body `{"delivery_id", "event", "alert"}` (the alert as in `GET /v1/alerts`), 5 s timeout, no redirects. The signature is
+    HMAC-SHA256 over the raw body with the secret string as the key. The delivery id is the same on every retry, so consumers deduplicate on it.
+  - **Retries:** after a failure (a non-2xx answer, a timeout or a connection error) at +10 s, +30 s, +2 min, +10 min, +1 h, +4 h, +12 h;
+    then the delivery is `failed`. About 17 hours in all, inside the 24 h limit.
+  - **Address rules:** `https` only, no credentials, no `localhost` or `.local` names, and every resolved address must be globally
+    routable (no loopback, private, link-local, multicast or reserved ranges). Checked at registration and again right before each
+    delivery. Limit: between that check and the connection a name could still change; connecting by the checked address is not done yet.
 
 Webhook payloads for `public`-visible changes (`trust_change`) contain the same coarse
 fields as the trust endpoints.
@@ -278,7 +293,7 @@ client's device.
 | `buffer_m` | Corridor half-width, 50-2000 (default 200). A corridor of k cells (`round(buffer_m / 920)`) means the worst cell within it counts |
 | `hazard_min_tier` | Lowest road-hazard tier that alerts (`unverified` < `corroborated` default < `confirmed`); see `docs/hazards.md` section 8 |
 | `min_level` | Lowest state that alerts: `degraded` (default) < `jammed` < `spoofed`; `UNKNOWN` never alerts |
-| `notify` | Only `{"sse": true}` today (the alert stream). Webhook ids and mesh delivery are refused with 422 until they exist; mesh gateways relay route alerts by the global relay rules |
+| `notify` | Only `{"sse": true}` today (the alert stream). Webhook ids and mesh delivery are refused with 422: webhooks are owned by operators and receive route alerts by subscribing to the `route` event (section 6); mesh gateways relay route alerts by the global relay rules |
 | `expires_at` | Needs a time zone; default now + 24 h, at most now + 7 days, must be in the future. Expired watches are deleted by the worker |
 | `asset_type` | Optional, at most 32 characters; reserved for playbook text |
 

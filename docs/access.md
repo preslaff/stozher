@@ -135,6 +135,9 @@ updating this table fails the build.
 | `DELETE /v1/watched-routes/{watch_id}` |  |  | x | x | x |  |
 | `GET /v1/watched-routes/{watch_id}` |  |  | x | x | x |  |
 | `PATCH /v1/watched-routes/{watch_id}` |  |  | x | x | x |  |
+| `GET /v1/webhooks` |  |  |  | x | x |  |
+| `POST /v1/webhooks` |  |  |  | x | x |  |
+| `DELETE /v1/webhooks/{webhook_id}` |  |  |  | x | x |  |
 <!-- access-matrix:end -->
 
 Not in the matrix because they are not built yet: the `public` and `reporter` hazard views, the along-route

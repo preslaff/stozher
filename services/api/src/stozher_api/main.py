@@ -32,6 +32,7 @@ from .routes import (
     system,
     trust,
     watched,
+    webhooks,
 )
 from .signing import load_signer
 
@@ -109,6 +110,7 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     app.include_router(alerts.router)
     app.include_router(control.router)
     app.include_router(watched.router)
+    app.include_router(webhooks.router)
     app.include_router(admin.router)
     app.include_router(reports.router)
     app.include_router(hazards.router)

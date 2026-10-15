@@ -23,8 +23,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > ESP32-S3 and Leonardo builds compile. The mesh uplink (to a stock Meshtastic T-Beam) is built on the host too. Nothing has run against a real KIM1 (waiting for the
 > KIM1), nor against a real GNSS receiver.
 >
-> **Not built yet:** `situation`, webhooks, Kinéis adapter, assistant,
-> offline field-kit sync, a dashboard UI for key management (use the admin API or
+> Also built: `GET /v1/situation`, `PATCH /v1/nodes/{id}`, webhooks (signed, retried, https and public addresses only), re-binding a reflashed
+> device to its node with proof (`docs/mesh.md`), module heartbeats, and the field kit (`make kit`, `docs/field-kit.md`).
+>
+> **Not built yet:** Kinéis adapter (the ground-segment format is unknown), assistant, field-kit sync with the cloud,
+> an Android witness app, a dashboard UI for key management (use the admin API or
 > `python -m stozher_api.cli create-key`).
 >
 > Run it: `make kit` (one command, `docs/field-kit.md`), or by hand `make migrate`, `make api`, `make worker`,
