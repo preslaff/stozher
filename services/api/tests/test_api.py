@@ -257,3 +257,51 @@ async def test_the_worker_heartbeat_makes_the_worker_present(client):  # type: i
     async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
         await beat(s, "worker")
     assert (await client.get("/health")).json()["modules"]["worker"] == "present"
+
+
+async def test_patch_node_renames_retires_and_surveys_and_never_touches_kind_or_keys(client):  # type: ignore[no-untyped-def]
+    node = await register(client, kind="expert", ext="p1")
+    url = f"/v1/nodes/{node}"
+    op = hdr(client, "operator")
+    r = await client.patch(url, headers=op, json={"name": "Quay 3", "mode": "fixed"})
+    assert r.status_code == 200 and r.json()["name"] == "Quay 3" and r.json()["kind"] == "expert"
+    r = await client.patch(url, headers=op, json={"surveyed_lat": 43.2, "surveyed_lon": 27.9})
+    assert r.json()["position"]["type"] == "Point"
+    r = await client.patch(url, headers=op, json={"surveyed_lat": None, "surveyed_lon": None})
+    assert r.status_code == 200 and r.json()["position"] is None  # explicit null clears
+    # what may not change, and what is malformed
+    for bad in (
+        {"kind": "phone"},
+        {"master_key_hex": "00" * 16},
+        {"transport_ids": []},
+        {"id": 5},
+        {},
+        {"name": None},
+        {"status": "gone"},
+        {"surveyed_lat": 43.2},
+        {"surveyed_lat": 43.2, "surveyed_lon": None},
+    ):
+        assert (await client.patch(url, headers=op, json=bad)).status_code == 422, bad
+    assert (
+        await client.patch("/v1/nodes/999999", headers=op, json={"name": "x"})
+    ).status_code == 404
+    for role in ("responder", "reporter", "public", "system"):
+        assert (
+            await client.patch(url, headers=hdr(client, role), json={"name": "x"})
+        ).status_code == 403
+    # retiring stops ingest: the node is inactive, its events stay
+    good = packet(rec(seq=1), node_id=node)
+    assert (await post(client, good, ext="p1")).json()["status"] == "accepted"
+    r = await client.patch(url, headers=op, json={"status": "retired"})
+    assert r.json()["status"] == "retired"
+    out = (await post(client, packet(rec(seq=2), node_id=node), ext="p1")).json()
+    assert out["status"] == "rejected" and out["reason"] == "node_inactive"
+    await client.patch(url, headers=op, json={"status": "active"})
+    assert (await post(client, packet(rec(seq=3), node_id=node), ext="p1")).json()[
+        "status"
+    ] == "accepted"
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        from stozher_api.models import AuditLog
+
+        acts = (await s.execute(select(AuditLog.action, AuditLog.target))).all()
+    assert sum(1 for a, _ in acts if a == "node.update") == 5

@@ -33,7 +33,9 @@ def test_only_a_short_known_list_of_endpoints_needs_no_role() -> None:
 def test_the_system_role_reaches_only_machine_endpoints() -> None:
     for path, method, need in operations(app()):
         if need not in ("open", "key") and allowed(need, "system"):
-            assert path.startswith(("/v1/ingest/", "/v1/acks", "/v1/system/heartbeat")), f"system may call {method} {path}"
+            assert path.startswith(("/v1/ingest/", "/v1/acks", "/v1/system/heartbeat")), (
+                f"system may call {method} {path}"
+            )
 
 
 def test_every_role_is_a_column_and_the_admin_reaches_everything_a_human_role_can() -> None:

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
@@ -194,6 +194,66 @@ async def rebind_transport(
             node=await _out(session, node),
             recovered=[RecoveredOut(status=a, reason=b) for a, b in results],
         )
+
+
+class NodePatch(BaseModel):
+    """Change what a node is called, whether it is in service, and where a fixed node was surveyed. Never its kind or keys."""
+
+    model_config = ConfigDict(
+        extra="forbid"
+    )  # kind, keys and transport IDs have their own, stricter routes
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    status: Literal["active", "retired"] | None = None
+    mode: Literal["fixed", "mobile"] | None = None
+    surveyed_lat: float | None = Field(default=None, ge=-90, le=90)
+    surveyed_lon: float | None = Field(default=None, ge=-180, le=180)
+
+    @model_validator(mode="after")
+    def _position_is_a_pair(self) -> "NodePatch":
+        sent = self.model_fields_set
+        if ("surveyed_lat" in sent) != ("surveyed_lon" in sent):
+            raise ValueError(
+                "send surveyed_lat and surveyed_lon together (both null clears the position)"
+            )
+        if ("surveyed_lat" in sent) and (
+            (self.surveyed_lat is None) != (self.surveyed_lon is None)
+        ):
+            raise ValueError("surveyed_lat and surveyed_lon must both be numbers or both be null")
+        for field in ("name", "status", "mode"):
+            if field in sent and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
+
+@router.patch("/{node_id}", response_model=NodeOut)
+async def patch_node(
+    node_id: int, body: NodePatch, request: Request, p: Principal = Depends(operator)
+) -> NodeOut:
+    """A retired node is rejected at ingest (`node_inactive`); its events stay. Explicit nulls clear the surveyed position."""
+    sent = body.model_fields_set
+    if not sent:
+        raise ApiError(422, "empty-patch", "Nothing to change")
+    async with request.app.state.sessionmaker() as session:
+        node = await session.get(Node, node_id)
+        if node is None:
+            raise ApiError(404, "not-found", "Node not found")
+        changed: list[str] = []
+        for field in ("name", "status", "mode"):
+            if field in sent and getattr(body, field) != getattr(node, field):
+                setattr(node, field, getattr(body, field))
+                changed.append(field)
+        if "surveyed_lat" in sent:
+            node.surveyed_position = (
+                None
+                if body.surveyed_lat is None or body.surveyed_lon is None
+                else func.ST_SetSRID(func.ST_MakePoint(body.surveyed_lon, body.surveyed_lat), 4326)
+            )
+            changed.append("surveyed_position")
+        if changed:
+            session.add(audit(p, "node.update", f"{node_id} {','.join(changed)}"[:64]))
+        await session.commit()
+        await session.refresh(node)
+        return await _out(session, node)
 
 
 @router.get("/{node_id}", response_model=NodeOut)
