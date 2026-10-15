@@ -31,16 +31,17 @@ echo "migrating the database..."
 
 echo $$ >"$STATE/kit.pid"
 pids=()
-stop() { trap - INT TERM EXIT; for p in "${pids[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null || true; done; rm -f "$STATE/kit.pid"; }
+# each part runs in its own process group (setsid), so stopping it also stops the processes it started (uv, sg, python)
+stop() { trap - INT TERM EXIT; for p in "${pids[@]:-}"; do [ -n "$p" ] && { kill -- "-$p" 2>/dev/null || kill "$p" 2>/dev/null || true; }; done; rm -f "$STATE/kit.pid"; }
 trap stop INT TERM EXIT
 
-STOZHER_DASHBOARD_DIR="$DASH" uv run uvicorn --factory stozher_api.main:app_factory --host "$HOST" --port "$PORT" >"$STATE/api.log" 2>&1 &
+STOZHER_DASHBOARD_DIR="$DASH" setsid uv run uvicorn --factory stozher_api.main:app_factory --host "$HOST" --port "$PORT" >"$STATE/api.log" 2>&1 &
 pids+=($!)
-uv run python -m stozher_worker >"$STATE/worker.log" 2>&1 &
+setsid uv run python -m stozher_worker >"$STATE/worker.log" 2>&1 &
 pids+=($!)
 if [ "$MESH_PORT" != "none" ]; then
   cmd="uv run --package stozher-mesh-bridge --extra radio python -m mesh_bridge --api http://127.0.0.1:$PORT --port '$MESH_PORT' run --health-port ${BRIDGE_HEALTH_PORT:-8766}"
-  if id -nG | tr ' ' '\n' | grep -qx dialout; then bash -c "$cmd" >"$STATE/bridge.log" 2>&1 & else sg dialout -c "$cmd" >"$STATE/bridge.log" 2>&1 & fi
+  if id -nG | tr ' ' '\n' | grep -qx dialout; then setsid bash -c "$cmd" >"$STATE/bridge.log" 2>&1 & else setsid sg dialout -c "$cmd" >"$STATE/bridge.log" 2>&1 & fi
   pids+=($!)
 fi
 
