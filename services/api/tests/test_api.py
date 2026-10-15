@@ -187,3 +187,73 @@ async def test_sim_and_live_nodes_cannot_cross_transports(client):  # type: igno
     sim_id = await register(client, kind="sim", ext="sim-9", transport="direct")
     r = await post(client, packet(rec(seq=1), node_id=sim_id), path="direct", ext="sim-9")
     assert r.json()["reason"] == "sim_mismatch"
+
+
+async def test_the_api_can_serve_the_built_dashboard_with_range_requests(database, tmp_path):  # type: ignore[no-untyped-def]
+    """A field kit serves the dashboard and the offline map from the API's own origin (docs/field-kit.md)."""
+    from sqlalchemy.pool import NullPool
+    from stozher_api.config import Settings
+    from stozher_api.main import create_app
+
+    (tmp_path / "basemap").mkdir()
+    (tmp_path / "index.html").write_text("<!doctype html><title>kit</title>")
+    blob = bytes(range(256)) * 64  # 16 KiB stands in for the map file
+    (tmp_path / "basemap" / "map.pmtiles").write_bytes(blob)
+    settings = Settings(
+        database_url=database, stozher_kek="ab" * 32, stozher_dashboard_dir=str(tmp_path)
+    )
+    app = create_app(settings, poolclass=NullPool)
+    async with app.router.lifespan_context(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+            page = await c.get("/")
+            assert page.status_code == 200 and "<title>kit</title>" in page.text
+            part = await c.get("/basemap/map.pmtiles", headers={"Range": "bytes=100-199"})
+            assert part.status_code == 206 and part.content == blob[100:200]
+            assert part.headers["content-range"] == f"bytes 100-199/{len(blob)}"
+            assert (await c.get("/health")).json()["db"] == "ok"  # the API routes still win
+            assert (await c.get("/v1/me")).status_code == 401
+
+
+async def test_modules_report_present_from_heartbeats_and_absent_when_stale(client):  # type: ignore[no-untyped-def]
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+    from stozher_api.models import ModuleHeartbeat
+
+    async def modules() -> dict[str, str]:
+        return (await client.get("/health")).json()["modules"]  # type: ignore[no-any-return]
+
+    assert (await modules())["mesh_bridge"] == "absent"
+    beat = {"module": "mesh_bridge", "info": {"radio_connected": True, "node_id": "!604e1da4"}}
+    for role in ("operator", "responder", "public"):  # only the machine lane may report
+        r = await client.post("/v1/system/heartbeat", headers=hdr(client, role), json=beat)
+        assert r.status_code == 403, role
+    assert (await client.post("/v1/system/heartbeat", json=beat)).status_code == 401
+    bad = {"module": "worker", "info": {}}  # the worker beats through the database, not the API
+    r = await client.post("/v1/system/heartbeat", headers=hdr(client, "system"), json=bad)
+    assert r.status_code == 422
+    r = await client.post("/v1/system/heartbeat", headers=hdr(client, "system"), json=beat)
+    assert r.status_code == 204
+    assert (await modules())["mesh_bridge"] == "present"
+
+    no_radio = {"module": "mesh_bridge", "info": {"radio_connected": False}}
+    await client.post("/v1/system/heartbeat", headers=hdr(client, "system"), json=no_radio)
+    assert (await modules())["mesh_bridge"] == "absent"  # alive but no radio is not a bridge
+
+    await client.post("/v1/system/heartbeat", headers=hdr(client, "system"), json=beat)
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        await s.execute(
+            update(ModuleHeartbeat).values(last_seen=datetime.now(UTC) - timedelta(minutes=5))
+        )
+        await s.commit()
+    assert (await modules())["mesh_bridge"] == "absent"  # silent for minutes
+
+
+async def test_the_worker_heartbeat_makes_the_worker_present(client):  # type: ignore[no-untyped-def]
+    from stozher_api.heartbeat import beat
+
+    assert (await client.get("/health")).json()["modules"]["worker"] == "absent"
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        await beat(s, "worker")
+    assert (await client.get("/health")).json()["modules"]["worker"] == "present"

@@ -3,11 +3,13 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Request
 from sqlalchemy import func, select, text
 
+from ..heartbeat import present_modules
 from ..models import Job
 
 router = APIRouter()
 
-# Optional modules report present/absent; none of them are wired yet.
+# Optional modules report present/absent. The mesh bridge, worker, Kinéis adapter and assistant send heartbeats
+# (`module_heartbeats`); ack signing is present when the key is configured; Copernicus is not wired yet.
 OPTIONAL_MODULES = (
     "ack_signing",
     "mesh_bridge",
@@ -30,6 +32,12 @@ async def health(request: Request) -> dict[str, object]:
     if request.app.state.signer is not None:
         modules["ack_signing"] = "present"
     try:
+        async with request.app.state.sessionmaker() as session:
+            for m in await present_modules(session, datetime.now(UTC)):
+                modules[m] = "present"
+    except Exception:
+        pass
+    try:  # a worker that predates heartbeats still counts when it finished a job lately
         async with request.app.state.sessionmaker() as session:
             last = (
                 await session.execute(select(func.max(Job.finished_at)).where(Job.state == "done"))

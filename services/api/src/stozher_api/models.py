@@ -412,3 +412,13 @@ class HazardHistory(Base):
     event: Mapped[str] = mapped_column(String(16))  # created, tier, status, passability, decision
     value: Mapped[str] = mapped_column(String(24))
     source: Mapped[str] = mapped_column(String(16))  # community, operator, system
+
+
+class ModuleHeartbeat(Base):
+    """The last time an optional module said it was alive (health shows present or absent from this)."""
+
+    __tablename__ = "module_heartbeats"
+
+    module: Mapped[str] = mapped_column(String(32), primary_key=True)
+    last_seen: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    info: Mapped[Any] = mapped_column(JSONB, nullable=True)

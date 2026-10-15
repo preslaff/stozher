@@ -12,6 +12,7 @@ import httpx
 from .acks import AckPusher
 from .forwarder import Forwarder
 from .health import serve_health
+from .heartbeat import HeartbeatPusher
 from .protocol import MeshText
 from .radio import Radio
 from .relay import AlertRelay
@@ -141,7 +142,16 @@ async def run_bridge(
         }
 
     server = await serve_health(health_port, snapshot) if health_port else None
-    tasks = [asyncio.create_task(forwarder.run()), asyncio.create_task(supervisor.run())]
+    beats = HeartbeatPusher(
+        http,
+        system_key,
+        lambda: {"radio_connected": supervisor.alive, "node_id": supervisor.node_id},
+    )
+    tasks = [
+        asyncio.create_task(forwarder.run()),
+        asyncio.create_task(supervisor.run()),
+        asyncio.create_task(beats.run()),
+    ]
     if relay:
         tasks.append(asyncio.create_task(relay.run()))
     if acks:

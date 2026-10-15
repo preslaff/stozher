@@ -1,9 +1,11 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, select
 
 from . import problems
@@ -26,6 +28,7 @@ from .routes import (
     nodes,
     reports,
     sim,
+    system,
     trust,
     watched,
 )
@@ -100,12 +103,22 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     app.include_router(hotspots.router)
     app.include_router(trust.router)
     app.include_router(sim.router)
+    app.include_router(system.router)
     app.include_router(alerts.router)
     app.include_router(control.router)
     app.include_router(watched.router)
     app.include_router(admin.router)
     app.include_router(reports.router)
     app.include_router(hazards.router)
+    dashboard = Path(settings.stozher_dashboard_dir) if settings.stozher_dashboard_dir else None
+    if dashboard is not None:
+        if (dashboard / "index.html").is_file():
+            # last, so every /v1 and /health route wins; Starlette answers Range requests (the offline map file)
+            app.mount("/", StaticFiles(directory=dashboard, html=True), name="dashboard")
+        else:
+            logging.getLogger("stozher.api").warning(
+                "STOZHER_DASHBOARD_DIR has no index.html; the dashboard is not served"
+            )
     return app
 
 

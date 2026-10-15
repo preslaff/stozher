@@ -59,7 +59,7 @@ Roles describe what a credential may do. Hierarchy: `public < reporter < respond
 | `responder` | field and operations teams | reporter + hazards, events, hotspots, alerts and stream, own watched routes |
 | `operator` | platform staff | responder + register nodes, confirm / close / dismiss hazards, see all watched routes, reset simulated data |
 | `admin` | platform administrators | operator + issue, rotate and revoke credentials, read the audit log |
-| `system` | machine components | ingest records, fetch acknowledgements; nothing else |
+| `system` | machine components | ingest records, fetch acknowledgements, report a heartbeat; nothing else |
 
 ### 3.1 Access matrix (generated from the code)
 
@@ -124,6 +124,7 @@ updating this table fails the build.
 | `POST /v1/sim/reports` |  |  |  | x | x |  |
 | `POST /v1/sim/reset` |  |  |  | x | x |  |
 | `GET /v1/stream/alerts` |  |  | x | x | x |  |
+| `POST /v1/system/heartbeat` |  |  |  |  |  | x |
 | `GET /v1/trust` | x | x | x | x | x |  |
 | `GET /v1/trust/grid` | x | x | x | x | x |  |
 | `POST /v1/trust/route` | x | x | x | x | x |  |

@@ -6,6 +6,7 @@ import httpx
 import pytest
 from mesh_bridge.app import RadioSupervisor
 from mesh_bridge.forwarder import Forwarder
+from mesh_bridge.heartbeat import HeartbeatPusher
 from mesh_bridge.protocol import (
     MeshText,
     alert_text,
@@ -410,3 +411,27 @@ def test_direct_messages_ask_for_a_link_layer_ack_but_broadcasts_do_not() -> Non
     direct, broadcast = radio._iface.sendText.call_args_list
     assert direct.kwargs == {"destinationId": "!bdf0a4b0", "wantAck": True, "channelIndex": 0}
     assert broadcast.kwargs == {"destinationId": "^all", "wantAck": False, "channelIndex": 0}
+
+
+async def test_heartbeat_reports_the_radio_state_and_survives_an_api_that_is_away() -> None:
+    seen: list[dict] = []  # type: ignore[type-arg]
+    up = {"on": True}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if not up["on"]:
+            raise httpx.ConnectError("api away")
+        seen.append({"key": request.headers["x-api-key"], "body": json.loads(request.content)})
+        return httpx.Response(204)
+
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://api")
+    state = {"radio_connected": True, "node_id": "!604e1da4"}
+    beats = HeartbeatPusher(http, "k", lambda: dict(state))
+    assert await beats.beat()
+    assert seen[0]["body"] == {"module": "mesh_bridge", "info": state} and seen[0]["key"] == "k"
+    state["radio_connected"] = False
+    await beats.beat()
+    assert seen[1]["body"]["info"]["radio_connected"] is False
+    up["on"] = False
+    assert not await beats.beat() and beats.last_error == "ConnectError"
+    up["on"] = True
+    assert await beats.beat() and beats.last_error is None and (beats.sent, beats.errors) == (3, 1)

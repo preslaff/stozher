@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     agreement_version: str = "0.1"
     # Browser origins allowed to call the API (the dashboard); comma separated.
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    # Folder of the built dashboard (web/dashboard/dist). When set, the API serves it at "/" so a field kit needs one
+    # process and one origin (no CORS). Empty: the API serves only /v1 and /health (docs/field-kit.md).
+    stozher_dashboard_dir: str = ""
 
 
 @lru_cache

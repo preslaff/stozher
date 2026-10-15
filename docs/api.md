@@ -30,7 +30,7 @@ same endpoints as third-party systems; there are no private endpoints.
 | `responder` | Emergency and operations users | Public + events, situation, hotspots, playbooks, restricted POIs, access/nearest, alert stream, assistant |
 | `operator` | Platform operators | Responder + nodes, evidence packs, EO changes, POI and closure writes, simulator, webhooks |
 | `admin` | Platform owners | Operator + API key management, audit log |
-| `system` | Machine components (adapters, simulator, field kit) | Ingest, sync, acks only |
+| `system` | Machine components (adapters, simulator, field kit) | Ingest, sync, acks and heartbeats only |
 
 Who may call each endpoint is in the generated access matrix of `docs/access.md` (checked by a test), together
 with the access model: organisations, named staff accounts, credential kinds and the issuing policy.
@@ -134,6 +134,7 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | Ingest | `POST /v1/ingest/mesh` | Mesh records: hex payload, Meshtastic origin node, hops | system |
 | Ingest | `POST /v1/ingest/direct` | Records over USB, Wi-Fi or mobile | system |
 | Ingest | `POST /v1/ingest/sim` | Simulator records (stored with `kind = sim`) | system |
+| System | `POST /v1/system/heartbeat` | An optional module (`mesh_bridge`, `kineis_adapter`, `assistant`) says it is alive, with small status facts (`radio_connected`). `/health` shows the module present while the beat is under 2 minutes old (the mesh bridge also needs a connected radio). The worker beats through the database | system |
 | Nodes | `POST /v1/nodes`, `GET /v1/nodes`, `GET /v1/nodes/{id}` | Register (surveyed position, kind, transport IDs); list; status and reliability | operator |
 | Nodes | `GET /v1/nodes/unrecognised-senders?transport=mesh` | Radio IDs that sent something we could not place (for example after a reflash), with the one node each proves to be, if any. No payloads | operator |
 | Nodes | `POST /v1/nodes/{id}/transport-ids/rebind` | Attach a new transport ID to the node, only when a fresh packet from that ID proves, by its tag, that the sender holds the node's key; recovers the packets that proved it. Errors: `no-proof` (409), `id-in-use` (409), `sim-node` (409). Audited (`node.rebind_transport`) | operator |
