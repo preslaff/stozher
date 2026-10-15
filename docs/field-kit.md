@@ -49,6 +49,8 @@ radio is connected, **worker** when the worker is alive. They come from heartbea
   WPA2 network, short-lived keys, and revoke a key when a device is lost. TLS for the kit is on the backlog.
 - Alert text goes back into the mesh only if `STOZHER_RESPONDER_KEY` is set (it is, after `kit-init`) and the radio is connected.
   A phone with the stock Meshtastic app on a radio receives it, but that app cannot verify our signatures.
-- Syncing a kit with the cloud (catch-up and upload) is not built yet. A kit holds what it received itself.
+- Sync with the cloud covers witness records only (`docs/api.md` section 8). Set `STOZHER_CLOUD_URL` and `STOZHER_CLOUD_KEY` (a `system` key
+  issued by the cloud, short expiry) in `infra/.env`; without them the kit holds only what it received itself. Nodes and their keys must exist on both
+  sides. Operator changes and hazard reports are not synced; short-lived credentials and the signed deny-list are not built.
 - Real GNSS jamming has not been recorded by our hardware: thresholds are calibrated on synthetic data and quiet baselines
   (`docs/firmware.md`).

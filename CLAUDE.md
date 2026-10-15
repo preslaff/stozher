@@ -26,7 +26,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > Also built: `GET /v1/situation`, `PATCH /v1/nodes/{id}`, webhooks (signed, retried, https and public addresses only), re-binding a reflashed
 > device to its node with proof (`docs/mesh.md`), module heartbeats, and the field kit (`make kit`, `docs/field-kit.md`).
 >
-> **Not built yet:** Kinéis adapter (the ground-segment format is unknown), assistant, field-kit sync with the cloud,
+> **Not built yet:** Kinéis adapter (the ground-segment format is unknown), assistant, field-kit sync of operator changes and hazard reports (witness-record sync is built, `docs/api.md` section 8),
 > an Android witness app, a dashboard UI for key management (use the admin API or
 > `python -m stozher_api.cli create-key`).
 >

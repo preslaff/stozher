@@ -158,8 +158,8 @@ Role means the minimum role; `system` endpoints accept only `system` keys.
 | Live | `GET /v1/stream/alerts` | SSE: alerts, hotspot and trust changes, new events | responder |
 | Live | `GET /v1/alerts?limit&after` **(new)** | Recent alerts, newest first (or after a cursor, oldest first) | responder |
 | Webhooks | `POST/GET/DELETE /v1/webhooks` **(new)** | Register, list, remove push subscriptions (section 6) | operator |
-| Sync | `GET /v1/sync/events?since=<cursor>` | Field kit catch-up | system |
-| Sync | `POST /v1/sync/upload` | Field kit uploads local events and operator changes | system |
+| Sync | `GET /v1/sync/events?since=<cursor>&limit` **(built)** | Field kit catch-up: signed witness records after a cursor (section 8) | system |
+| Sync | `POST /v1/sync/upload` **(built)** | Field kit uploads the records it holds, each verified again (section 8) | system |
 | Control | `GET /v1/acks?node_id=` or `?transport=&external_id=` (`&key_id=`) | Latest cloud-signed acknowledgement per key id of one node, for gateways to relay (docs/control.md). `503 signing-not-configured` without a signing key | system |
 | Control | `GET /v1/control/public-key` | The cloud's Ed25519 public key and key id, for provisioning nodes (open; nodes must be provisioned with it, not fetch it at runtime) | none |
 | Assistant | `POST /v1/assistant/query` | Question in, answer with tool calls and sources | responder |
@@ -373,7 +373,34 @@ segment index only.
   create/delete with the key prefix only. Do not use watches to follow moving individuals.
 - Watched routes evaluated against simulated data carry `"sim": true`.
 
-## 8. Open points
+## 8. Field-kit sync **(new)**
+
+A field kit and the cloud run the same API. Sync moves **witness records only**; hazards, hotspots and the trust grid are
+derived and recomputed on each side (`docs/trust.md`). Both ends verify every record again under the node's key, so a peer
+cannot invent evidence, only pass on what a node signed. Both endpoints are `system` role.
+
+**Prerequisite:** the cloud and the kit know the same nodes: same node ID, same master keys (and so the same KEK-sealed key
+rows). A record for a node the receiver does not know is rejected (`unknown_transport_id`) and not retried.
+
+- `GET /v1/sync/events?since=<cursor>&limit=<1..200>` returns `{items, next_cursor, has_more}`. An item is
+  `{cursor, node_id, payload_hex, received_via, ingested_at}`. The cursor is `events.sync_seq`, allocated by the database in
+  insert order. Simulated events are never served. Events younger than 5 s are held back, because a row with a lower number
+  may still be committing; the next call returns them.
+- `POST /v1/sync/upload` takes `{records: [{node_id, payload_hex, received_via?}]}` (at most 200) and returns one result
+  `{status, reason}` per record, in order (`accepted`, `duplicate`, `rejected`). Old records are accepted (the live replay
+  window does not apply, since a kit may have been offline for days); a record dated in the future beyond that window, a bad
+  tag and a simulated node are rejected. Stored with `origin = "synced"` and the transport it first arrived by.
+- **The kit's loop** (worker job `sync`, every 60 s, only if `STOZHER_CLOUD_URL` and `STOZHER_CLOUD_KEY` are set): pull from the
+  `download` cursor, ingest each record locally as `synced`, then push local events that are not `synced` from the `upload`
+  cursor. Records that came from the cloud are not sent back. The cursors and the last error live in `sync_cursors`. An
+  unreachable cloud is recorded and retried next round; nothing is skipped. A *rejected* record (for example an unknown node on
+  the other side) is counted and not retried, so provision the node and reset the cursor if that was a mistake.
+- Duplicates are harmless: the unique `(node_id, key_id, seq)` keeps the first.
+
+**Not built:** syncing operator changes (nodes, closures) and hazard reports; short-lived kit credentials and the signed
+deny-list (`docs/access.md`, row 8). Until then, issue the kit's cloud key with a short expiry.
+
+## 9. Open points
 
 - Whether PDF evidence packs ship this weekend (spec: optional).
 - Final rate-limit defaults; tune after a load run.

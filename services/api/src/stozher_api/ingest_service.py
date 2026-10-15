@@ -61,7 +61,13 @@ async def ingest(
     replay_window_s: int,
     meta: dict[str, Any] | None = None,
     now: datetime | None = None,
+    node_id: int | None = None,
+    origin: str = "cloud",
+    via: str | None = None,
+    check_window: bool = True,
 ) -> IngestResult:
+    """`node_id`, `origin`, `via` and `check_window=False` are for sync (docs/api.md section 8): the record is old, it
+    names its node directly, and it keeps the transport it first arrived by. The tag is verified either way."""
     now = now or datetime.now(UTC)
     text = payload.strip()
     if text.upper().startswith(MESH_PREFIX):
@@ -86,16 +92,23 @@ async def ingest(
         await session.commit()
         return IngestResult(status, reason, event_id)
 
-    node = (
-        await session.execute(
-            select(Node)
-            .join(TransportId, TransportId.node_id == Node.id)
-            .where(TransportId.transport == transport, TransportId.external_id == external_id)
-        )
-    ).scalar_one_or_none()
+    if node_id is not None:
+        node = await session.get(Node, node_id)
+    else:
+        node = (
+            await session.execute(
+                select(Node)
+                .join(TransportId, TransportId.node_id == Node.id)
+                .where(TransportId.transport == transport, TransportId.external_id == external_id)
+            )
+        ).scalar_one_or_none()
     if node is None:
         return await finish("rejected", "unknown_transport_id", None)
-    if (transport == "sim") != (node.kind == "sim"):
+    if (
+        (node.kind == "sim")
+        if transport == "sync"
+        else ((transport == "sim") != (node.kind == "sim"))
+    ):
         return await finish("rejected", "sim_mismatch", node.id)
     if node.status != "active":
         return await finish("rejected", "node_inactive", node.id)
@@ -123,7 +136,8 @@ async def ingest(
         return await finish("rejected", exc.reason.value, node.id)
 
     observed = datetime.fromtimestamp(rec.timestamp, UTC)
-    if abs((now - observed).total_seconds()) > replay_window_s:
+    age = (now - observed).total_seconds()
+    if (abs(age) if check_window else -age) > replay_window_s:
         return await finish("rejected", "outside_time_window", node.id)
 
     values = {
@@ -139,8 +153,8 @@ async def ingest(
         "observed_at": observed,
         "duration_s": rec.duration_s,
         "features": _features(rec),
-        "origin": "cloud",
-        "received_via": transport,
+        "origin": origin,
+        "received_via": via or transport,
         "ingested_at": now,
         "payload_hex": text,
         "sim": node.kind == "sim",

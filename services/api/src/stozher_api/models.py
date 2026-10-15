@@ -106,6 +106,8 @@ class Event(Base):
     ingested_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
     payload_hex: Mapped[str] = mapped_column(Text)
     sim: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Allocated by the database in insert order; the cursor of sync (docs/api.md section 8). Never set by code.
+    sync_seq: Mapped[int | None] = mapped_column(BigInteger, Identity(), index=True)
 
 
 class ApiKey(Base):
@@ -460,3 +462,15 @@ class WebhookDelivery(Base):
     last_error: Mapped[str | None] = mapped_column(String(120), nullable=True)
     created_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
     delivered_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+
+
+class SyncCursor(Base):
+    """Where a field kit has got to with the cloud: `download` (cloud sync_seq) and `upload` (local sync_seq)."""
+
+    __tablename__ = "sync_cursors"
+
+    name: Mapped[str] = mapped_column(String(16), primary_key=True)
+    cursor: Mapped[int] = mapped_column(BigInteger, default=0)
+    updated_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
+    last_ok_at: Mapped[datetime | None] = mapped_column(TS, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(200), nullable=True)

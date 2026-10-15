@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     # Folder of the built dashboard (web/dashboard/dist). When set, the API serves it at "/" so a field kit needs one
     # process and one origin (no CORS). Empty: the API serves only /v1 and /health (docs/field-kit.md).
     stozher_dashboard_dir: str = ""
+    # A field kit syncs with this cloud API (docs/api.md section 8) using a `system` key issued there. Empty: no sync.
+    stozher_cloud_url: str = ""
+    stozher_cloud_key: str = ""
 
 
 @lru_cache

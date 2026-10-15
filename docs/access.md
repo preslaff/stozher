@@ -126,6 +126,8 @@ updating this table fails the build.
 | `POST /v1/sim/reset` |  |  |  | x | x |  |
 | `GET /v1/situation` |  |  | x | x | x |  |
 | `GET /v1/stream/alerts` |  |  | x | x | x |  |
+| `GET /v1/sync/events` |  |  |  |  |  | x |
+| `POST /v1/sync/upload` |  |  |  |  |  | x |
 | `POST /v1/system/heartbeat` |  |  |  |  |  | x |
 | `GET /v1/trust` | x | x | x | x | x |  |
 | `GET /v1/trust/grid` | x | x | x | x | x |  |
