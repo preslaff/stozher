@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Command line of an installed field kit: stozher-kit start|stop|status|doctor|init|logs
+set -euo pipefail
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+ROOT="$(cd "$(dirname "$SELF")/../.." && pwd)"
+cd "$ROOT"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/stozher"
+[ -f infra/kit/kit.env ] && { set -a; . infra/kit/kit.env; set +a; }  # MESH_PORT=... and other kit settings
+case "${1:-}" in
+  start)  shift; exec infra/kit/run.sh "$@" ;;
+  stop)   if [ -f "$STATE/kit.pid" ]; then kill "$(cat "$STATE/kit.pid")" && echo "stopping the kit"; else echo "the kit is not running"; fi ;;
+  status) curl -s -m 3 "http://127.0.0.1:${STOZHER_API_PORT:-8000}/health" || { echo "the kit is not running"; exit 1; }; echo ;;
+  doctor) exec infra/kit/doctor.sh ;;
+  init)   exec infra/kit/init.sh ;;
+  logs)   exec tail -n "${2:-50}" -f "$STATE"/api.log "$STATE"/worker.log "$STATE"/bridge.log ;;
+  *) echo "usage: stozher-kit start|stop|status|doctor|init|logs   (set MESH_PORT in infra/kit/kit.env; MESH_PORT=none = no radio)" >&2; exit 2 ;;
+esac

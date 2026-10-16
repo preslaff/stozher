@@ -3,6 +3,7 @@
 # A new encryption key (STOZHER_KEK) would orphan every node key already stored, so it is created only when there is none.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+. infra/kit/lib.sh
 ENV=infra/.env
 [ -f "$ENV" ] || { cp infra/.env.example "$ENV"; chmod 600 "$ENV"; echo "created $ENV from the example"; }
 has() { grep -q -E "^$1=.+" "$ENV"; }

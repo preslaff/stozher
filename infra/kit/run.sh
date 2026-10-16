@@ -3,6 +3,7 @@
 # Needs the local PostgreSQL (no containers). Stop with Ctrl-C or `make kit-stop`. See docs/field-kit.md.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+. infra/kit/lib.sh
 ROOT="$(pwd)"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/stozher"
 mkdir -p "$STATE"

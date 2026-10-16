@@ -1,4 +1,4 @@
-.PHONY: up down field kit kit-init kit-build kit-stop migrate test lint sim sim-hazards fw fw-test fw-vectors fw-upload worker api bridge
+.PHONY: up down field kit-bundle kit-doctor kit kit-init kit-build kit-stop migrate test lint sim sim-hazards fw fw-test fw-vectors fw-upload worker api bridge
 
 S ?= coastal
 
@@ -14,6 +14,12 @@ kit-build:  # the dashboard with a relative API URL, served by the API itself
 
 kit:  # MESH_PORT=/dev/serial/by-id/<gateway> (or none); serves http://<this laptop>:8000/
 	infra/kit/run.sh
+
+kit-bundle:  # offline bundle for another laptop (add WITH_MAP=1 to include the 260 MB map)
+	tools/kit/bundle.sh $(if $(WITH_MAP),--with-map)
+
+kit-doctor:
+	infra/kit/doctor.sh
 
 kit-stop:
 	@if [ -f $${XDG_STATE_HOME:-$$HOME/.local/state}/stozher/kit.pid ]; then kill $$(cat $${XDG_STATE_HOME:-$$HOME/.local/state}/stozher/kit.pid) && echo "stopping the kit"; else echo "the kit is not running"; fi
