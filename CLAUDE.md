@@ -24,7 +24,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 > KIM1), nor against a real GNSS receiver.
 >
 > Also built: `GET /v1/situation`, `PATCH /v1/nodes/{id}`, webhooks (signed, retried, https and public addresses only), re-binding a reflashed
-> device to its node with proof (`docs/mesh.md`), module heartbeats, and the field kit (`make kit`, `docs/field-kit.md`).
+> device to its node with proof (`docs/mesh.md`), module heartbeats, and the field kit (`make kit`, `docs/field-kit.md`), with an offline bundle, installer and doctor for other laptops (`make kit-bundle`).
 >
 > **Not built yet:** Kinéis adapter (the ground-segment format is unknown), assistant, field-kit sync of operator changes and hazard reports (witness-record sync is built, `docs/api.md` section 8),
 > an Android witness app, a dashboard UI for key management (use the admin API or

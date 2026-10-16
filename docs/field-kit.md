@@ -22,6 +22,32 @@ make kit-build       # the dashboard with a relative API URL (web/dashboard/dist
 ```
 `kit-init` will not create a new `STOZHER_KEK` if one exists: a new one would orphan every node key already stored.
 
+## Deploying to another laptop
+
+Build once on a machine with the repository (and, for the map, internet), carry the files, install offline.
+```
+make kit-bundle                  # kit-dist/stozher-kit-<version>-<arch>.tar.zst (+ .sha256), about 120 MB; WITH_MAP=1 adds the 260 MB map
+```
+On the target laptop (Linux, same CPU architecture, Python 3.12, PostgreSQL with PostGIS running on the local socket, no containers):
+```
+sha256sum -c stozher-kit-*.tar.zst.sha256
+zstd -dc stozher-kit-*.tar.zst | tar -x && cd stozher-kit-*/
+./install.sh [--dir ~/stozher-kit] [--db-name stozher] [--map bulgaria.pmtiles] [--service]
+```
+The installer checks the bundle's checksums, the laptop (it prints the exact `apt` line for anything missing), copies the kit, builds the
+Python environment **from the bundled cache, offline**, creates the database (through `sudo -u postgres` only if you are not a PostgreSQL
+superuser, and it says so), runs `init.sh` and finishes with the doctor. It never changes the network, never starts the kit by itself
+(`--service` only installs a systemd user unit) and never contains your secrets: each laptop makes its own `infra/.env` and KEK.
+Running it again with a newer bundle upgrades the code and keeps `infra/.env` and the database.
+
+Afterwards: put the gateway's `/dev/serial/by-id/...` path in `infra/kit/kit.env` (`MESH_PORT=...`), then
+`stozher-kit start | stop | status | doctor | logs`. `make kit-doctor` / `stozher-kit doctor` checks secrets, database, map, radio, ports and
+prints the addresses phones use; run it before a deployment and whenever something does not start.
+
+**Nodes are not in the bundle.** Their master keys are sealed with the KEK of the laptop that holds them, so a new laptop starts with none.
+Create an operator key there (`uv run python -m stozher_api.cli create-key --role operator --label "<team>, setup"`) and register each
+node with the same node ID and master key as the cloud (`POST /v1/nodes`), over a channel you trust, or sync cannot match records.
+
 ## Start and stop
 ```
 MESH_PORT=/dev/serial/by-id/usb-Silicon_Labs_CP2104_..._02066B17-if00-port0 make kit
