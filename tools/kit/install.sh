@@ -62,8 +62,10 @@ psu -d "$DB" -c "CREATE EXTENSION IF NOT EXISTS postgis" >/dev/null
 echo "database ready (owner $ME)"
 
 say "Settings and keys"
-[ -f infra/.env ] || { cp infra/.env.example infra/.env; chmod 600 infra/.env; }
-grep -q -E '^DATABASE_URL=.+' infra/.env || echo "DATABASE_URL=postgresql+asyncpg://$ME@/$DB?host=/var/run/postgresql" >>infra/.env
+if [ ! -f infra/.env ]; then  # a new kit: its own database URL, never the example's (that names the developer's database)
+  grep -v -E '^DATABASE_URL=' infra/.env.example >infra/.env; chmod 600 infra/.env
+  echo "DATABASE_URL=postgresql+asyncpg://$ME@/$DB?host=/var/run/postgresql" >>infra/.env
+fi
 infra/kit/init.sh
 [ -f infra/kit/kit.env ] || printf '# Gateway radio: /dev/serial/by-id/<device>, or none to run without a radio\nMESH_PORT=none\n' >infra/kit/kit.env
 
