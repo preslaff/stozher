@@ -25,3 +25,12 @@ dist/
 # Offline base map (built by tools/basemap/fetch.sh)
 web/dashboard/public/basemap/
 kit-dist/
+
+# Third-party Meshtastic firmware images and tools (GPL-3.0, not our code; see DECLARATIONS.md) and the private channel config
+firmware/node/firmware-*
+firmware/node/littlefs-*
+firmware/node/bleota-*
+firmware/node/mt-esp32-ota.bin
+firmware/node/device-install.*
+firmware/node/device-update.*
+tbeam-a4b0.yaml
