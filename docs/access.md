@@ -131,6 +131,7 @@ updating this table fails the build.
 | `POST /v1/system/heartbeat` |  |  |  |  |  | x |
 | `GET /v1/trust` | x | x | x | x | x |  |
 | `GET /v1/trust/grid` | x | x | x | x | x |  |
+| `GET /v1/trust/history` |  |  | x | x | x |  |
 | `POST /v1/trust/route` | x | x | x | x | x |  |
 | `GET /v1/watched-routes` |  |  | x | x | x |  |
 | `POST /v1/watched-routes` |  |  | x | x | x |  |

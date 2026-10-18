@@ -85,3 +85,14 @@ falls back below; each transition once. UNKNOWN never alerts.
 A witness record whose latitude and longitude are both 0 has no GNSS fix. It is stored and shown as an event, but the worker
 never localises it: it makes no hotspot, no trust cell and no alert with coordinates (`stozher_worker.points.has_fix`).
 The count is in the recompute summary (`no_fix`).
+
+## History is not trust
+
+The live grid holds the last 90 minutes of evidence and nothing else: older evidence has under 12% weight and is dropped, so a quiet network
+(a healthy node sends one heartbeat an hour and an event only on an anomaly) gives an empty grid. An empty grid is "no recent evidence", never "clear".
+
+`GET /v1/trust/history` shows what was last seen, for responders and above, over 6 hours, 24 hours or 7 days. It is a different thing from the grid:
+- each cell is scored at the moment of its **newest** evidence (weights relative to that moment), then labelled `expired` and given the age it has today;
+- it uses the same evidence rules as the grid (types 0, 1, 2; no-fix records and classes 4 and 7 are left out) and the same 4-ring spread;
+- clients must draw it as expired (grey, hatched, with the age), never with the trust colours, and must say it is not current;
+- the public role does not get it, because a map of where witnesses reported is location history. The public sees only `newest_evidence_age_s` on the grid.
