@@ -166,6 +166,9 @@ async def test_history_is_marked_expired_and_events_hide_identities() -> None:
     e = await t.call("recent_events", {"hours": 24})
     blob = json.dumps(e.data)
     assert e.data["without_gnss_position"] == 1 and e.data["count"] == 2
+    assert (
+        e.data_age_s is not None and e.data_age_s > 100
+    )  # the API said 100 s, but that reading had no position: the placed one counts
     assert "4243" not in blob and "27.9" not in blob  # no node IDs, no positions
 
 
@@ -185,6 +188,25 @@ async def test_a_report_without_any_engine_still_states_the_facts() -> None:
         "do not mean the roads are clear" not in a.answer
         and "does not mean the roads are clear" in a.answer
     )
+
+
+async def test_readings_without_a_position_do_not_count_as_recent_evidence() -> None:
+    events = {
+        "items": [
+            {
+                "class": "benign",
+                "observed_at": "2026-10-18T09:00:00+00:00",
+                "position": {"coordinates": [0.0, 0.0]},
+            }
+        ],
+        "count": 1,
+        "data_age_s": 5,
+        "sources": ["witness_nodes"],
+    }
+    routes = {"/v1/situation": SITUATION_EMPTY, "/v1/events": events}
+    a = await report(None, Tools(api(routes), "k", BBOX), BBOX)
+    assert NO_EVIDENCE in a.caveats and a.data_age_s is None
+    assert "1 reading(s) arrived without a GNSS position" in a.answer
 
 
 async def test_a_report_survives_an_engine_failure() -> None:

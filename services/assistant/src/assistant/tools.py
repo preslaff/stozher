@@ -263,9 +263,11 @@ class Tools:
             "by_class": by_class,
             "without_gnss_position": no_fix,
             "newest_placed_age_s": newest_placed,
-            "note": "class 0 normal, 1 jamming, 2 spoofing, 3 benign, 4 tamper, 5 time anomaly, 7 unknown",
         }
-        return self._base(body, data)
+        # only a reading with a position says anything about a place, so the age that counts is the newest placed one
+        result = self._base(body, data)
+        result.data_age_s = newest_placed
+        return result
 
     async def _t_alerts(self, args: dict[str, Any]) -> ToolResult:
         body, err = await self._get("/v1/alerts", {"limit": min(int(args.get("limit", 10)), 20)})
