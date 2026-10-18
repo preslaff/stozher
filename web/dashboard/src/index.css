@@ -674,3 +674,54 @@ li.withdel .item {
   gap: 8px;
   padding: 6px 4px;
 }
+
+/* Assistant panel (docs/assistant.md): optional, shown only when the module is present */
+.assistantopen {
+  position: absolute;
+  right: 56px;
+  bottom: 68px;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.assistant {
+  position: absolute;
+  right: 56px;
+  bottom: 68px;
+  width: min(360px, calc(100% - 24px));
+  max-height: 70%;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  z-index: 3;
+}
+.assistant textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg, #0f151b);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.assistanthead,
+.assistantbtns,
+.assistantmeta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.assistanthead {
+  justify-content: space-between;
+}
+.answertext {
+  white-space: pre-wrap;
+  font-size: 13px;
+}

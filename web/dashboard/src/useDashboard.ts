@@ -249,5 +249,6 @@ export function useDashboard(key: string | null) {
     setSelectedId,
     detail,
     setView,
+    view,
   }
 }

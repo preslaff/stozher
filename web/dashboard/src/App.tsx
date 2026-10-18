@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Bbox } from './api'
+import { AssistantPanel } from './components/AssistantPanel'
 import { Detail } from './components/Detail'
 import { HazardDetail } from './components/HazardDetail'
 import { ReportPanel } from './components/ReportPanel'
@@ -192,6 +193,12 @@ export default function App() {
             await d.createWatch({ ...w, coordinates: planner.waypoints, bufferM: planner.bufferM })
           }}
         />
+        {d.api &&
+          d.health?.modules.assistant === 'present' &&
+          d.role !== null &&
+          d.role !== 'public' &&
+          d.role !== 'reporter' &&
+          d.role !== 'system' && <AssistantPanel api={d.api} bbox={d.view?.bbox ?? null} />}
         {canReport && (
           <ReportPanel
             placing={placing}

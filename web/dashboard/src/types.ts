@@ -74,6 +74,19 @@ export interface RebindResult {
   recovered: { status: string; reason: string | null }[]
 }
 
+/** POST /v1/assistant/query (docs/assistant.md). The labels (age, sources, SIM, caveats) are computed by the server, not by the model. */
+export interface AssistantAnswer {
+  answer: string
+  engine: string
+  model: string
+  grounded: boolean
+  data_age_s: number | null
+  sim: boolean
+  sources: string[]
+  caveats: string[]
+  tools: { name: string; data_age_s: number | null; expired: boolean; error: boolean }[]
+}
+
 export interface Health {
   status: string
   db: string

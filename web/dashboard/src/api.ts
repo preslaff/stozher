@@ -1,6 +1,7 @@
 import type { FeatureCollection, Polygon } from 'geojson'
 import type {
   Alert,
+  AssistantAnswer,
   Hazard,
   HazardKind,
   HazardRoute,
@@ -125,6 +126,8 @@ export function makeApi(key: string, base: string = API_URL) {
           newest_unplaced_age_s: number | null
         }
       >(`/v1/trust/grid?bbox=${b.map((n) => n.toFixed(5)).join(',')}`),
+    assistant: (body: { question?: string; mode: 'ask' | 'report'; bbox?: string }) =>
+      send<AssistantAnswer>('POST', '/v1/assistant/query', body),
     trustHistory: (b: Bbox, window: HistoryWindow) =>
       get<FeatureCollection<Polygon, HistoryProps> & { sim: boolean; window: HistoryWindow }>(
         `/v1/trust/history?bbox=${b.map((n) => n.toFixed(5)).join(',')}&window=${window}`,
