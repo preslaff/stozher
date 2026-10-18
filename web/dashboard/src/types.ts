@@ -78,6 +78,21 @@ export interface TrustProps {
   sim: boolean
 }
 
+/** One cell of GET /v1/trust/history: what a place looked like at its newest evidence. Expired: never a current state. */
+export interface HistoryProps {
+  h3: string
+  expired: true
+  last_state: TrustState
+  last_score: number | null
+  newest_observed_at: string
+  data_age_s: number
+  event_count: number
+  independent_sources: number
+  sim: boolean
+}
+
+export type HistoryWindow = '6h' | '24h' | '7d'
+
 export type MinLevel = 'degraded' | 'jammed' | 'spoofed'
 
 export interface RouteSegment {

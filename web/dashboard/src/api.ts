@@ -13,6 +13,8 @@ import type {
   Passability,
   RebindResult,
   RouteTrust,
+  HistoryProps,
+  HistoryWindow,
   TrustProps,
   UnknownSender,
   WatchedRouteItem,
@@ -116,8 +118,15 @@ export function makeApi(key: string, base: string = API_URL) {
     decide: (id: string, action: 'confirm' | 'close' | 'dismiss', reason: string) =>
       send<Hazard>('POST', `/v1/hazards/${id}/${action}`, { reason }),
     trustGrid: (b: Bbox) =>
-      get<FeatureCollection<Polygon, TrustProps> & { sim: boolean }>(
-        `/v1/trust/grid?bbox=${b.map((n) => n.toFixed(5)).join(',')}`,
+      get<
+        FeatureCollection<Polygon, TrustProps> & {
+          sim: boolean
+          newest_evidence_age_s: number | null
+        }
+      >(`/v1/trust/grid?bbox=${b.map((n) => n.toFixed(5)).join(',')}`),
+    trustHistory: (b: Bbox, window: HistoryWindow) =>
+      get<FeatureCollection<Polygon, HistoryProps> & { sim: boolean; window: HistoryWindow }>(
+        `/v1/trust/history?bbox=${b.map((n) => n.toFixed(5)).join(',')}&window=${window}`,
       ),
   }
 }

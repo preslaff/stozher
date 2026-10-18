@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseSse } from './sse'
-import { ageText, TRUST_COLOR } from './style'
+import { ageText, freshness, historyText, quietNote, TRUST_COLOR } from './style'
 
 describe('parseSse', () => {
   it('parses CRLF events and keeps a partial tail', () => {
@@ -43,5 +43,33 @@ describe('style helpers', () => {
       'TRUSTED',
       'UNKNOWN',
     ])
+  })
+})
+
+describe('empty map explanations', () => {
+  it('says nothing while cells are shown or the grid is not loaded', () => {
+    expect(quietNote(null, 100)).toBeNull()
+    expect(quietNote(3, 100)).toBeNull()
+  })
+  it('tells how old the newest reading is and that empty is not safe', () => {
+    const t = quietNote(0, 7200)
+    expect(t).toContain('last 90 min')
+    expect(t).toContain('2.0 h ago')
+    expect(t).toContain('does not mean safe')
+    expect(quietNote(0, null)).toContain('No evidence has been received yet')
+  })
+  it('grades node freshness from last_seen', () => {
+    const now = Date.parse('2026-10-18T12:00:00Z')
+    expect(freshness(null, now)).toBe('never')
+    expect(freshness('2026-10-18T11:30:00Z', now)).toBe('fresh')
+    expect(freshness('2026-10-18T06:00:00Z', now)).toBe('stale')
+    expect(freshness('2026-10-15T12:00:00Z', now)).toBe('silent')
+  })
+  it('labels history as expired', () => {
+    const t = historyText({ last_state: 'JAMMED', data_age_s: 10800, event_count: 1 })
+    expect(t).toContain('Expired')
+    expect(t).toContain('3.0 h ago')
+    expect(t).toContain('(1 report)')
+    expect(t).toContain('Not the current state')
   })
 })

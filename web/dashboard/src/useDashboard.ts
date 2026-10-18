@@ -2,12 +2,14 @@ import type { FeatureCollection, Polygon } from 'geojson'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { API_URL, ApiError, makeApi, type Bbox } from './api'
 import { connectStream, type SseEvent, type StreamState } from './sse'
-import { MIN_GRID_ZOOM } from './style'
+import { MIN_GRID_ZOOM, quietNote } from './style'
 import type {
   Alert,
   Hazard,
   Health,
   Hotspot,
+  HistoryProps,
+  HistoryWindow,
   HotspotDetail,
   NodeInfo,
   TrustProps,
@@ -15,7 +17,11 @@ import type {
   WatchedRouteItem,
 } from './types'
 
-type Grid = FeatureCollection<Polygon, TrustProps> & { sim: boolean }
+type Grid = FeatureCollection<Polygon, TrustProps> & {
+  sim: boolean
+  newest_evidence_age_s?: number | null
+}
+type History = FeatureCollection<Polygon, HistoryProps> & { sim: boolean }
 export interface View {
   bbox: Bbox
   zoom: number
@@ -35,6 +41,9 @@ export function useDashboard(key: string | null) {
   const [selectedHazardId, setSelectedHazardId] = useState<string | null>(null)
   const [grid, setGrid] = useState<Grid | null>(null)
   const [gridError, setGridError] = useState<string | null>(null)
+  const [history, setHistory] = useState<History | null>(null)
+  const [historyOn, setHistoryOn] = useState(false)
+  const [historyWindow, setHistoryWindow] = useState<HistoryWindow>('24h')
   const [stream, setStream] = useState<StreamState>('connecting')
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -125,6 +134,27 @@ export function useDashboard(key: string | null) {
     return () => clearTimeout(t)
   }, [api, view, gridTooFar, gridVersion])
   const gridNote = gridTooFar ? `Zoom in to see the trust grid (zoom ${MIN_GRID_ZOOM}+)` : gridError
+  // Why an empty grid is empty. Only once a grid has actually loaded for the current view.
+  const quiet =
+    gridTooFar || gridError
+      ? null
+      : grid
+        ? quietNote(grid.features.length, grid.newest_evidence_age_s)
+        : null
+
+  // Expired history: responders and above only (the API refuses the rest), and only when the user switches it on.
+  const canHistory = role !== null && role !== 'public' && role !== 'reporter' && role !== 'system'
+  useEffect(() => {
+    if (!api || !view || gridTooFar || !historyOn || !canHistory) return
+    const t = setTimeout(() => {
+      api
+        .trustHistory(view.bbox, historyWindow)
+        .then(setHistory)
+        .catch(() => setHistory(null))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [api, view, gridTooFar, historyOn, canHistory, historyWindow, gridVersion])
+  const shownHistory = historyOn && canHistory && !gridTooFar ? history : null
 
   useEffect(() => {
     if (!api || !selectedId) return
@@ -204,6 +234,13 @@ export function useDashboard(key: string | null) {
     nodes,
     grid,
     gridNote,
+    quiet,
+    history: shownHistory,
+    historyOn,
+    setHistoryOn,
+    historyWindow,
+    setHistoryWindow,
+    canHistory,
     stream,
     error,
     lastLoad,

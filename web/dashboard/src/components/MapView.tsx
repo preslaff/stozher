@@ -7,9 +7,9 @@ import type { Bbox } from '../api'
 import type { View } from '../useDashboard'
 import { baseStyle } from '../basemap'
 import { TIER_COLOR } from '../hazards'
-import { TRUST_COLOR } from '../style'
+import { FRESH_COLOR, freshness, historyText, TRUST_COLOR } from '../style'
 import { bboxOf, unionBbox } from '../geo'
-import type { Hotspot, NodeInfo, TrustProps } from '../types'
+import type { HistoryProps, Hotspot, NodeInfo, TrustProps } from '../types'
 import type { Waypoint } from '../route'
 import type { FeatureCollection, LineString, Polygon } from 'geojson'
 
@@ -56,6 +56,7 @@ interface Props {
   hotspots: Hotspot[]
   nodes: NodeInfo[]
   grid: FeatureCollection<Polygon, TrustProps> | null
+  history: FeatureCollection<Polygon, HistoryProps> | null
   selectedId: string | null
   routeFc: FeatureCollection<LineString>
   watchedFc: FeatureCollection<LineString>
@@ -78,6 +79,7 @@ export function MapView({
   hotspots,
   nodes,
   grid,
+  history,
   selectedId,
   routeFc,
   watchedFc,
@@ -133,6 +135,7 @@ export function MapView({
     }
     map.on('load', () => {
       map.addSource('trust', { type: 'geojson', data: EMPTY })
+      map.addSource('history', { type: 'geojson', data: EMPTY })
       map.addSource('hotspots', { type: 'geojson', data: EMPTY })
       map.addSource('nodes', { type: 'geojson', data: EMPTY })
       map.addSource('watched', { type: 'geojson', data: EMPTY })
@@ -141,6 +144,27 @@ export function MapView({
       map.addSource('hazard-shapes', { type: 'geojson', data: EMPTY })
       map.addSource('hazard-markers', { type: 'geojson', data: EMPTY })
       map.addSource('report-point', { type: 'geojson', data: EMPTY })
+      // Expired last-known evidence: grey and dashed on purpose, never in the trust colours, and below the live grid.
+      map.addLayer({
+        id: 'history-fill',
+        type: 'fill',
+        source: 'history',
+        paint: {
+          'fill-color': '#9aa4b2',
+          'fill-opacity': ['interpolate', ['linear'], ['get', 'data_age_s'], 0, 0.28, 604800, 0.08],
+        },
+      })
+      map.addLayer({
+        id: 'history-line',
+        type: 'line',
+        source: 'history',
+        paint: {
+          'line-color': '#9aa4b2',
+          'line-opacity': 0.7,
+          'line-width': 1,
+          'line-dasharray': [2, 2],
+        },
+      })
       map.addLayer({
         id: 'trust-fill',
         type: 'fill',
@@ -291,7 +315,15 @@ export function MapView({
         source: 'nodes',
         paint: {
           'circle-radius': 5,
-          'circle-color': '#e6edf3',
+          'circle-color': [
+            'match',
+            ['get', 'fresh'],
+            'fresh',
+            FRESH_COLOR.fresh,
+            'stale',
+            FRESH_COLOR.stale,
+            FRESH_COLOR.silent,
+          ],
           'circle-stroke-width': 2,
           'circle-stroke-color': ['case', ['get', 'sim'], '#5b8def', '#0f151b'],
         },
@@ -307,6 +339,17 @@ export function MapView({
       })
       map.on('mouseenter', 'hazard-markers', () => (map.getCanvas().style.cursor = 'pointer'))
       map.on('mouseleave', 'hazard-markers', () => (map.getCanvas().style.cursor = ''))
+      map.on('click', 'history-fill', (e) => {
+        if (drawingRef.current || placingRef.current) return
+        const p = e.features?.[0]?.properties as HistoryProps | undefined
+        if (!p) return
+        new maplibregl.Popup({ closeButton: true, maxWidth: '260px' })
+          .setLngLat(e.lngLat)
+          .setText(historyText(p))
+          .addTo(map)
+      })
+      map.on('mouseenter', 'history-fill', () => (map.getCanvas().style.cursor = 'pointer'))
+      map.on('mouseleave', 'history-fill', () => (map.getCanvas().style.cursor = ''))
       map.on('click', 'hotspot-fill', (e) => {
         if (drawingRef.current) return
         const id = e.features?.[0]?.properties?.id as string | undefined
@@ -329,6 +372,12 @@ export function MapView({
     if (!map || !ready) return
     ;(map.getSource('trust') as GeoJSONSource).setData(grid ?? EMPTY)
   }, [grid, ready])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    ;(map.getSource('history') as GeoJSONSource).setData(history ?? EMPTY)
+  }, [history, ready])
 
   useEffect(() => {
     const map = mapRef.current
@@ -367,7 +416,7 @@ export function MapView({
         .map((n) => ({
           type: 'Feature',
           geometry: n.position!,
-          properties: { id: n.id, name: n.name, sim: n.sim },
+          properties: { id: n.id, name: n.name, sim: n.sim, fresh: freshness(n.last_seen) },
         })),
     }
     ;(map.getSource('nodes') as GeoJSONSource).setData(fc)

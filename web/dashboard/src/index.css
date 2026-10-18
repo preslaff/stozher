@@ -636,3 +636,35 @@ li.withdel .item {
   border-radius: 50%;
   margin-top: 4px;
 }
+
+/* Why the map is empty, and expired history (docs/trust.md, "History is not trust"). */
+.banner.quiet {
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  color: var(--text);
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  text-align: center;
+  top: 0;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  max-width: min(640px, 92%);
+  border-radius: 0 0 8px 8px;
+}
+.legend .histtoggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.legend select {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.legend i.histkey {
+  background: #9aa4b255;
+  border: 1px dashed #9aa4b2;
+}

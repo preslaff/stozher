@@ -145,6 +145,7 @@ export default function App() {
           hotspots={d.hotspots}
           nodes={d.nodes}
           grid={d.grid}
+          history={d.history}
           selectedId={d.selectedId}
           routeFc={routeFc}
           watchedFc={watchedFc}
@@ -205,7 +206,21 @@ export default function App() {
             onSubmit={d.submitReport}
           />
         )}
-        <Legend note={d.gridNote} />
+        {d.quiet && !d.history && (
+          <div className="banner quiet" role="status">
+            {d.quiet}
+          </div>
+        )}
+        <Legend
+          note={d.gridNote}
+          history={{
+            available: d.canHistory,
+            on: d.historyOn,
+            window: d.historyWindow,
+            onToggle: d.setHistoryOn,
+            onWindow: d.setHistoryWindow,
+          }}
+        />
         {hasSim && <div className="simbadge">SIMULATED DATA</div>}
         {d.selectedHazard && (
           <HazardDetail
