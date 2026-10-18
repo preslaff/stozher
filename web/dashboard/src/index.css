@@ -668,3 +668,9 @@ li.withdel .item {
   background: #9aa4b255;
   border: 1px dashed #9aa4b2;
 }
+
+.nodeitem {
+  display: flex;
+  gap: 8px;
+  padding: 6px 4px;
+}

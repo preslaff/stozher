@@ -81,3 +81,25 @@ export function historyText(p: {
 }): string {
   return `Expired: last evidence ${p.last_state.toLowerCase()}, ${ageText(p.data_age_s)} (${p.event_count} report${p.event_count === 1 ? '' : 's'}). Not the current state.`
 }
+
+/** One line on what the cloud holds of a node's records and whether the node was told (it can then stop retransmitting). */
+export function deliveryText(
+  d:
+    | {
+        records: number
+        missing: number
+        last_ack_at: string | null
+        ack_current: boolean | null
+      }
+    | null
+    | undefined,
+  now: number = Date.now(),
+): string {
+  if (!d) return 'No records yet'
+  const held = `${d.records} record${d.records === 1 ? '' : 's'} held${d.missing > 0 ? `, ${d.missing} missing` : ''}`
+  if (d.ack_current === null) return `${held}. Never acknowledged.`
+  const when = d.last_ack_at ? ` (last ack ${sinceText(d.last_ack_at, now)})` : ''
+  return d.ack_current
+    ? `${held}. Node told${when}.`
+    : `${held}. New records not yet acknowledged${when}.`
+}

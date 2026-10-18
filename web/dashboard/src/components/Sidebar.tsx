@@ -4,10 +4,12 @@ import type {
   Alert,
   Hazard,
   Hotspot,
+  NodeInfo,
   RebindResult,
   UnknownSender,
   WatchedRouteItem,
 } from '../types'
+import { NodesPanel } from './NodesPanel'
 import { SendersPanel } from './SendersPanel'
 
 interface Props {
@@ -23,6 +25,7 @@ interface Props {
   onPickHotspot: (h: Hotspot) => void
   onPickRoute: (w: WatchedRouteItem) => void
   onDeleteRoute: (w: WatchedRouteItem) => void
+  nodes: NodeInfo[]
   senders: UnknownSender[]
   canBind: boolean
   onBind: (s: UnknownSender) => Promise<RebindResult | null>
@@ -41,6 +44,7 @@ export function Sidebar({
   onPickHotspot,
   onPickRoute,
   onDeleteRoute,
+  nodes,
   senders,
   canBind,
   onBind,
@@ -49,6 +53,7 @@ export function Sidebar({
   const closed = hotspots.filter((h) => h.state === 'closed')
   return (
     <aside className="side">
+      <NodesPanel nodes={nodes} now={now} />
       <SendersPanel senders={senders} canBind={canBind} now={now} onBind={onBind} />
       <section>
         <h2>

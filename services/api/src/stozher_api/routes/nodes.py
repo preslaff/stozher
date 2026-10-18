@@ -8,10 +8,11 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from stozher_core.control import summarize
 
 from ..audit import audit
 from ..auth import Principal, require_role
-from ..models import Node, NodeKey, TransportId
+from ..models import AckRecord, Event, Node, NodeKey, TransportId
 from ..problems import ApiError
 from ..rebind_service import rebind, unrecognised_senders
 from ..secrets_box import KekMissingError, seal
@@ -51,6 +52,63 @@ class NodeIn(BaseModel):
         return v.lower()
 
 
+class Delivery(BaseModel):
+    """What the cloud holds of this node's records, and whether the node has been told (docs/control.md)."""
+
+    key_id: int
+    records: int
+    highest_seq: int
+    contiguous_seq: int = Field(description="every sequence number up to here is held")
+    missing: int = Field(description="gaps below highest_seq: the node may still retransmit these")
+    last_ack_at: datetime | None = Field(
+        description="when the newest acknowledgement for this key was signed"
+    )
+    ack_current: bool | None = Field(
+        description="the newest signed ack covers what is held now; null if none was ever signed. False means records arrived that the node has not been told about"
+    )
+
+
+async def _delivery(session, node_id: int) -> Delivery | None:  # type: ignore[no-untyped-def]
+    latest = (
+        await session.execute(
+            select(Event.key_id)
+            .where(Event.node_id == node_id)
+            .order_by(Event.observed_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    if latest is None:
+        return None
+    seqs = set(
+        (
+            await session.execute(
+                select(Event.seq).where(Event.node_id == node_id, Event.key_id == latest)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    contiguous, mask = summarize(seqs)
+    highest = max(seqs)
+    ack = (
+        await session.execute(
+            select(AckRecord)
+            .where(AckRecord.node_id == node_id, AckRecord.key_id == latest)
+            .order_by(AckRecord.signed_at.desc(), AckRecord.id.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    return Delivery(
+        key_id=latest,
+        records=len(seqs),
+        highest_seq=highest,
+        contiguous_seq=contiguous,
+        missing=max(0, highest - len([s for s in seqs if s >= 1])),
+        last_ack_at=ack.signed_at if ack else None,
+        ack_current=None if ack is None else (ack.max_seq, ack.mask) == (contiguous, mask),
+    )
+
+
 class NodeOut(BaseModel):
     id: int
     name: str
@@ -61,6 +119,7 @@ class NodeOut(BaseModel):
     sim: bool
     position: dict[str, Any] | None
     transport_ids: list[TransportIn]
+    delivery: Delivery | None = None
 
 
 async def _out(session, node: Node) -> NodeOut:  # type: ignore[no-untyped-def]
@@ -84,6 +143,7 @@ async def _out(session, node: Node) -> NodeOut:  # type: ignore[no-untyped-def]
         sim=node.kind == "sim",
         position=json.loads(pos) if pos else None,
         transport_ids=[TransportIn(transport=t.transport, external_id=t.external_id) for t in tids],
+        delivery=await _delivery(session, node.id),
     )  # type: ignore[arg-type]
 
 

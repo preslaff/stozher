@@ -77,3 +77,10 @@ same bytes for the same fields, and reject the invalid ones with the stated reas
 `GET /v1/acks` (system role) returns the latest signed ack for a node; see docs/api.md. The mesh
 bridge fetches it after forwarding records from a node and sends it back as `STZA1:` text, rate
 limited per node. Satellite nodes have no downlink, so acks reach them only through a gateway.
+
+## Seeing delivery status
+
+`GET /v1/nodes` (operator) reports, per node, what the cloud holds and whether the newest signed ack covers it (`delivery.ack_current`), so an operator can tell
+a silent node from one that is delivering but has not been told yet. It cannot tell what a node sent and the cloud never received: gaps (`missing`) are only
+visible below the highest sequence number held. Acks are signed on request by the bridge, so `ack_current: false` for a moment after new records is normal;
+it stays `false` when no gateway hears the node (a satellite-only node never receives acks).

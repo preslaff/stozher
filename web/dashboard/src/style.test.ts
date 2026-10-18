@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseSse } from './sse'
-import { ageText, freshness, historyText, quietNote, TRUST_COLOR } from './style'
+import { ageText, deliveryText, freshness, historyText, quietNote, TRUST_COLOR } from './style'
 
 describe('parseSse', () => {
   it('parses CRLF events and keeps a partial tail', () => {
@@ -75,5 +75,27 @@ describe('empty map explanations', () => {
     expect(t).toContain('3.0 h ago')
     expect(t).toContain('(1 report)')
     expect(t).toContain('Not the current state')
+  })
+})
+
+describe('delivery text', () => {
+  const now = Date.parse('2026-10-18T12:00:00Z')
+  it('covers every acknowledgement state', () => {
+    expect(deliveryText(null)).toBe('No records yet')
+    expect(deliveryText({ records: 1, missing: 0, last_ack_at: null, ack_current: null })).toBe(
+      '1 record held. Never acknowledged.',
+    )
+    expect(
+      deliveryText(
+        { records: 5, missing: 2, last_ack_at: '2026-10-18T11:58:00Z', ack_current: false },
+        now,
+      ),
+    ).toBe('5 records held, 2 missing. New records not yet acknowledged (last ack 2 min ago).')
+    expect(
+      deliveryText(
+        { records: 5, missing: 0, last_ack_at: '2026-10-18T11:58:00Z', ack_current: true },
+        now,
+      ),
+    ).toContain('Node told')
   })
 })

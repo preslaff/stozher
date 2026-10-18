@@ -107,3 +107,25 @@ async def test_sim_nodes_get_labelled_acks_and_reset_removes_them(signed_client)
     assert item["sim"] is True
     assert (await c.post("/v1/sim/reset", headers=hdr(c, "operator"))).status_code == 200
     assert (await ack_for(c, sim_id)).status_code == 404
+
+
+async def test_node_listing_says_what_is_held_and_whether_the_node_was_told(signed_client):  # type: ignore[no-untyped-def]
+    c = signed_client
+    node = await register(c)
+
+    async def delivery() -> dict:  # type: ignore[type-arg]
+        items = (await c.get("/v1/nodes", headers=hdr(c, "operator"))).json()
+        return next(n for n in items if n["id"] == node)["delivery"]
+
+    assert (await c.get("/v1/nodes", headers=hdr(c, "operator"))).json()[0]["delivery"] is None
+    for seq in (1, 2, 3, 5, 7):
+        await post(c, packet(rec(seq=seq), node))
+    d = await delivery()
+    assert (d["highest_seq"], d["contiguous_seq"], d["missing"], d["records"]) == (7, 3, 2, 5)
+    assert d["ack_current"] is None and d["last_ack_at"] is None  # never told
+    await ack_for(c, node)
+    d = await delivery()
+    assert d["ack_current"] is True and d["last_ack_at"] is not None
+    await post(c, packet(rec(seq=4), node))  # a gap is filled after the ack was signed
+    d = await delivery()
+    assert d["ack_current"] is False and d["contiguous_seq"] == 5 and d["missing"] == 1

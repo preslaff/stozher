@@ -36,6 +36,17 @@ export interface Alert {
   sim: boolean
 }
 
+/** What the cloud holds of a node's records and whether the node was told (GET /v1/nodes, operators; docs/control.md). */
+export interface Delivery {
+  key_id: number
+  records: number
+  highest_seq: number
+  contiguous_seq: number
+  missing: number
+  last_ack_at: string | null
+  ack_current: boolean | null
+}
+
 export interface NodeInfo {
   id: number
   name: string
@@ -44,6 +55,7 @@ export interface NodeInfo {
   last_seen: string | null
   sim: boolean
   position: Point | null
+  delivery?: Delivery | null
 }
 
 /** A radio ID that sent something we could not place, for example after a reflash (docs/mesh.md). */
