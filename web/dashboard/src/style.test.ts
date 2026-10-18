@@ -54,9 +54,13 @@ describe('empty map explanations', () => {
   it('tells how old the newest reading is and that empty is not safe', () => {
     const t = quietNote(0, 7200)
     expect(t).toContain('last 90 min')
-    expect(t).toContain('2.0 h ago')
+    expect(t).toContain('Newest 2.0 h ago')
     expect(t).toContain('does not mean safe')
-    expect(quietNote(0, null)).toContain('No evidence has been received yet')
+    expect(quietNote(0, null)).toContain('No reading with a position has been received yet')
+    const live = quietNote(0, 7200, 96)
+    expect(live).toContain('Readings are arriving (newest 2 min ago)')
+    expect(live).toContain('without a GNSS fix')
+    expect(quietNote(0, 7200, 20000)).not.toContain('arriving')
   })
   it('grades node freshness from last_seen', () => {
     const now = Date.parse('2026-10-18T12:00:00Z')

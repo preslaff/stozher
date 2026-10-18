@@ -122,6 +122,7 @@ export function makeApi(key: string, base: string = API_URL) {
         FeatureCollection<Polygon, TrustProps> & {
           sim: boolean
           newest_evidence_age_s: number | null
+          newest_unplaced_age_s: number | null
         }
       >(`/v1/trust/grid?bbox=${b.map((n) => n.toFixed(5)).join(',')}`),
     trustHistory: (b: Bbox, window: HistoryWindow) =>

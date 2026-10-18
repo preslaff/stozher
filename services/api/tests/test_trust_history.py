@@ -53,6 +53,7 @@ async def test_old_evidence_leaves_the_live_grid_but_stays_in_the_history(client
     ).json()
     assert grid["features"] == [] and grid["data_age_s"] is None
     assert 10000 <= grid["newest_evidence_age_s"] <= 11500  # about 3 h, no place named
+    assert grid["newest_unplaced_age_s"] is None
     h = await client.get(
         "/v1/trust/history", params={"bbox": BBOX, "window": "6h"}, headers=hdr(client, "responder")
     )

@@ -20,6 +20,7 @@ import type {
 type Grid = FeatureCollection<Polygon, TrustProps> & {
   sim: boolean
   newest_evidence_age_s?: number | null
+  newest_unplaced_age_s?: number | null
 }
 type History = FeatureCollection<Polygon, HistoryProps> & { sim: boolean }
 export interface View {
@@ -139,7 +140,7 @@ export function useDashboard(key: string | null) {
     gridTooFar || gridError
       ? null
       : grid
-        ? quietNote(grid.features.length, grid.newest_evidence_age_s)
+        ? quietNote(grid.features.length, grid.newest_evidence_age_s, grid.newest_unplaced_age_s)
         : null
 
   // Expired history: responders and above only (the API refuses the rest), and only when the user switches it on.

@@ -35,12 +35,25 @@ export const GRID_WINDOW_MIN = 90
 /** Why the map looks empty. null while the grid is not loaded or has cells. An empty map never means safe. */
 export function quietNote(
   gridCells: number | null,
-  newestEvidenceAgeS: number | null | undefined,
+  newestPlacedAgeS: number | null | undefined,
+  newestUnplacedAgeS: number | null | undefined = null,
 ): string | null {
   if (gridCells !== 0) return null
-  if (newestEvidenceAgeS === null || newestEvidenceAgeS === undefined)
-    return 'No evidence has been received yet. Uncoloured does not mean safe.'
-  return `No evidence in the last ${GRID_WINDOW_MIN} min. Newest reading ${ageText(newestEvidenceAgeS)}. Uncoloured does not mean safe.`
+  const unplaced =
+    newestUnplacedAgeS !== null &&
+    newestUnplacedAgeS !== undefined &&
+    newestUnplacedAgeS * 1 <= GRID_WINDOW_MIN * 60 &&
+    (newestPlacedAgeS === null ||
+      newestPlacedAgeS === undefined ||
+      newestUnplacedAgeS < newestPlacedAgeS)
+  const placed =
+    newestPlacedAgeS === null || newestPlacedAgeS === undefined
+      ? 'No reading with a position has been received yet.'
+      : `No reading with a position in the last ${GRID_WINDOW_MIN} min. Newest ${ageText(newestPlacedAgeS)}.`
+  const extra = unplaced
+    ? ` Readings are arriving (newest ${ageText(newestUnplacedAgeS)}) but without a GNSS fix, so they cannot be placed.`
+    : ''
+  return `${placed}${extra} Uncoloured does not mean safe.`
 }
 
 export type Freshness = 'fresh' | 'stale' | 'silent' | 'never'

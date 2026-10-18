@@ -99,11 +99,15 @@ async def trust_grid(
         )
     newest = max((c.newest_observed_at for c in cells), default=None)
     async with request.app.state.sessionmaker() as session:
-        latest = (
+        no_fix = (func.ST_X(Event.position) == 0) & (func.ST_Y(Event.position) == 0)
+        latest, latest_unplaced = (
             await session.execute(
-                select(func.max(Event.observed_at)).where(Event.msg_type.in_(ANALYSED_TYPES))
+                select(
+                    func.max(Event.observed_at).filter(~no_fix),
+                    func.max(Event.observed_at).filter(no_fix),
+                ).where(Event.msg_type.in_(ANALYSED_TYPES))
             )
-        ).scalar_one()
+        ).one()
     now = datetime.now(UTC)
     return {
         "type": "FeatureCollection",
@@ -112,6 +116,8 @@ async def trust_grid(
         "data_age_s": age_s(newest, now),
         # when the grid is empty: how old the newest evidence anywhere is (age only, no place), so a quiet network is not read as a broken one
         "newest_evidence_age_s": age_s(latest, now),
+        # readings that arrived without a GNSS position: stored, never placed on the map
+        "newest_unplaced_age_s": age_s(latest_unplaced, now),
         "sim": any(c.sim for c in cells),
     }
 
