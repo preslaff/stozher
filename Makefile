@@ -1,4 +1,4 @@
-.PHONY: up down field kit-bundle kit-doctor kit kit-init kit-build kit-stop migrate test lint sim sim-hazards assistant fw fw-test fw-vectors fw-upload worker api bridge
+.PHONY: up down field kit-bundle kit-doctor kit kit-init kit-build kit-stop migrate test lint sim sim-hazards assistant assistant-eval fw fw-test fw-vectors fw-upload worker api bridge
 
 S ?= coastal
 
@@ -45,6 +45,8 @@ worker:
 
 assistant:  # optional; needs STOZHER_SYSTEM_KEY for the heartbeat; set STOZHER_ASSISTANT_URL=http://127.0.0.1:8100 for the API
 	uv run python -m assistant
+assistant-eval:  # asks the local model the evaluation questions against canned data (docs/assistant.md); not part of make test
+	uv run python -m assistant.evaluation
 
 bridge:  # needs STOZHER_SYSTEM_KEY; MESH_PORT=fake runs with no radio
 	uv run --package stozher-mesh-bridge --extra radio python -m mesh_bridge run

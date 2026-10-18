@@ -52,6 +52,18 @@ and the kit never switches it on. Switching it on is a decision about where situ
 `ASSISTANT=on MESH_PORT=... make kit` starts it with the kit (log `~/.local/state/stozher/assistant.log`), or `make assistant` by hand with `STOZHER_ASSISTANT_URL=http://127.0.0.1:8100` set for the API.
 For the local engine start `llama-server --jinja -m <tool-capable-instruct-model.gguf> --port 8080` (`--jinja` is needed for tool calls; any GGUF instruct model with a tool template works, for example Qwen2.5 7B Instruct). `STOZHER_LLAMACPP_URL` points at it. Ollama still works with `STOZHER_ASSISTANT_LOCAL_BACKEND=ollama`. `/health` lists `assistant` as present while its heartbeat (30 s) is recent.
 
+## Evaluating the assistant
+
+`services/assistant/eval/cases.json` holds about 20 fixed cases: a question, a canned `/v1` "world" (live and strong, live but thin, empty, expired only, simulated, unverified hazard, API down, readings without a position)
+and the checks the answer must pass: grounded or not, data age, SIM label, required and absent caveats, wording that must never appear ("no action required", "all clear", "safe to ..."), and refusals.
+It is data, so a failure seen in use becomes a new case.
+
+- **Tier 1** (`uv run pytest services/assistant`, part of `make test`): each case is played with a scripted provider, including deliberately bad model answers, to prove the rules that code enforces. No model needed.
+- **Tier 2** (`make assistant-eval`): the same questions go to the configured local engine (llama-server must be running) and the real answers are checked with the same rules; it prints pass/fail and seconds per case
+  and exits non-zero on any failure. It never uses the cloud unless the operator has switched it on. Which tool a real model picks is not a rule, so tier 2 does not check it.
+
+Run tier 2 whenever the model, the prompt (`agent.SYSTEM`) or a tool changes.
+
 ## Not built
 
 Retrieval over playbooks (pgvector `kb_chunks`), voice, and streaming answers. The dashboard panel is the only client so far.
