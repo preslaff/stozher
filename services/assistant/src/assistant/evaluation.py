@@ -77,6 +77,11 @@ class ScriptedProvider:
 def failures(answer: Answer, expect: dict[str, Any], live: bool) -> list[str]:
     """Why the answer broke the case's expectations; empty means it passed."""
     out: list[str] = []
+    expect = dict(expect)
+    scripted_only = expect.pop("scripted_only", {})
+    if not live:  # what a deliberately bad scripted answer must trigger; a real model may simply not make the mistake
+        for key, value in scripted_only.items():
+            expect[key] = [*expect.get(key, []), *value] if isinstance(value, list) else value
     # the model's own words: caveats are added by code and legitimately contain phrases like "not an all-clear"
     own = answer.answer
     for note in answer.caveats:

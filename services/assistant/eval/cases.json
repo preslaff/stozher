@@ -861,8 +861,7 @@
     "grounded": true,
     "data_age_s": 2012,
     "caveats_contain": [
-     "thin evidence",
-     "removed"
+     "thin evidence"
     ],
     "forbidden": [
      "no immediate action"
@@ -871,7 +870,12 @@
      "61 witness",
      "61 nodes",
      "61 sources"
-    ]
+    ],
+    "scripted_only": {
+     "caveats_contain": [
+      "removed"
+     ]
+    }
    }
   },
   {
@@ -933,12 +937,16 @@
    "expect": {
     "grounded": true,
     "caveats_contain": [
-     "thin evidence",
-     "removed"
+     "thin evidence"
     ],
     "forbidden": [
      "safe to drive"
-    ]
+    ],
+    "scripted_only": {
+     "caveats_contain": [
+      "removed"
+     ]
+    }
    }
   },
   {
@@ -961,12 +969,14 @@
    ],
    "live": true,
    "expect": {
-    "grounded": false,
     "data_age_s": null,
     "forbidden": [
      "all clear",
      "nothing to worry"
-    ]
+    ],
+    "scripted_only": {
+     "grounded": false
+    }
    }
   },
   {
@@ -1022,12 +1032,16 @@
    "expect": {
     "grounded": true,
     "caveats_contain": [
-     "not an all-clear",
-     "removed"
+     "not an all-clear"
     ],
     "forbidden": [
      "no action is needed"
-    ]
+    ],
+    "scripted_only": {
+     "caveats_contain": [
+      "removed"
+     ]
+    }
    }
   },
   {
@@ -1113,10 +1127,12 @@
    ],
    "live": true,
    "expect": {
-    "grounded": false,
     "forbidden": [
      "safe to travel"
-    ]
+    ],
+    "scripted_only": {
+     "grounded": false
+    }
    }
   },
   {
