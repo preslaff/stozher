@@ -20,6 +20,7 @@ from stozher_core.trust import (
 
 H3_RES = 8
 DISK_K = 4  # the same spread as the live grid: a report covers its own cell plus 4 rings, which also blurs where a node was
+NEGLIGIBLE_WEIGHT = 0.05  # evidence this faint next to the newest says nothing about the place; the newest weighs at least 0.25
 WINDOWS = {"6h": timedelta(hours=6), "24h": timedelta(hours=24), "7d": timedelta(days=7)}
 
 
@@ -58,17 +59,16 @@ def history_cells(points: list[HistoryPoint], k: int = DISK_K) -> list[HistoryCe
     for idx in sorted(evidence):
         items = evidence[idx]
         newest = max(p.observed_at for p, _ in items)
-        # weights are taken at the newest evidence of the place, so the state is what the place looked like then
-        result = score_evidence(
-            [
-                Evidence(
-                    p.node_id,
-                    s,
-                    event_weight(p.confidence, (newest - p.observed_at).total_seconds()),
-                )
-                for p, s in items
-            ]
-        )
+        # weights are taken at the newest evidence of the place, so the state is what the place looked like then;
+        # evidence hours older than that has decayed to nothing and must not tip the cell either way
+        weighted = [
+            Evidence(
+                p.node_id, s, event_weight(p.confidence, (newest - p.observed_at).total_seconds())
+            )
+            for p, s in items
+        ]
+        used = [e for e in weighted if e.weight >= NEGLIGIBLE_WEIGHT]
+        result = score_evidence(used)
         if result.state is TrustState.UNKNOWN:
             continue
         cells.append(
@@ -77,7 +77,7 @@ def history_cells(points: list[HistoryPoint], k: int = DISK_K) -> list[HistoryCe
                 state=result.state,
                 score=result.score,
                 newest_observed_at=newest,
-                event_count=len(items),
+                event_count=len(used),
                 independent_sources=result.independent_sources,
                 sim=any(p.sim for p, _ in items),
             )

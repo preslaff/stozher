@@ -94,5 +94,7 @@ The live grid holds the last 90 minutes of evidence and nothing else: older evid
 `GET /v1/trust/history` shows what was last seen, for responders and above, over 6 hours, 24 hours or 7 days. It is a different thing from the grid:
 - each cell is scored at the moment of its **newest** evidence (weights relative to that moment), then labelled `expired` and given the age it has today;
 - it uses the same evidence rules as the grid (types 0, 1, 2; no-fix records and classes 4 and 7 are left out) and the same 4-ring spread;
+- evidence whose weight at that moment is under 0.05 (about 4 half-lives, 2 hours or more older than the newest) is ignored, so a cell is not turned
+  DEGRADED by a stray old reading next to a fresh heartbeat; the newest evidence always counts (its weight is at least 0.25);
 - clients must draw it as expired (grey, hatched, with the age), never with the trust colours, and must say it is not current;
 - the public role does not get it, because a map of where witnesses reported is location history. The public sees only `newest_evidence_age_s` on the grid.

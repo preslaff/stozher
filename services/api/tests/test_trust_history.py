@@ -37,6 +37,21 @@ def test_old_evidence_keeps_its_own_weight_not_the_age_of_today() -> None:
     assert all(c.score is not None for c in first)
 
 
+def test_evidence_hours_older_than_the_newest_does_not_tip_a_cell() -> None:
+    # six benign (DEGRADED) readings 9 h before a normal heartbeat: weight ~1e-6, so the cell is what the newest says
+    old = [point(3, -540 + i, conf=6) for i in range(6)]
+    cells = history_cells([*old, point(0, 0, conf=0)])
+    assert cells and {c.state.value for c in cells} == {"TRUSTED"}
+    assert {c.event_count for c in cells} == {1}  # only the evidence that counted
+
+
+def test_close_adverse_evidence_still_degrades_and_a_newest_adverse_wins() -> None:
+    near = history_cells([point(3, -10, conf=20), point(0, 0, conf=0)])
+    assert {c.state.value for c in near} == {"DEGRADED"}
+    newest = history_cells([point(0, -30, conf=0), point(1, 0, conf=20)])
+    assert {c.state.value for c in newest} == {"JAMMED"}
+
+
 async def age_events(c: httpx.AsyncClient, hours: int) -> None:
     async with c.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
         await s.execute(text(f"UPDATE events SET observed_at = now() - interval '{hours} hours'"))
