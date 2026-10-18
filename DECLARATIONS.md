@@ -31,7 +31,11 @@ Every library, tool, model and dataset used, with licence. Add a row when you ad
 | go-pmtiles CLI 1.31.2 | tool | BSD-3 | tools/basemap/fetch.sh | cuts the extract; used on the developer machine only |
 | protomaps/basemaps-assets: Noto Sans (Regular, Medium, Italic) glyphs, dark sprites | dataset | SIL OFL 1.1 (fonts), BSD-3 (sprites) | web/dashboard/public/basemap (git-ignored) | map labels and icons served locally, so no font or sprite is fetched online |
 | Meshtastic Python library (+ pypubsub) | library | GPL-3.0 | services/mesh_bridge (optional `radio` extra) | bridge is GPL-3.0-or-later and isolated, HTTP only |
-| httpx | library | BSD-3 | simulator, mesh_bridge, tests | |
+| httpx | library | BSD-3 | simulator, mesh_bridge, assistant, tests | |
+| uvicorn | library | BSD-3 | services/api, services/assistant | serves the assistant on loopback |
+| Ollama (local LLM server) | tool | MIT | services/assistant (optional, not bundled) | local engine; HTTP `/api/chat` with tools; installed by the user, nothing is downloaded by the kit |
+| qwen2.5:7b-instruct (Qwen2.5 7B Instruct, Alibaba Cloud) | model | Apache-2.0 | services/assistant (default local model) | open-weight instruct model with tool calling; pulled by the user with `ollama pull`; replaceable with `STOZHER_ASSISTANT_LOCAL_MODEL` |
+| Anthropic Messages API, model `claude-sonnet-5-5` | service / model | Anthropic terms (commercial API) | services/assistant (optional cloud engine) | off by default; used only when `STOZHER_ASSISTANT_CLOUD=on` and `ANTHROPIC_API_KEY` are both set in the environment; called with plain httpx, no SDK |
 | Ed25519 via `cryptography` | library feature | Apache-2.0 / BSD | stozher_core.control, services/api | acknowledgement signatures; golden vectors cross-checked with the OpenSSL CLI |
 | Sentinel-1 GRD (processed on CDSE through openEO), Copernicus DEM GLO-30 | datasets | Copernicus Sentinel data terms (free, attribution required) | spikes/eo_flood | flood-detection spike; attribution in docs/spikes/eo-flood.md |
 | Copernicus EMS rapid-mapping products (EMSR692 AOI 05) | dataset | Copernicus EMS terms (free, attribution) | spikes/eo_flood | validation reference only, not redistributed |

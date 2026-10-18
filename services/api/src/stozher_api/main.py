@@ -18,6 +18,7 @@ from .routes import (
     access,
     admin,
     alerts,
+    assistant,
     control,
     events,
     hazards,
@@ -116,6 +117,7 @@ def create_app(settings: Settings | None = None, **engine_kw: object) -> FastAPI
     app.include_router(admin.router)
     app.include_router(reports.router)
     app.include_router(hazards.router)
+    app.include_router(assistant.router)
     dashboard = Path(settings.stozher_dashboard_dir) if settings.stozher_dashboard_dir else None
     if dashboard is not None:
         if (dashboard / "index.html").is_file():

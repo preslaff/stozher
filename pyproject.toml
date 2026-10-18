@@ -3,7 +3,7 @@ name = "stozher"
 version = "0.0.0"
 description = "STOZHER workspace root"
 requires-python = ">=3.12"
-dependencies = ["stozher-core", "stozher-api", "stozher-worker", "stozher-simulator", "stozher-mesh-bridge"]
+dependencies = ["stozher-core", "stozher-api", "stozher-worker", "stozher-simulator", "stozher-mesh-bridge", "stozher-assistant"]
 
 [tool.uv.sources]
 stozher-core = { workspace = true }
@@ -11,9 +11,10 @@ stozher-api = { workspace = true }
 stozher-worker = { workspace = true }
 stozher-simulator = { workspace = true }
 stozher-mesh-bridge = { workspace = true }
+stozher-assistant = { workspace = true }
 
 [tool.uv.workspace]
-members = ["packages/stozher_core", "services/api", "services/worker", "services/simulator", "services/mesh_bridge"]
+members = ["packages/stozher_core", "services/api", "services/worker", "services/simulator", "services/mesh_bridge", "services/assistant"]
 
 [dependency-groups]
 dev = ["pytest", "pytest-asyncio", "hypothesis", "httpx", "ruff", "mypy", "pyubx2"]

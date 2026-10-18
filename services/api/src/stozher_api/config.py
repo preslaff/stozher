@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     # A field kit syncs with this cloud API (docs/api.md section 8) using a `system` key issued there. Empty: no sync.
     stozher_cloud_url: str = ""
     stozher_cloud_key: str = ""
+    # The optional assistant service (docs/api.md). Empty: the assistant is absent and its endpoint answers 503.
+    stozher_assistant_url: str = ""
 
 
 @lru_cache

@@ -1,4 +1,4 @@
-.PHONY: up down field kit-bundle kit-doctor kit kit-init kit-build kit-stop migrate test lint sim sim-hazards fw fw-test fw-vectors fw-upload worker api bridge
+.PHONY: up down field kit-bundle kit-doctor kit kit-init kit-build kit-stop migrate test lint sim sim-hazards assistant fw fw-test fw-vectors fw-upload worker api bridge
 
 S ?= coastal
 
@@ -30,7 +30,7 @@ migrate:
 lint:
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy packages/stozher_core/src services/api/src services/worker/src services/simulator/src services/mesh_bridge/src
+	uv run mypy packages/stozher_core/src services/api/src services/worker/src services/simulator/src services/mesh_bridge/src services/assistant/src
 	@if [ -f web/dashboard/package.json ]; then cd web/dashboard && pnpm lint; fi
 
 test: lint
@@ -42,6 +42,9 @@ api:
 
 worker:
 	uv run python -m stozher_worker
+
+assistant:  # optional; needs STOZHER_SYSTEM_KEY for the heartbeat; set STOZHER_ASSISTANT_URL=http://127.0.0.1:8100 for the API
+	uv run python -m assistant
 
 bridge:  # needs STOZHER_SYSTEM_KEY; MESH_PORT=fake runs with no radio
 	uv run --package stozher-mesh-bridge --extra radio python -m mesh_bridge run

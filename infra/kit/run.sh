@@ -10,6 +10,8 @@ mkdir -p "$STATE"
 ENV=infra/.env
 [ -f "$ENV" ] || { echo "no $ENV: run infra/kit/init.sh first" >&2; exit 1; }
 set -a; . "$ENV"; set +a
+# the API forwards questions to the assistant when it is switched on (ASSISTANT=on); otherwise the endpoint answers 503
+[ "${ASSISTANT:-off}" = "on" ] && export STOZHER_ASSISTANT_URL="http://127.0.0.1:${STOZHER_ASSISTANT_PORT:-8100}"
 for v in STOZHER_KEK STOZHER_SYSTEM_KEY; do
   [ -n "${!v:-}" ] || { echo "$v is missing in $ENV: run infra/kit/init.sh" >&2; exit 1; }
 done
@@ -46,11 +48,17 @@ if [ "$MESH_PORT" != "none" ]; then
   pids+=($!)
 fi
 
+if [ "${ASSISTANT:-off}" = "on" ]; then
+  # optional: answers questions through the API with the asker's own key; the core runs without it
+  setsid uv run python -m assistant >"$STATE/assistant.log" 2>&1 &
+  pids+=($!)
+fi
+
 sleep 4
 echo
 echo "STOZHER field kit is running. Open it from this laptop or any device on the same network:"
 for ip in $(hostname -I 2>/dev/null); do echo "  http://$ip:$PORT/"; done
-echo "Sign in with an API key for your role. Logs: $STATE/{api,worker,bridge}.log"
+echo "Sign in with an API key for your role. Logs: $STATE/{api,worker,bridge,assistant}.log"
 echo "Ctrl-C to stop."
 wait -n "${pids[@]}" || true
 echo "a component exited; stopping the kit. See $STATE/*.log" >&2

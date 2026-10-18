@@ -97,6 +97,7 @@ updating this table fails the build.
 | `POST /v1/admin/users/{user_id}/disable` |  |  |  |  | x |  |
 | `POST /v1/admin/users/{user_id}/role` |  |  |  |  | x |  |
 | `GET /v1/alerts` |  |  | x | x | x |  |
+| `POST /v1/assistant/query` |  |  | x | x | x |  |
 | `GET /v1/control/public-key` (no key) | x | x | x | x | x | x |
 | `GET /v1/events` |  |  | x | x | x |  |
 | `GET /v1/events/{event_id}` |  |  | x | x | x |  |
