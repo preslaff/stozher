@@ -11,7 +11,7 @@ dashboard / API client ──POST /v1/assistant/query (responder key)──► A
                                                                                ▼
                                                                         /v1 situation, trust, hotspots, events, alerts, hazards…
                                                                                │
-                                                                    engine: cloud model (if switched on) or local Ollama
+                                                                    engine: cloud model (if switched on) or local llama.cpp / Ollama
 ```
 
 - The API forwards the caller's own key, so the assistant can read exactly what the caller can read and nothing more. A tool the key may not call returns an error text.
@@ -41,7 +41,7 @@ A model, if one is available, only adds a short summary on top, from those facts
 
 | Engine | When | Data |
 |---|---|---|
-| Local: Ollama, `qwen2.5:7b-instruct` by default | always available if Ollama runs (offline too) | stays on this machine |
+| Local: llama.cpp `llama-server` (default) or Ollama | always available if the server runs (offline too) | stays on this machine |
 | Cloud: Anthropic Messages API, `claude-sonnet-5-5` | only when `STOZHER_ASSISTANT_CLOUD=on` **and** `ANTHROPIC_API_KEY` are set in the environment | tool results (compacted situation data, role-limited by the key) are sent to the provider |
 
 `STOZHER_ASSISTANT_ENGINE=auto` (default) tries the cloud first when it is on, then falls back to the local engine; `local` and `cloud` force one. The cloud is off by default
@@ -50,7 +50,7 @@ and the kit never switches it on. Switching it on is a decision about where situ
 ## Running it
 
 `ASSISTANT=on MESH_PORT=... make kit` starts it with the kit (log `~/.local/state/stozher/assistant.log`), or `make assistant` by hand with `STOZHER_ASSISTANT_URL=http://127.0.0.1:8100` set for the API.
-Install Ollama and `ollama pull qwen2.5:7b-instruct` once for the local engine. `/health` lists `assistant` as present while its heartbeat (30 s) is recent.
+For the local engine start `llama-server --jinja -m <tool-capable-instruct-model.gguf> --port 8080` (`--jinja` is needed for tool calls; any GGUF instruct model with a tool template works, for example Qwen2.5 7B Instruct). `STOZHER_LLAMACPP_URL` points at it. Ollama still works with `STOZHER_ASSISTANT_LOCAL_BACKEND=ollama`. `/health` lists `assistant` as present while its heartbeat (30 s) is recent.
 
 ## Not built
 

@@ -18,9 +18,12 @@ class Settings(BaseSettings):
     stozher_assistant_port: int = 8100
     # auto = the cloud model when it is switched on and reachable, else the local one; local / cloud force one of them.
     stozher_assistant_engine: str = "auto"
-    # Local engine: Ollama with an open-weight instruct model that can call tools.
+    # Local engine: llama.cpp `llama-server --jinja` (default) or Ollama, with an open-weight instruct model that can call tools.
+    stozher_assistant_local_backend: str = "llamacpp"  # llamacpp | ollama
+    stozher_llamacpp_url: str = "http://127.0.0.1:8080"
     stozher_ollama_url: str = "http://127.0.0.1:11434"
-    stozher_assistant_local_model: str = "qwen2.5:7b-instruct"
+    # Empty: llama-server uses the model it loaded; Ollama falls back to qwen2.5:7b-instruct.
+    stozher_assistant_local_model: str = ""
     # Cloud engine: used only when BOTH are set. Situation summaries leave this machine then, so the default is off.
     stozher_assistant_cloud: str = "off"
     anthropic_api_key: str = ""

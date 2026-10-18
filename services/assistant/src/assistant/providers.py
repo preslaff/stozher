@@ -87,6 +87,80 @@ class OllamaProvider:
         return Turn(text=msg.get("content") or "", calls=calls)
 
 
+class LlamaCppProvider:
+    """Local engine: llama.cpp `llama-server` (OpenAI-style /v1/chat/completions). Works offline.
+
+    Tool calls need the server to be started with `--jinja` and a model whose chat template supports tools.
+    """
+
+    name = "llamacpp"
+
+    def __init__(self, http: httpx.AsyncClient, model: str) -> None:
+        self.http, self.model = (
+            http,
+            model or "local",
+        )  # llama-server answers with the model it loaded
+
+    @staticmethod
+    def _messages(system: str, messages: list[Message]) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = [{"role": "system", "content": system}]
+        for m in messages:
+            if m["role"] == "user":
+                out.append({"role": "user", "content": m["text"]})
+            elif m["role"] == "assistant":
+                item: dict[str, Any] = {"role": "assistant", "content": m.get("text", "")}
+                if m.get("calls"):
+                    item["tool_calls"] = [
+                        {
+                            "id": c.id,
+                            "type": "function",
+                            "function": {"name": c.name, "arguments": dump(c.args)},
+                        }
+                        for c in m["calls"]
+                    ]
+                out.append(item)
+            else:
+                out.append({"role": "tool", "tool_call_id": m["id"], "content": m["text"]})
+        return out
+
+    async def complete(self, system: str, messages: list[Message], tools: list[ToolSchema]) -> Turn:
+        body = {
+            "model": self.model,
+            "stream": False,
+            "temperature": 0.1,
+            "max_tokens": 1500,
+            "messages": self._messages(system, messages),
+            "tools": [{"type": "function", "function": t} for t in tools],
+        }
+        try:
+            r = await self.http.post("/v1/chat/completions", json=body)
+            r.raise_for_status()
+            msg = r.json()["choices"][0]["message"]
+            calls = [
+                ToolCall(
+                    c.get("id") or f"call_{i}",
+                    c["function"]["name"],
+                    _arguments(c["function"].get("arguments")),
+                )
+                for i, c in enumerate(msg.get("tool_calls") or [])
+            ]
+        except (httpx.HTTPError, KeyError, IndexError, ValueError, TypeError) as exc:
+            raise EngineError(f"llamacpp: {exc.__class__.__name__}") from exc
+        return Turn(text=msg.get("content") or "", calls=calls)
+
+
+def _arguments(raw: Any) -> dict[str, Any]:
+    """OpenAI-style arguments are a JSON string; a small model may send an empty or broken one."""
+    if isinstance(raw, dict):
+        return raw
+    if not raw:
+        return {}
+    value = json.loads(raw)
+    if not isinstance(value, dict):
+        raise ValueError("tool arguments are not an object")
+    return value
+
+
 class AnthropicProvider:
     """Cloud engine (Messages API). Built only when the operator switched the cloud on and set a key."""
 

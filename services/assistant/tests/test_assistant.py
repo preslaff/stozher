@@ -2,12 +2,20 @@ import json
 from typing import Any
 
 import httpx
+import pytest
 from assistant.agent import ask
 from assistant.app import create_app
 from assistant.config import Settings
 from assistant.engines import Engines
 from assistant.guard import NO_EVIDENCE, refusal
-from assistant.providers import AnthropicProvider, EngineError, OllamaProvider, ToolCall, Turn
+from assistant.providers import (
+    AnthropicProvider,
+    EngineError,
+    LlamaCppProvider,
+    OllamaProvider,
+    ToolCall,
+    Turn,
+)
 from assistant.report import report
 from assistant.tools import Tools
 
@@ -294,20 +302,90 @@ async def test_ollama_and_anthropic_translate_tool_turns() -> None:
     ]  # results share one user message
 
 
+async def test_llamacpp_translates_openai_style_tool_turns() -> None:
+    seen: dict[str, Any] = {}
+
+    def server(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "x1",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "situation",
+                                        "arguments": json.dumps({"bbox": BBOX}),
+                                    },
+                                },
+                                {
+                                    "type": "function",
+                                    "function": {"name": "alerts", "arguments": ""},
+                                },
+                            ],
+                        }
+                    }
+                ]
+            },
+        )
+
+    history = [
+        {"role": "user", "text": "q"},
+        {"role": "assistant", "text": "", "calls": [ToolCall("c1", "situation", {"bbox": BBOX})]},
+        {"role": "tool", "id": "c1", "name": "situation", "text": "{}"},
+    ]
+    p = LlamaCppProvider(
+        httpx.AsyncClient(base_url="http://l", transport=httpx.MockTransport(server)), ""
+    )
+    turn = await p.complete(
+        "sys", history, [{"name": "situation", "description": "d", "parameters": {}}]
+    )
+    assert seen["path"] == "/v1/chat/completions" and seen["body"]["model"] == "local"
+    assert turn.calls[0].id == "x1" and turn.calls[0].args == {"bbox": BBOX}
+    assert turn.calls[1].id == "call_1" and turn.calls[1].args == {}  # no id, empty arguments
+    sent = seen["body"]["messages"]
+    assert sent[2]["tool_calls"][0]["function"]["arguments"] == json.dumps(
+        {"bbox": BBOX}, separators=(",", ":")
+    )  # arguments travel as a JSON string
+    assert sent[3] == {"role": "tool", "tool_call_id": "c1", "content": "{}"}
+
+    broken = httpx.MockTransport(
+        lambda r: httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"tool_calls": [{"function": {"name": "a", "arguments": "{oops"}}]}}
+                ]
+            },
+        )
+    )
+    bad = LlamaCppProvider(httpx.AsyncClient(base_url="http://l", transport=broken), "")
+    with pytest.raises(EngineError):
+        await bad.complete("s", history, [])
+
+
 def test_the_cloud_needs_both_the_switch_and_a_key() -> None:
     assert not Settings(stozher_assistant_cloud="on", anthropic_api_key="").cloud_enabled
     assert not Settings(stozher_assistant_cloud="off", anthropic_api_key="sk").cloud_enabled
     assert Settings(stozher_assistant_cloud="on", anthropic_api_key="sk").cloud_enabled
     local = Engines(Settings(stozher_assistant_cloud="off", anthropic_api_key="sk"))
-    assert [p.name for p in local.candidates()] == ["ollama"]
+    assert [p.name for p in local.candidates()] == ["llamacpp"]
     both = Engines(Settings(stozher_assistant_cloud="on", anthropic_api_key="sk"))
-    assert [p.name for p in both.candidates()] == ["anthropic", "ollama"]
+    assert [p.name for p in both.candidates()] == ["anthropic", "llamacpp"]
     only_local = Engines(
         Settings(
             stozher_assistant_engine="local", stozher_assistant_cloud="on", anthropic_api_key="sk"
         )
     )
-    assert [p.name for p in only_local.candidates()] == ["ollama"]
+    assert [p.name for p in only_local.candidates()] == ["llamacpp"]
+    ollama = Engines(Settings(stozher_assistant_local_backend="ollama"))
+    assert [p.name for p in ollama.candidates()] == ["ollama"]
 
 
 async def test_the_http_face_needs_a_key_and_degrades_when_no_engine_is_there() -> None:
