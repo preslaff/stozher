@@ -13,19 +13,21 @@ export function NodesPanel({ nodes, now }: { nodes: NodeInfo[]; now: number }) {
         {nodes.map((n) => {
           const f = freshness(n.last_seen, now)
           return (
-            <li key={n.id} className="nodeitem">
-              <span className="dot" style={{ background: FRESH_COLOR[f] }} aria-label={`${f}`} />
-              <span className="body">
-                <span className="msg">
-                  {n.name}
-                  {n.sim && <span className="chip sim">SIM</span>}
+            <li key={n.id}>
+              <div className="item">
+                <span className="dot" style={{ background: FRESH_COLOR[f] }} aria-label={`${f}`} />
+                <span className="body">
+                  <span className="msg">
+                    {n.name}
+                    {n.sim && <span className="chip sim">SIM</span>}
+                  </span>
+                  <span className="meta">
+                    {n.status !== 'active' ? `${n.status} · ` : ''}
+                    {n.last_seen ? `heard ${sinceText(n.last_seen, now)}` : 'never heard'}
+                  </span>
+                  <span className="meta">{deliveryText(n.delivery, now)}</span>
                 </span>
-                <span className="meta">
-                  {n.status !== 'active' ? `${n.status} · ` : ''}
-                  {n.last_seen ? `heard ${sinceText(n.last_seen, now)}` : 'never heard'}
-                </span>
-                <span className="meta">{deliveryText(n.delivery, now)}</span>
-              </span>
+              </div>
             </li>
           )
         })}
