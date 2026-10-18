@@ -41,6 +41,45 @@ NO_EVIDENCE = (
 EXPIRED = "Expired history was used: it shows what was seen, not the current state."
 UNVERIFIED = "Hazard reports marked unverified are unverified; only a human confirms them."
 SIM_LABEL = "SIMULATED DATA: part of this comes from the simulator."
+REMOVED = "A statement the data does not support was removed."
+THIN_CONFIDENCE = 0.3  # one witness at full weight tops out at 0.3 (stozher_core.trust)
+
+
+def thin_evidence(r: ToolResult) -> bool:
+    """Live evidence that rests on one source or has low confidence. Unknown values do not count as thin."""
+    if r.no_recent_evidence:
+        return False  # that case has its own caveat
+    low = r.confidence is not None and r.confidence < THIN_CONFIDENCE
+    single = r.sources_count is not None and r.sources_count <= 1
+    return low or single
+
+
+def thin_text(r: ToolResult) -> str:
+    conf = "unknown" if r.confidence is None else f"{r.confidence:.2f}"
+    n = "unknown" if r.sources_count is None else str(r.sources_count)
+    return (
+        f"Based on thin evidence (confidence {conf}, {n} independent source(s)). "
+        "Treat as indicative and confirm with another source of position."
+    )
+
+
+# Wording the data can never support when evidence is absent or thin (CLAUDE.md: nothing is clear by default or by absence).
+_OVERCLAIM = re.compile(
+    r"\b(all[- ]clear|safe\s+to|is\s+safe|are\s+safe|no\s+(immediate\s+)?action\s+(is\s+)?(required|needed)|"
+    r"nothing\s+to\s+worry|no\s+risk|can\s+be\s+trusted\s+fully)\b",
+    re.I,
+)
+
+
+def overclaims(text: str) -> bool:
+    return _OVERCLAIM.search(text) is not None
+
+
+def strip_overclaims(text: str) -> tuple[str, bool]:
+    """Drop the sentences (and bullet lines) that overclaim. Returns the text and whether anything was removed."""
+    parts = re.split(r"(?<=[.!?])\s+|\n+", text)
+    kept = [p for p in parts if p.strip() and not overclaims(p)]
+    return "\n".join(kept), len(kept) != len([p for p in parts if p.strip()])
 
 
 def caveats(used: list[tuple[str, ToolResult]]) -> list[str]:
@@ -49,6 +88,9 @@ def caveats(used: list[tuple[str, ToolResult]]) -> list[str]:
     live = [r for n, r in used if n in LIVE_EVIDENCE_TOOLS]
     if not any(not r.no_recent_evidence for r in live):
         out.append(NO_EVIDENCE)
+    thin = next((r for n, r in used if n in LIVE_EVIDENCE_TOOLS and thin_evidence(r)), None)
+    if thin is not None:
+        out.append(thin_text(thin))
     if any(n == "trust_history" and not r.error for n, r in used):
         out.append(EXPIRED)
     if any(n == "hazards" and not r.error and r.data.get("count", 0) > 0 for n, r in used):

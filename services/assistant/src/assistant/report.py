@@ -39,9 +39,9 @@ def sentences(res: dict[str, ToolResult], bbox: str | None, now: datetime) -> li
             out.append(f"Interference: {hs['active']} active hotspot(s) ({kinds}).")
         else:
             out.append("Interference: no active hotspot.")
-        cells = (sit.data["trust"] or {}).get("cells", 0)
+        cells = sit.data.get("cells_with_evidence", 0)
         if cells:
-            states = ", ".join(f"{n} {k}" for k, n in sit.data["trust"]["by_state"].items())
+            states = ", ".join(f"{n} {k}" for k, n in sit.data["cells_by_state"].items())
             out.append(
                 f"GNSS trust: {cells} cell(s) with evidence in the last 90 min ({states}); newest {age(sit.data_age_s)}."
             )

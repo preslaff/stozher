@@ -110,6 +110,8 @@ class ToolResult:
     sources: list[str] = field(default_factory=list)
     expired: bool = False  # history: old by definition
     error: bool = False
+    confidence: float | None = None  # of the live evidence; None when the tool does not say
+    sources_count: int | None = None  # independent sources behind it; None when unknown
 
     @property
     def no_recent_evidence(self) -> bool:
@@ -178,18 +180,28 @@ class Tools:
         if err:
             return self._fail(err)
         hs = body.get("hotspots", {})
-        data = {
+        trust = body.get("trust") or {}
+        data: dict[str, Any] = {
             "hotspots": {
                 "active": hs.get("active", 0),
                 "by_kind": hs.get("by_kind", {}),
                 "top": [_drop_geometry(i) for i in hs.get("items", [])[:5]],
             },
-            "trust": body.get("trust"),
+            # cells are places on the map, not witnesses: the names say so, so a model cannot mix them up
+            "cells_with_evidence": trust.get("cells", 0),
+            "cells_by_state": trust.get("by_state", {}),
             "confidence": body.get("confidence"),
-            "data_age_s": body.get("data_age_s"),
+            "newest_evidence_age_s": body.get("data_age_s"),
             "sim": body.get("sim"),
         }
-        return self._base(body, data)
+        result = self._base(body, data)
+        result.confidence = body.get("confidence")
+        grid, gerr = await self._get("/v1/trust/grid", {"bbox": bbox})
+        if gerr is None and grid.get("features"):
+            counts = [int(f["properties"].get("independent_sources", 0)) for f in grid["features"]]
+            result.sources_count = max(counts)
+            data["max_independent_sources_in_a_cell"] = result.sources_count
+        return result
 
     async def _t_trust_point(self, args: dict[str, Any]) -> ToolResult:
         body, err = await self._get(
@@ -201,7 +213,11 @@ class Tools:
         data = {k: body.get(k) for k in keep}
         if body.get("state") == "UNKNOWN":
             data["note"] = "no recent evidence here; this is not an all-clear"
-        return self._base(body, data)
+        result = self._base(body, data)
+        result.confidence = body.get("confidence")
+        if body.get("state") != "UNKNOWN":
+            result.sources_count = body.get("independent_sources")
+        return result
 
     async def _t_trust_history(self, args: dict[str, Any]) -> ToolResult:
         bbox = self._bbox(args)

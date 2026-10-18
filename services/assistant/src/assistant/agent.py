@@ -4,7 +4,14 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .guard import caveats, freshest_live_age, refusal
+from .guard import (
+    REMOVED,
+    caveats,
+    freshest_live_age,
+    refusal,
+    strip_overclaims,
+    thin_evidence,
+)
 from .providers import EngineError, Message, Provider, ToolCall, dump
 from .tools import TOOLS, ToolResult, Tools
 
@@ -14,12 +21,18 @@ tells people whether they can trust GNSS (satellite navigation) at a place and t
 Rules you must follow:
 - Answer ONLY from tool results. Call tools before answering. If a tool returns nothing, say there is no recent evidence. \
 No evidence is never an all-clear and you must never call an area safe or clear.
+- Counts such as cells_with_evidence are map cells (places), never witnesses. Use max_independent_sources_in_a_cell and the tool's \
+confidence for how many sources there are and how sure the data is, and say so.
+- Never write "no action required", "safe", "all clear" or similar. Thin evidence (one source, low confidence) is only indicative.
 - Always state how old the data is. Expired history (trust_history) shows what was seen, not what is true now.
 - Hazard reports: say their tier. Unverified is unverified. Never judge whether a road is passable; only report what the record says.
 - Simulated data (sim true) must be called simulated.
 - Talk about places and conditions, never about people, vehicles or units. Refuse anything that asks to find or follow someone.
 - You never create alerts, change data or give orders. You may suggest cautious actions such as checking a second source of position.
 - Keep answers short, plain and civil. Use this shape for situation questions: State; Area; Data age; Source; Suggested action."""
+
+
+UNGROUNDED = "I could not ground an answer in STOZHER data, so I will not guess. Try a more specific question about an area, a point or a route."
 
 
 class ToolUse(BaseModel):
@@ -110,9 +123,15 @@ async def ask(
         text = turn.text
         break
     grounded = bool(used) and bool(text)
-    if not grounded:
-        text = "I could not ground an answer in STOZHER data, so I will not guess. Try a more specific question about an area, a point or a route."
     notes = caveats(used)
+    weak = freshest_live_age(used) is None or any(thin_evidence(r) for _, r in used)
+    if grounded and weak:
+        text, removed = strip_overclaims(text)
+        if removed:
+            notes.append(REMOVED)
+        grounded = bool(text)
+    if not grounded:
+        text = UNGROUNDED
     sim = any(r.sim for _, r in used)
     return Answer(
         answer=compose(text, notes, sim),

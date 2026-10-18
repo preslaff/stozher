@@ -415,3 +415,66 @@ async def test_the_http_face_needs_a_key_and_degrades_when_no_engine_is_there() 
             )
             assert rep.status_code == 200 and rep.json()["engine"] == "none"
             assert (await c.get("/health")).json()["cloud"] == "off"
+
+
+GRID_ONE_SOURCE = {
+    "type": "FeatureCollection",
+    "features": [{"properties": {"state": "TRUSTED", "confidence": 0.03, "independent_sources": 1}}]
+    * 61,
+}
+SITUATION_THIN = {
+    "hotspots": {"active": 0, "by_kind": {}, "items": []},
+    "trust": {"cells": 61, "by_state": {"TRUSTED": 61}},
+    "sources": ["witness_nodes"],
+    "data_age_s": 2012,
+    "confidence": 0.03,
+    "sim": False,
+}
+
+
+async def test_situation_names_cells_and_sources_apart() -> None:
+    res = await Tools(
+        api({"/v1/situation": SITUATION_THIN, "/v1/trust/grid": GRID_ONE_SOURCE}), "k", BBOX
+    ).call("situation", {})
+    assert res.data["cells_with_evidence"] == 61
+    assert res.data["max_independent_sources_in_a_cell"] == 1 and res.sources_count == 1
+    assert "trust" not in res.data  # the ambiguous bare count is gone
+
+
+async def test_thin_evidence_gets_a_caveat_and_overclaims_are_removed() -> None:
+    p = Scripted(
+        call_situation(),
+        Turn(
+            text="State: TRUSTED. Data age: 33 minutes. Source: 61 witness nodes. "
+            "Suggested action: No immediate action required."
+        ),
+    )
+    a = await ask(
+        p,
+        Tools(api({"/v1/situation": SITUATION_THIN, "/v1/trust/grid": GRID_ONE_SOURCE}), "k", BBOX),
+        "can I trust GNSS here?",
+        BBOX,
+    )
+    assert "No immediate action required" not in a.answer
+    assert any("thin evidence (confidence 0.03, 1 independent source" in c for c in a.caveats)
+    assert any("removed" in c for c in a.caveats) and a.grounded
+
+
+async def test_strong_evidence_keeps_neutral_wording() -> None:
+    strong = {**SITUATION_LIVE, "confidence": 0.8}
+    grid = {"features": [{"properties": {"independent_sources": 3}}]}
+    p = Scripted(call_situation(), Turn(text="State: jammed. It is not safe to rely on GNSS."))
+    a = await ask(
+        p,
+        Tools(api({"/v1/situation": strong, "/v1/trust/grid": grid}), "k", BBOX),
+        "is there jamming?",
+        BBOX,
+    )
+    assert "not safe to rely" in a.answer or "State: jammed" in a.answer
+    assert not any("thin evidence" in c for c in a.caveats)
+
+
+async def test_an_answer_that_is_only_an_overclaim_becomes_ungrounded() -> None:
+    p = Scripted(call_situation(), Turn(text="All clear, nothing to worry about."))
+    a = await ask(p, Tools(api({"/v1/situation": SITUATION_EMPTY}), "k", BBOX), "is it safe?", BBOX)
+    assert a.grounded is False and "could not ground" in a.answer
