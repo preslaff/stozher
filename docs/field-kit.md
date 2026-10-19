@@ -10,7 +10,7 @@ phones / laptops ----- Wi-Fi (kit's network) ------ http://<laptop>:8000/  (dash
 ```
 
 ## What you need
-- A Linux laptop with the repository, `uv`, `pnpm`, the local PostgreSQL 16 (PostGIS, pgvector) with the `stozher` database. **No containers.**
+- A Linux laptop with the repository, `uv`, `pnpm`, the local PostgreSQL 16 (PostGIS; pgvector is not needed yet) with the `stozher` database. **No containers.**
 - A gateway radio on the private channel with stock Meshtastic (the TTGO T3 in our kit), connected by USB. Find its path with
   `ls /dev/serial/by-id/` (identify a board by its USB serial, never by `ttyUSB` number).
 - The offline map, built once with internet: `tools/basemap/fetch.sh` (`docs/basemap.md`). After that nothing needs a network.

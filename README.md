@@ -38,8 +38,8 @@ Contracts live in `docs/`: `packet.md`, `api.md`, `trust.md`, `control.md`, `mes
 
 ## Quick start
 
-Needs Linux, Python 3.12 with [`uv`](https://docs.astral.sh/uv/), Node with `pnpm`, and a **local PostgreSQL 16** with PostGIS and
-pgvector (no containers). Details and the full procedure are in `docs/field-kit.md`.
+Needs Linux, Python 3.12 with [`uv`](https://docs.astral.sh/uv/), Node with `pnpm`, and a **local PostgreSQL 16** with PostGIS
+(no containers; pgvector is only needed once playbook retrieval is built). Details and the full procedure are in `docs/field-kit.md`.
 
 ```
 git clone git@github.com:preslaff/stozher.git && cd stozher
