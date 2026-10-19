@@ -34,3 +34,6 @@ firmware/node/mt-esp32-ota.bin
 firmware/node/device-install.*
 firmware/node/device-update.*
 tbeam-a4b0.yaml
+
+# Phone GnssLogger recordings contain the phone position: never commit them
+gnss_log_*.txt
