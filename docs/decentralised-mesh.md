@@ -1,15 +1,17 @@
-# Decentralised operation: design note (proposed, not built)
+# Decentralised operation: design note (proposal)
 
-> **Status: proposal for team review.** Nothing in this note is built. It changes no contract; where a step would change one
-> (`docs/control.md`, `docs/api.md`), the step says so and needs a team decision first.
+> **Status: proposal for team review.** Only step 0 is built; steps 1 to 5 are proposals. The note changes no contract; where a
+> step would change one (`docs/control.md`, `docs/api.md`), the step says so and needs a team decision first.
 
 STOZHER should keep working when parts of it are missing: a receiver switched off, a relay node gone, the cloud unreachable,
 two kits cut off from each other for a day. This note records what already tolerates that, where the system is still
 centralised, and the steps to remove each single point of failure, in order of cost.
 
-It was prompted by a real failure (20 October 2026): the only receiving machine, with the only gateway radio on it,
-suspended overnight. The witness node kept sending its hourly heartbeat for about ten hours, nobody received it, and those
-records are gone. The mesh does not store messages and the node does not resend them.
+It was prompted by a real failure (19 to 20 October 2026). The only receiving machine, with the only gateway radio on it,
+suspended overnight. After it woke, the bridge still reported its radio as connected, but the serial link was dead, so for
+another nine hours nothing arrived either. When the bridge was restarted, the gateway handed over the 8 messages it was still
+holding; the 43 records before them were lost. The gateway kept only those last 8 for its disconnected client, and the node
+does not resend on the mesh path.
 
 ## What already tolerates missing parts (built)
 
@@ -35,7 +37,8 @@ witness nodes ~~LoRa mesh~~ ONE gateway --USB--> ONE machine: bridge -> API -> O
                                          sync (kit-driven) <-> ONE cloud URL
 ```
 
-- **One receiver.** One gateway radio on one machine. If it sleeps, crashes or loses USB, records sent meanwhile are lost.
+- **One receiver.** One gateway radio on one machine. If it sleeps, crashes or loses USB, records sent meanwhile are lost
+  beyond the few the gateway holds for its client.
 - **No retransmission on the mesh path.** The node's mesh queue holds 4 records; an event is sent twice 30 s apart,
   a heartbeat once, then the slot is freed whether or not an ack came (`firmware/node/lib/stozher/stz_mesh.*`, used unchanged
   by the T-Beam module in `firmware/tbeam`). The satellite path does retry (`stz_tx.*`). The heartbeat interval is 3600 s,
@@ -61,6 +64,13 @@ grow-only set, so they come last and only with explicit rules.
 ## Steps
 
 Each step is useful on its own. Order is by cost and by how much it removes.
+
+### Step 0. Keep the one receiver awake and its link alive (built, 20 October 2026)
+
+- **Sleep lock:** the kit holds a `systemd-inhibit --what=sleep` lock while it runs (`infra/kit/run.sh`, `docs/field-kit.md`).
+- **Stale link:** the bridge reopens the radio link after the machine resumes from sleep and after `--stale-after` seconds
+  (default 3 h) with no text from the radio; health shows the reconnects and their reasons (`docs/mesh.md`, Behaviour).
+- **What it does not fix:** a crash, a pulled cable or a dead gateway still lose records. That is what steps 1 to 3 are for.
 
 ### Step 1. Several receivers on one mesh
 
@@ -137,7 +147,8 @@ deployment). Peer kits authenticate each other with system keys labelled by orga
 | Drill | Expected outcome |
 |---|---|
 | Switch off the acking receiver for an hour | the second receiver keeps ingesting; after step 4 it acks; no gap in `/v1/nodes` delivery |
-| Suspend every receiver for an hour | with step 3 the node resends on the next heartbeat; the gap closes; without it the gap stays (today) |
+| Try to suspend the receiver while the kit runs | refused by the sleep lock (step 0) |
+| Suspend every receiver for an hour (lock off) | the link is reopened on resume (step 0); the gateway hands over what it held; with step 3 the node resends the rest |
 | Remove a relay node | records still arrive by another path, or the gap is visible in delivery |
 | Partition two kits for a day, then reconnect | after step 2 both hold the same record set and show the same trust grid |
 | Lose a kit | its system key and ack key id are revoked; other kits and nodes keep working |
