@@ -275,6 +275,94 @@ async def test_supervisor_survives_a_missing_radio_and_reconnects() -> None:
         await task
 
 
+class Clocks:
+    """Monotonic and boot clocks under test control: sleeping advances only the boot clock."""
+
+    def __init__(self) -> None:
+        self.mono = self.boot = 1000.0
+
+    def run(self, s: float) -> None:
+        self.mono += s
+        self.boot += s
+
+    def sleep_machine(self, s: float) -> None:
+        self.boot += s
+
+
+def started_supervisor(clocks: Clocks, stale_after_s: float = 600.0) -> RadioSupervisor:
+    sup = RadioSupervisor(
+        FakeRadio,
+        lambda m: None,
+        stale_after_s=stale_after_s,
+        mono=lambda: clocks.mono,
+        boot=lambda: clocks.boot,
+    )
+    sup.radio = FakeRadio()
+    sup.radio.start(sup.on_text)
+    return sup
+
+
+def test_a_healthy_link_is_left_alone() -> None:
+    clocks = Clocks()
+    sup = started_supervisor(clocks)
+    for _ in range(10):
+        clocks.run(50)
+        sup.radio.inject(msg("STZ1:" + HEX28))  # type: ignore[union-attr]
+        assert sup.stale_reason() is None
+    assert sup.reconnects == 0
+
+
+def test_the_link_is_reopened_after_the_machine_sleeps() -> None:
+    clocks = Clocks()
+    sup = started_supervisor(clocks)
+    assert sup.stale_reason() is None
+    clocks.sleep_machine(36000)  # ten hours suspended
+    clocks.run(5)
+    reason = sup.stale_reason()
+    assert reason is not None and "slept" in reason
+    sup.reopen(reason)
+    assert not sup.alive and sup.reconnects == 1 and sup.last_reconnect_reason == reason
+    assert sup.stale_reason() is None  # the sleep is counted once
+
+
+def test_the_link_is_reopened_after_a_long_silence_unless_switched_off() -> None:
+    clocks = Clocks()
+    sup = started_supervisor(clocks, stale_after_s=600)
+    clocks.run(599)
+    assert sup.stale_reason() is None
+    clocks.run(2)
+    assert "no text" in (sup.stale_reason() or "")
+    off = started_supervisor(clocks, stale_after_s=0)
+    clocks.run(100000)
+    assert off.stale_reason() is None
+
+
+async def test_supervisor_reconnects_after_a_sleep() -> None:
+    clocks = Clocks()
+    opened = {"n": 0}
+
+    class Counting(FakeRadio):
+        def start(self, on_text):  # type: ignore[no-untyped-def]
+            opened["n"] += 1
+            super().start(on_text)
+
+    sup = RadioSupervisor(
+        Counting, lambda m: None, retry_s=0.01, mono=lambda: clocks.mono, boot=lambda: clocks.boot
+    )
+    task = asyncio.create_task(sup.run())
+    async with asyncio.timeout(2):
+        while opened["n"] < 1:
+            await asyncio.sleep(0.01)
+    clocks.sleep_machine(3600)
+    async with asyncio.timeout(2):
+        while opened["n"] < 2:
+            await asyncio.sleep(0.01)
+    assert sup.reconnects == 1 and sup.alive
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+
 async def test_stats_do_not_shadow_the_queue_length() -> None:
     f = Forwarder(client(lambda r: httpx.Response(503)), "K")
     f.submit(msg("STZ1:" + HEX28))

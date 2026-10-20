@@ -68,6 +68,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 relay_interval_s=args.relay_interval,
                 send_acks=not args.no_acks,
                 health_port=args.health_port,
+                stale_after_s=args.stale_after,
             )
         )
     except KeyboardInterrupt:
@@ -137,6 +138,12 @@ def main() -> None:
     )
     r.add_argument(
         "--health-port", type=int, default=None, help="serve JSON health on 127.0.0.1:<port>"
+    )
+    r.add_argument(
+        "--stale-after",
+        type=float,
+        default=3 * 3600.0,
+        help="reopen the radio link after this many seconds without a text (0: never); it is also reopened after the machine sleeps",
     )
     sub.add_parser("info", help="print this radio's node ID and the nodes it has heard")
     s = sub.add_parser("send", help="send a text over the radio")

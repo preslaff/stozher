@@ -3,6 +3,15 @@
 # Needs the local PostgreSQL (no containers). Stop with Ctrl-C or `make kit-stop`. See docs/field-kit.md.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# A sleeping machine receives nothing (the gateway's messages are lost), so block sleep while the kit runs.
+# The lock is released when the kit stops. KIT_SLEEP=allow turns this off; without systemd-inhibit the kit runs with a warning.
+if [ "${KIT_SLEEP:-block}" != "allow" ] && [ -z "${STOZHER_SLEEP_BLOCKED:-}" ]; then
+  if command -v systemd-inhibit >/dev/null && systemd-inhibit --what=sleep --who=STOZHER --why=check --mode=block true 2>/dev/null; then
+    export STOZHER_SLEEP_BLOCKED=1
+    exec systemd-inhibit --what=sleep --who="STOZHER field kit" --why="receiving witness records" --mode=block "$0" "$@"
+  fi
+  echo "warning: cannot block sleep on this machine (no systemd-inhibit or not allowed); if it sleeps, the kit receives nothing" >&2
+fi
 . infra/kit/lib.sh
 ROOT="$(pwd)"
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/stozher"

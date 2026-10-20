@@ -63,6 +63,11 @@ Setting `STOZHER_RESPONDER_KEY` also relays alerts to the mesh (below).
   refused key (401/403) keeps the record and keeps retrying so a corrected key loses nothing. The
   backend's answer (`accepted`, `duplicate` or `rejected`) is final and never retried.
 - **A missing radio never stops the bridge.** It retries the port every 5 s and keeps serving health.
+- **A stale link is reopened.** A serial link can die without the radio library noticing: after the machine
+  suspended, the bridge reported "connected" for hours while the gateway held the node's messages. The bridge reopens the
+  link when the machine resumes from sleep (the monotonic clock stops during suspend, the boot clock does not) and after
+  `--stale-after` seconds with no text from the radio (default 3 h, 0 = never). Health shows `reconnects`,
+  `last_reconnect_reason` and `last_text_age_s`. Records the gateway did not keep while the link was dead are lost.
 - **Alerts to the mesh (optional).** With a responder key the bridge listens to the alert stream and
   sends `STOZHER <LEVEL>: <message>` (at most 200 bytes) on channel 0, warnings and critical only,
   at most one per `--relay-interval` (default 60 s) because LoRa airtime is shared. Simulated

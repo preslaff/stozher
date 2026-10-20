@@ -57,6 +57,11 @@ make kit-stop        # or Ctrl-C in the terminal that runs it
 starts the API (bound to all interfaces, port 8000, override with `STOZHER_API_HOST` and `STOZHER_API_PORT`), the worker and the
 bridge, prints the addresses, and stops everything on exit. Logs: `~/.local/state/stozher/{api,worker,bridge}.log`.
 
+**The machine does not sleep while the kit runs.** A sleeping machine receives nothing and the gateway keeps only a few
+messages, so the kit holds a sleep lock (`systemd-inhibit --what=sleep`) until it stops; `systemd-inhibit --list` shows it.
+`KIT_SLEEP=allow make kit` turns this off. Where the lock is not available the kit starts with a warning. The lock does not
+keep a laptop awake with the lid closed if the system is set to suspend on lid close; change that in the system settings.
+
 The top bar of the dashboard shows the state of each part: the **mesh bridge** chip turns green when the bridge is alive and its
 radio is connected, **worker** when the worker is alive. They come from heartbeats (`POST /v1/system/heartbeat`, `docs/api.md`).
 
