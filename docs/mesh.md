@@ -100,3 +100,5 @@ Setting `STOZHER_RESPONDER_KEY` also relays alerts to the mesh (below).
 Test records use the well-known test key; use real per-node keys for anything else.
 The Meshtastic library is GPL-3.0, which is why the bridge is a separate GPL-3.0-or-later package
 that talks to the platform only over HTTP (`services/mesh_bridge/LICENSE-NOTE.md`).
+
+See also `docs/decentralised-mesh.md` (proposal, not built): several receivers, peer sync and retransmission on the mesh path.

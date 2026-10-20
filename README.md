@@ -26,7 +26,7 @@ Built for the 12th CASSINI Hackathon (Challenge #1). Civil use only: situation, 
 | Field kit | `infra/kit`, `tools/kit` | one command to run the stack on a laptop; offline bundle and installer |
 
 Contracts live in `docs/`: `packet.md`, `api.md`, `trust.md`, `control.md`, `mesh.md`, `hazards.md`, `access.md`, `assistant.md`,
-`field-kit.md`. Working rules and architecture are in `CLAUDE.md`; every library, tool, model and dataset is listed in `DECLARATIONS.md`.
+`field-kit.md`; `decentralised-mesh.md` is a design proposal (not built). Working rules and architecture are in `CLAUDE.md`; every library, tool, model and dataset is listed in `DECLARATIONS.md`.
 
 ## Principles
 

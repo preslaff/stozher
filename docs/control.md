@@ -84,3 +84,5 @@ limited per node. Satellite nodes have no downlink, so acks reach them only thro
 a silent node from one that is delivering but has not been told yet. It cannot tell what a node sent and the cloud never received: gaps (`missing`) are only
 visible below the highest sequence number held. Acks are signed on request by the bridge, so `ack_current: false` for a moment after new records is normal;
 it stays `false` when no gateway hears the node (a satellite-only node never receives acks).
+
+See also `docs/decentralised-mesh.md` (proposal, not built), step 4: more than one ack signer.
