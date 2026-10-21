@@ -97,5 +97,20 @@ describe('delivery text', () => {
         now,
       ),
     ).toContain('Node told')
+    expect(
+      deliveryText(
+        {
+          records: 142,
+          missing: 128,
+          last_ack_at: '2026-10-15T09:04:46Z',
+          ack_current: true,
+          acked_through: 17,
+          unacked: 126,
+        },
+        now,
+      ),
+    ).toMatch(
+      /^142 records held, 128 missing\. Ack stuck at seq 17 behind a gap: 126 not acknowledged \(last ack /,
+    )
   })
 })

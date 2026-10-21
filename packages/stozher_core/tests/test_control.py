@@ -8,7 +8,9 @@ from stozher_core.control import (
     ACK_LEN,
     Ack,
     ControlError,
+    ack_covers,
     ack_from_text,
+    ack_reach,
     ack_to_text,
     private_key_from_seed,
     public_key_from_bytes,
@@ -55,6 +57,23 @@ def test_ack_signed_by_another_key_is_rejected() -> None:
     with pytest.raises(ControlError) as err:
         verify_ack(msg, TRUSTED)
     assert err.value.reason.value == "bad_signature"
+
+
+def test_ack_reach_is_the_highest_covered_sequence() -> None:
+    assert ack_reach(0, 0) == 0  # nothing acknowledged
+    assert ack_reach(3, 0) == 3
+    assert ack_reach(2, 0b101) == 6  # bit 2 -> sequence 2 + 2 + 2
+    # sequence 1 never arrived: a full mask reaches 17, and nothing beyond it is ever acknowledged
+    max_seq, mask = summarize(range(2, 271))
+    assert (max_seq, mask, ack_reach(max_seq, mask)) == (0, 0xFFFF, 17)
+    assert ack_covers(max_seq, mask, 17) and not ack_covers(max_seq, mask, 18)
+
+
+@given(st.sets(st.integers(min_value=1, max_value=60)))
+def test_ack_reach_matches_covers(received: set[int]) -> None:
+    max_seq, mask = summarize(received)
+    reach = ack_reach(max_seq, mask)
+    assert all(ack_covers(max_seq, mask, s) == (s in received and s <= reach) for s in range(1, 80))
 
 
 def test_summarize_contiguity_and_mask() -> None:

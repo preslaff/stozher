@@ -90,6 +90,8 @@ export function deliveryText(
         missing: number
         last_ack_at: string | null
         ack_current: boolean | null
+        acked_through?: number | null
+        unacked?: number
       }
     | null
     | undefined,
@@ -99,6 +101,9 @@ export function deliveryText(
   const held = `${d.records} record${d.records === 1 ? '' : 's'} held${d.missing > 0 ? `, ${d.missing} missing` : ''}`
   if (d.ack_current === null) return `${held}. Never acknowledged.`
   const when = d.last_ack_at ? ` (last ack ${sinceText(d.last_ack_at, now)})` : ''
+  // an ack covers the contiguous run and 16 beyond it: one record that never arrived pins it (docs/control.md)
+  if (d.ack_current && d.unacked && d.acked_through != null)
+    return `${held}. Ack stuck at seq ${d.acked_through} behind a gap: ${d.unacked} not acknowledged${when}.`
   return d.ack_current
     ? `${held}. Node told${when}.`
     : `${held}. New records not yet acknowledged${when}.`

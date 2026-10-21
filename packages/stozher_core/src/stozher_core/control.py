@@ -62,10 +62,24 @@ class Ack:
 
     def covers(self, seq: int) -> bool:
         """True if the cloud holds this sequence number according to this ack."""
-        if 1 <= seq <= self.max_seq:
-            return True
-        i = seq - self.max_seq - 2
-        return 0 <= i < MASK_BITS and bool(self.mask >> i & 1)
+        return ack_covers(self.max_seq, self.mask, seq)
+
+
+def ack_covers(max_seq: int, mask: int, seq: int) -> bool:
+    """True if an ack with this (max_seq, mask) tells the node the cloud holds `seq`."""
+    if 1 <= seq <= max_seq:
+        return True
+    i = seq - max_seq - 2
+    return 0 <= i < MASK_BITS and bool(mask >> i & 1)
+
+
+def ack_reach(max_seq: int, mask: int) -> int:
+    """The highest sequence number an ack covers: max_seq, or the highest one set in the mask.
+
+    An ack reaches at most max_seq + 1 + MASK_BITS, so one record that never arrives keeps every later record
+    beyond that window unacknowledged, however many the cloud holds.
+    """
+    return max_seq + 1 + mask.bit_length() if mask else max_seq
 
 
 def summarize(received: Collection[int]) -> tuple[int, int]:

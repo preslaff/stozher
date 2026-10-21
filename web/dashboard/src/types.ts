@@ -45,6 +45,10 @@ export interface Delivery {
   missing: number
   last_ack_at: string | null
   ack_current: boolean | null
+  /** highest sequence the newest ack covers; null if never acknowledged */
+  acked_through?: number | null
+  /** records held that the newest ack does not cover */
+  unacked?: number
 }
 
 export interface NodeInfo {

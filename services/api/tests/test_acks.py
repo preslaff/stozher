@@ -123,9 +123,28 @@ async def test_node_listing_says_what_is_held_and_whether_the_node_was_told(sign
     d = await delivery()
     assert (d["highest_seq"], d["contiguous_seq"], d["missing"], d["records"]) == (7, 3, 2, 5)
     assert d["ack_current"] is None and d["last_ack_at"] is None  # never told
+    assert (d["acked_through"], d["unacked"]) == (None, 5)
     await ack_for(c, node)
     d = await delivery()
     assert d["ack_current"] is True and d["last_ack_at"] is not None
     await post(c, packet(rec(seq=4), node))  # a gap is filled after the ack was signed
     d = await delivery()
     assert d["ack_current"] is False and d["contiguous_seq"] == 5 and d["missing"] == 1
+    assert (d["acked_through"], d["unacked"]) == (7, 1)  # the old ack covered 1-3, 5, 7; 4 is new
+
+
+async def test_a_missing_first_record_pins_the_ack_and_the_listing_shows_it(signed_client):  # type: ignore[no-untyped-def]
+    c = signed_client
+    node = await register(c)
+    for seq in range(2, 31):  # sequence 1 never arrives
+        await post(c, packet(rec(seq=seq), node))
+    await ack_for(c, node)
+    d = next(
+        n for n in (await c.get("/v1/nodes", headers=hdr(c, "operator"))).json() if n["id"] == node
+    )["delivery"]
+    assert (d["contiguous_seq"], d["acked_through"], d["unacked"], d["ack_current"]) == (
+        0,
+        17,
+        13,
+        True,
+    )
