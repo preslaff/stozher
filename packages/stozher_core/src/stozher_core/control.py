@@ -22,6 +22,9 @@ SIGNATURE_LEN = 64
 ACK_LEN = ACK_PAYLOAD_LEN + SIGNATURE_LEN
 ACK_TEXT_PREFIX = "STZA1:"
 MASK_BITS = 16
+ACK_WINDOW = (
+    MASK_BITS + 1
+)  # an ack describes the newest 17 sequence numbers in full; older gaps are given up
 
 
 class ControlReason(StrEnum):
@@ -44,7 +47,7 @@ class Ack:
     cloud_key_id: int
     node_id: int
     key_id: int
-    max_seq: int  # every sequence 1..max_seq was received
+    max_seq: int  # every sequence 1..max_seq was received or given up (summarize)
     mask: int  # bit i: sequence max_seq + 2 + i was received
     signed_at: int
 
@@ -76,16 +79,30 @@ def ack_covers(max_seq: int, mask: int, seq: int) -> bool:
 def ack_reach(max_seq: int, mask: int) -> int:
     """The highest sequence number an ack covers: max_seq, or the highest one set in the mask.
 
-    An ack reaches at most max_seq + 1 + MASK_BITS, so one record that never arrives keeps every later record
-    beyond that window unacknowledged, however many the cloud holds.
+    For an ack from `summarize` this is the highest sequence held. Acks signed before the distance rule could stop
+    at max_seq + 1 + MASK_BITS behind a gap that never filled.
     """
     return max_seq + 1 + mask.bit_length() if mask else max_seq
 
 
-def summarize(received: Collection[int]) -> tuple[int, int]:
-    """(max_seq, mask) for a set of received sequence numbers; sequence 0 is not part of the run."""
+def contiguous_run(received: Collection[int]) -> int:
+    """The highest N such that every sequence 1..N was received (0 if sequence 1 was not)."""
     have = {s for s in received if s >= 1}
     n = 0
+    while n + 1 in have:
+        n += 1
+    return n
+
+
+def summarize(received: Collection[int]) -> tuple[int, int]:
+    """(max_seq, mask) of the ack for a set of received sequence numbers (docs/control.md, distance rule).
+
+    With H the highest sequence received, a missing sequence s is given up once s <= H - ACK_WINDOW: max_seq starts
+    at max(0, H - ACK_WINDOW) and extends through every following sequence received, so it means "received or given
+    up". The mask then always reaches H. max_seq never decreases as records are added. Sequence 0 is not counted.
+    """
+    have = {s for s in received if s >= 1}
+    n = max(0, max(have, default=0) - ACK_WINDOW)
     while n + 1 in have:
         n += 1
     mask = 0

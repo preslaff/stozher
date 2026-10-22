@@ -133,18 +133,16 @@ async def test_node_listing_says_what_is_held_and_whether_the_node_was_told(sign
     assert (d["acked_through"], d["unacked"]) == (7, 1)  # the old ack covered 1-3, 5, 7; 4 is new
 
 
-async def test_a_missing_first_record_pins_the_ack_and_the_listing_shows_it(signed_client):  # type: ignore[no-untyped-def]
+async def test_a_missing_first_record_is_given_up_17_behind_the_newest(signed_client):  # type: ignore[no-untyped-def]
     c = signed_client
     node = await register(c)
     for seq in range(2, 31):  # sequence 1 never arrives
         await post(c, packet(rec(seq=seq), node))
-    await ack_for(c, node)
+    item = (await ack_for(c, node)).json()["items"][0]
+    assert (item["max_seq"], item["mask"]) == (30, 0)
     d = next(
         n for n in (await c.get("/v1/nodes", headers=hdr(c, "operator"))).json() if n["id"] == node
     )["delivery"]
-    assert (d["contiguous_seq"], d["acked_through"], d["unacked"], d["ack_current"]) == (
-        0,
-        17,
-        13,
-        True,
-    )
+    # the cloud's own view stays exact: sequence 1 is still missing
+    assert (d["contiguous_seq"], d["missing"]) == (0, 1)
+    assert (d["acked_through"], d["unacked"], d["ack_current"]) == (30, 0, True)

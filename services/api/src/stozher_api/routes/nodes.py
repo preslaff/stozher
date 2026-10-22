@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from stozher_core.control import ack_covers, ack_reach, summarize
+from stozher_core.control import ack_covers, ack_reach, contiguous_run, summarize
 
 from ..audit import audit
 from ..auth import Principal, require_role
@@ -69,13 +69,12 @@ class Delivery(BaseModel):
     acked_through: int | None = Field(
         default=None,
         description="the highest sequence number the newest signed ack covers; null if none was ever signed. "
-        "An ack covers the contiguous run and at most 16 beyond it, so one early record that never arrives "
-        "keeps every later record unacknowledged",
+        "Gaps 17 or more behind the newest record are given up, so a current ack reaches the highest record held",
     )
     unacked: int = Field(
         default=0,
         description="records held that the newest signed ack does not cover (all of them if none was signed). "
-        "Above 0 with ack_current true means the ack is pinned behind a gap",
+        "Above 0 with ack_current true only for an ack signed before gaps were given up (pinned behind a gap)",
     )
 
 
@@ -99,7 +98,7 @@ async def _delivery(session, node_id: int) -> Delivery | None:  # type: ignore[n
         .scalars()
         .all()
     )
-    contiguous, mask = summarize(seqs)
+    contiguous = contiguous_run(seqs)
     highest = max(seqs)
     ack = (
         await session.execute(
@@ -116,7 +115,7 @@ async def _delivery(session, node_id: int) -> Delivery | None:  # type: ignore[n
         contiguous_seq=contiguous,
         missing=max(0, highest - len([s for s in seqs if s >= 1])),
         last_ack_at=ack.signed_at if ack else None,
-        ack_current=None if ack is None else (ack.max_seq, ack.mask) == (contiguous, mask),
+        ack_current=None if ack is None else (ack.max_seq, ack.mask) == summarize(seqs),
         acked_through=None if ack is None else ack_reach(ack.max_seq, ack.mask),
         unacked=len(
             [

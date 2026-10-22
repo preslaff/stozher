@@ -19,8 +19,10 @@ you control (flash it at installation), not at runtime.
 An ack tells one node which of its records the cloud holds, so it can drop them and skip
 retransmitting. For a node and a key id, with sequence numbers starting at 1 under each key:
 
-- `max_seq`: the highest sequence number N such that **every** sequence 1..N was received
-  (highest contiguous, as in the specification). 0 if sequence 1 has not arrived.
+- `max_seq`: the highest sequence number N such that every sequence 1..N was received **or given up**
+  (see "Giving up on old gaps" below: a missing sequence is given up once the newest record is 17 or more ahead
+  of it). Without old gaps this is the highest contiguous run, as in the specification; 0 if sequence 1 has not
+  arrived and is not yet given up.
 - `mask` (uint16): selective acknowledgement beyond the gap. Bit i (i = 0..15, least significant
   first) is set when sequence `max_seq + 2 + i` was received. (`max_seq + 1` is by definition
   missing, so it needs no bit.) A node may drop records marked in the mask and must keep
@@ -72,17 +74,12 @@ with the `openssl` CLI independently of `stozher_core`. The test seed is public 
 used outside tests. Every implementation (Python, C++) must verify the valid vectors, produce the
 same bytes for the same fields, and reject the invalid ones with the stated reason.
 
-## Proposed: giving up on old gaps (not built, team decision)
+## Giving up on old gaps (distance rule)
 
-**Status: proposal.** Nothing below is implemented; today `max_seq` is strictly "every sequence 1..N was received".
-
-**Problem.** One record that never arrives pins `max_seq`. The mask reaches 16 further, so every later record beyond
-that window is never acknowledged, however many the cloud holds. Observed: a T-Beam whose sequence 1 never arrived
-has received the same ack (`max_seq` 0, mask full, covering 2 to 17) since 15 October 2026 while about 300 more sequence
-numbers were used. On the mesh path this costs only airtime: the node frees a record after sending it (at most 30 s for
-an event, `stz_mesh.cpp`). On the satellite path a node resends an unacknowledged event at most `max_resends` = 3 times
-at heartbeat time (`stz_tx.h`), so the cost is up to three wasted transmissions per event from a daily budget of 48, not
-a stuck queue. Mesh retransmission (`docs/decentralised-mesh.md`, step 3) would add the same cost there.
+**Problem.** One record that never arrives would pin `max_seq`. The mask reaches 16 further, so every later record
+beyond that window would never be acknowledged, however many the cloud holds. Observed before this rule: a T-Beam whose
+sequence 1 never arrived received the same ack (`max_seq` 0, mask full, covering 2 to 17) from 15 to 22 October 2026
+while about 300 more sequence numbers were used.
 
 ### Rule: the ack follows the newest record
 
@@ -90,11 +87,11 @@ Let `H` be the highest sequence number the cloud holds for the node and key, and
 one missing sequence it starts after). A missing sequence `s` counts as *given up* once `s <= H - W`. Then:
 
 - `max_seq`: start at `max(0, H - W)` and extend through every following sequence that was received.
-  This equals today's value whenever `H - W` is below the contiguous run, so nothing changes for a node without old gaps.
-- `mask`: as today, computed above that `max_seq`. Because `max_seq >= H - W`, the mask always reaches `H`: the newest
+  This equals the contiguous run whenever `H - W` is below it, so nothing changes for a node without old gaps.
+- `mask`: computed above that `max_seq`. Because `max_seq >= H - W`, the mask always reaches `H`: the newest
   record is always acknowledged, and the ack always describes the 17 most recent sequence numbers in full.
 
-In `stozher_core.control.summarize` this is one line: the loop starts at `max(0, max(have) - W)` instead of 0.
+Reference: `stozher_core.control.summarize` (`ACK_WINDOW`); `contiguous_run` gives the exact run for reporting.
 
 ### Why distance, not time
 
@@ -110,42 +107,39 @@ An earlier draft gave up a gap after it had been open for a fixed time (6 h). Di
 
 ### What it costs
 
-- **Meaning of `max_seq`.** It becomes "the node can forget everything up to here": received **or given up**. The cloud's
+- **Meaning of `max_seq`.** It is "the node can forget everything up to here": received **or given up**. The cloud's
   own view stays exact: `contiguous_seq` and `missing` in `GET /v1/nodes` still count given-up sequences as missing.
 - **Mesh path: nothing.** A mesh node frees each record within 30 s of creating it, far less than 17 sequence numbers.
-- **Satellite path: an old event can lose its remaining resends.** An event that has finished its burst stays queued
-  until acknowledged or evicted, and can be resent at up to 3 later heartbeats (about 3 h). If 17 newer sequence numbers
-  are used in that time and acks are freeing their slots, the event is given up while it still had resends left.
-  At normal rates (one heartbeat an hour, occasional events) that cannot happen; it needs a burst of more than about a
-  dozen events within 3 h, when newer events describe the same situation. Without acks today the queue (8 slots) evicts
-  the oldest finished entry first, so such an event is dropped by the node anyway.
-- **Closing that gap exactly (firmware, later):** let the node apply the same horizon: stop resending and free any
-  record that is `W` or more behind its own newest sequence. Then node and cloud give up at the same point by
-  construction. It is a few lines in `Tx::queue_resends` and the mesh queue, and belongs with the first KIM1 build, which
-  needs flashing anyway. Also a firmware invariant from now on: a node's queue holds at most 16 records (`STZ_TX_QUEUE` 8
-  and `STZ_MESH_QUEUE` 4 today); a larger store-and-forward queue needs a new ack format, not a larger window here.
+- **Satellite path: none left, by the node's matching horizon.** An event that has finished its burst stays queued
+  until acknowledged or evicted, and is resent at up to 3 later heartbeats. The node applies the same horizon: at
+  heartbeat time it frees any entry `W` or more behind its own newest sequence (`Tx::queue_resends`, `kAckWindow` in
+  `stz_ack.h`), and the mesh queue does the same when a record is queued (`mesh::Link::on_record`). So node and cloud
+  give up at the same point by construction. An event lost this way needs a burst of more than a dozen events within
+  3 h, when newer events describe the same situation. The Leonardo build leaves the horizon out (`STZ_NO_ACK_HORIZON`,
+  no flash left); it cannot verify acks either, so it only resends up to `max_resends` as before.
+- **Firmware invariant:** a node's queue holds at most 16 records (`STZ_TX_QUEUE` 8 and `STZ_MESH_QUEUE` 4 today,
+  enforced by `static_assert`); a larger store-and-forward queue needs a new ack format, not a larger window here.
 
-**Properties kept:** no wire, golden-vector or firmware change for the cloud side (nodes already drop `seq <= max_seq`,
-receive rule 5); `max_seq` never goes backwards (`H` only grows, and a late arrival only fills a gap); late records are
-still ingested and stored normally; only verified records count, so nobody without the node's key can push `H` up.
+**Properties kept:** no wire or golden-vector change (nodes already drop `seq <= max_seq`, receive rule 5); `max_seq`
+never goes backwards (`H` only grows, and a late arrival only fills a gap), so an ack signed under the old rule is
+followed by a higher one that nodes accept; late records are still ingested and stored normally; only verified records
+count, so nobody without the node's key can push `H` up.
 
-### Tests to write once agreed
+### Tests
 
-`stozher_core.control.summarize` (pure, plus a property test that `max_seq` never decreases as records are added and that
-the mask always reaches the highest held sequence), and an API test through `GET /v1/acks` and `GET /v1/nodes`.
+`packages/stozher_core/tests/test_control.py` (the table, plus property tests that `max_seq` never decreases as records
+are added and that the ack reaches the highest held sequence), `services/api/tests/test_acks.py` through `GET /v1/acks`
+and `GET /v1/nodes`, and `firmware/node/test/test_tx`, `test_mesh` for the node horizon.
 
-| Held | Expected `max_seq`, mask |
+| Held | `max_seq`, mask |
 |---|---|
-| 2..10 (1 missing) | 0, mask 2..10 (within the window: as today) |
-| 2..17 (1 missing) | 0, mask full 2..17 (as today) |
+| 2..10 (1 missing) | 0, mask 2..10 (within the window) |
+| 2..17 (1 missing) | 0, mask full 2..17 |
 | 2..18 (1 missing) | 18, mask 0 (seq 1 is now 17 behind: given up) |
 | 2..30 (1 missing) | 30, mask 0 (the a4b0 case) |
-| 1..3, 5..10, 12..14 | 3, mask 5..10 and 12..14 (as today) |
+| 1..3, 5..10, 12..14 | 3, mask 5..10 and 12..14 |
 | 1..3, 5..40, 42..45 | 40, mask 42..45 (4 given up; 41 still inside the window) |
 | previous row, then 4 arrives late | unchanged: never lower |
-| simulated node | same rule, ack labelled `sim` as today |
-
-**Decisions needed:** adopt the distance rule or not; whether the matching firmware horizon goes into the first KIM1 build.
 
 ## Delivery
 
@@ -160,9 +154,9 @@ a silent node from one that is delivering but has not been told yet. It cannot t
 visible below the highest sequence number held. Acks are signed on request by the bridge, so `ack_current: false` for a moment after new records is normal;
 it stays `false` when no gateway hears the node (a satellite-only node never receives acks).
 
-An ack reaches at most 16 sequence numbers beyond its contiguous run, so one record that never arrives keeps every later one
-unacknowledged even though the cloud holds them, and the ack stays the same: `ack_current` is then `true` while `unacked`
-(records held that the newest ack does not cover) grows and `acked_through` (the highest sequence it covers) stays put.
-Seen on a T-Beam whose sequence 1 never arrived: `acked_through` 17 for a week. See "Proposed: giving up on old gaps" above.
+`acked_through` is the highest sequence the newest ack covers and `unacked` the records held that it does not cover. A
+current ack reaches the highest record held, so `unacked` is 0 then. Above 0 with `ack_current: true` happens only for an
+ack signed before the distance rule, pinned behind a gap (seen on a T-Beam whose sequence 1 never arrived: `acked_through`
+17 for a week); the next ack signed fixes it. Given-up records still count in `missing`.
 
 See also `docs/decentralised-mesh.md` (proposal, not built), step 4: more than one ack signer.

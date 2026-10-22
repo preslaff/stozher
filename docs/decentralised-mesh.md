@@ -103,8 +103,9 @@ Each step is useful on its own. Order is by cost and by how much it removes.
 - **Contracts:** none on the wire; `docs/firmware.md` behaviour changes. Host tests (`make fw-test`) for queue, ack and
   budget behaviour first.
 - **Hardware:** flashing a node needs the owner's go-ahead. No change to radio settings.
-- **Depends on:** acks that move past a lost record (`docs/control.md`, "Proposed: giving up on old gaps"); otherwise
-  one lost record keeps every later one unacknowledged and the node resends records the cloud already holds.
+- **Depends on:** acks that move past a lost record. **Built** (`docs/control.md`, "Giving up on old gaps"): the ack
+  gives up a gap 17 behind the newest record, and the node's mesh queue does the same, so one lost record no longer
+  keeps every later one unacknowledged.
 - **Limit:** a queue of 4 covers minutes to hours of outage, not ten hours of hourly heartbeats; a larger queue or a
   shorter heartbeat interval is a separate, measured decision (airtime and duty cycle).
 

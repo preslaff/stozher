@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > **Current state (Oct 2026), built and tested:**
 > - `stozher_core`: packet codec and crypto with golden vectors, trust model, Ed25519 signed
->   acknowledgements (`docs/control.md`).
+>   acknowledgements (`docs/control.md`, gaps 17 behind the newest record are given up).
 > - API: ingest (kineis, mesh, direct, sim), nodes, events, hotspots, trust grid and route trust,
 >   alerts + SSE, watched routes, signed acks, sim reset, **API key management** (create, rotate with
 >   grace, revoke, audit log) and per-key rate limits (`docs/api.md` sections 3-4).
