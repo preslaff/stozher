@@ -57,6 +57,17 @@ make kit-stop        # or Ctrl-C in the terminal that runs it
 starts the API (bound to all interfaces, port 8000, override with `STOZHER_API_HOST` and `STOZHER_API_PORT`), the worker and the
 bridge, prints the addresses, and stops everything on exit. Logs: `~/.local/state/stozher/{api,worker,bridge}.log`.
 
+**A second gateway on another LoRa band.** Radios on different bands never hear each other (a 433 MHz board cannot
+reach the 868 MHz mesh, whatever its firmware), so a mesh on each band needs its own gateway on the laptop. Set
+`MESH_PORT_2` to the second gateway's `/dev/serial/by-id/...` path (and `MESH_NAME_2`, default `433`), run
+`MESH_PORT_2=... infra/kit/init.sh` once to create its own system and relay keys (`STOZHER_SYSTEM_KEY_2`,
+`STOZHER_RESPONDER_KEY_2` in `infra/.env`), then start the kit with both variables set (or put them in `infra/kit/kit.env`).
+The second bridge has its own spool (`mesh-spool-2.jsonl`), log (`bridge-2.log`) and health port (8767,
+`BRIDGE_2_HEALTH_PORT`). Both forward to the same API, which keeps the first copy of a record and counts the rest as
+duplicates; each sends acks and alert texts only on its own band. `/health` lists both under `mesh_bridges` and the
+dashboard chip reads `mesh bridge 1/2` when one is down. In Bulgaria use `EU_433` or `EU_868`; the 470 MHz band is
+China's and not allowed here.
+
 **The machine does not sleep while the kit runs.** A sleeping machine receives nothing and the gateway keeps only a few
 messages, so the kit holds a sleep lock (`systemd-inhibit --what=sleep`) until it stops; `systemd-inhibit --list` shows it.
 `KIT_SLEEP=allow make kit` turns this off. Where the lock is not available the kit starts with a warning. The lock does not

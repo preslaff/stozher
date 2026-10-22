@@ -12,6 +12,7 @@ case "${1:-}" in
   status) curl -s -m 3 "http://127.0.0.1:${STOZHER_API_PORT:-8000}/health" || { echo "the kit is not running"; exit 1; }; echo ;;
   doctor) exec infra/kit/doctor.sh ;;
   init)   exec infra/kit/init.sh ;;
-  logs)   exec tail -n "${2:-50}" -f "$STATE"/api.log "$STATE"/worker.log "$STATE"/bridge.log ;;
-  *) echo "usage: stozher-kit start|stop|status|doctor|init|logs   (set MESH_PORT in infra/kit/kit.env; MESH_PORT=none = no radio)" >&2; exit 2 ;;
+  logs)   logs=("$STATE"/api.log "$STATE"/worker.log "$STATE"/bridge.log); [ -f "$STATE/bridge-2.log" ] && logs+=("$STATE/bridge-2.log")
+          exec tail -n "${2:-50}" -f "${logs[@]}" ;;
+  *) echo "usage: stozher-kit start|stop|status|doctor|init|logs   (set MESH_PORT in infra/kit/kit.env; MESH_PORT=none = no radio; MESH_PORT_2 = a second gateway)" >&2; exit 2 ;;
 esac

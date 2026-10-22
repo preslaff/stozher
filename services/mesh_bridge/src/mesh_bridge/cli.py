@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -9,6 +10,16 @@ from .app import run_bridge
 from .radio import FakeRadio, Radio
 
 DEFAULT_PORT = "/dev/ttyUSB0"
+
+
+def _bridge_name(v: str) -> str | None:
+    if not v:
+        return None
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,15}", v) or v == "main":
+        raise argparse.ArgumentTypeError(
+            "lowercase letters, digits, - and _, at most 16, not 'main' (that is the unnamed bridge)"
+        )
+    return v
 
 
 def _radio_factory(args: argparse.Namespace):  # type: ignore[no-untyped-def]
@@ -69,6 +80,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 send_acks=not args.no_acks,
                 health_port=args.health_port,
                 stale_after_s=args.stale_after,
+                name=args.name,
             )
         )
     except KeyboardInterrupt:
@@ -144,6 +156,12 @@ def main() -> None:
         type=float,
         default=3 * 3600.0,
         help="reopen the radio link after this many seconds without a text (0: never); it is also reopened after the machine sleeps",
+    )
+    r.add_argument(
+        "--name",
+        type=_bridge_name,
+        default=None,
+        help="this bridge's name in /health when the kit runs more than one (e.g. 433 for a 433 MHz gateway)",
     )
     sub.add_parser("info", help="print this radio's node ID and the nodes it has heard")
     s = sub.add_parser("send", help="send a text over the radio")

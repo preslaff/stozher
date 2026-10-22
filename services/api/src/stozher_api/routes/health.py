@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, Request
 from sqlalchemy import func, select, text
 
-from ..heartbeat import present_modules
+from ..heartbeat import module_states
 from ..models import Job
 
 router = APIRouter()
@@ -31,10 +31,17 @@ async def health(request: Request) -> dict[str, object]:
     modules = {m: "absent" for m in OPTIONAL_MODULES}
     if request.app.state.signer is not None:
         modules["ack_signing"] = "present"
+    bridges: dict[str, str] = {}
     try:
         async with request.app.state.sessionmaker() as session:
-            for m in await present_modules(session, datetime.now(UTC)):
-                modules[m] = "present"
+            present, instances = await module_states(session, datetime.now(UTC))
+        for m in present:
+            modules[m] = "present"
+        # one entry per gateway radio heard in the last day; mesh_bridge is present when any of them is
+        bridges = {
+            name: "present" if ok else "absent"
+            for name, ok in sorted(instances.get("mesh_bridge", {}).items())
+        }
     except Exception:
         pass
     try:  # a worker that predates heartbeats still counts when it finished a job lately
@@ -50,4 +57,5 @@ async def health(request: Request) -> dict[str, object]:
         "status": "ok" if db == "ok" else "degraded",
         "db": db,
         "modules": modules,
+        "mesh_bridges": bridges,
     }

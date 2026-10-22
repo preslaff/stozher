@@ -49,13 +49,19 @@ if id -nG | tr ' ' '\n' | grep -qx dialout; then ok "user is in group dialout"; 
 ports=(/dev/serial/by-id/*)
 if [ -e "${ports[0]}" ]; then for p in "${ports[@]}"; do ok "serial device: ${p##*/}"; done; else warn "no serial device plugged in (MESH_PORT=none runs without a radio)"; fi
 if [ -n "${MESH_PORT:-}" ] && [ "$MESH_PORT" != none ]; then [ -e "$MESH_PORT" ] && ok "MESH_PORT exists" || bad "MESH_PORT $MESH_PORT is not there"; fi
+if [ -n "${MESH_PORT_2:-}" ] && [ "$MESH_PORT_2" != none ]; then
+  [ -e "$MESH_PORT_2" ] && ok "MESH_PORT_2 exists (second gateway, ${MESH_NAME_2:-433})" || bad "MESH_PORT_2 $MESH_PORT_2 is not there"
+  [ "$MESH_PORT_2" != "${MESH_PORT:-}" ] || bad "MESH_PORT_2 is the same device as MESH_PORT"
+  grep -q -E "^STOZHER_SYSTEM_KEY_2=.+" infra/.env 2>/dev/null && grep -q -E "^STOZHER_RESPONDER_KEY_2=.+" infra/.env 2>/dev/null \
+    && ok "second bridge keys present" || bad "second bridge keys missing: MESH_PORT_2=... infra/kit/init.sh"
+fi
 
 echo "Network"
 PORT="${STOZHER_API_PORT:-8000}"
 H="$(curl -s -m 3 "http://127.0.0.1:$PORT/health" 2>/dev/null || true)"
 if [ -n "$H" ]; then
   ok "kit is running on port $PORT"
-  printf '%s' "$H" | python3 -c 'import json,sys; m=json.load(sys.stdin).get("modules",{}); print("        modules: "+", ".join(k+"="+str(v) for k,v in m.items()))' 2>/dev/null || true
+  printf '%s' "$H" | python3 -c 'import json,sys; h=json.load(sys.stdin); m=h.get("modules",{}); b=h.get("mesh_bridges",{}); print("        modules: "+", ".join(k+"="+str(v) for k,v in m.items())); b and print("        mesh bridges: "+", ".join(k+"="+str(v) for k,v in b.items()))' 2>/dev/null || true
 elif ss -ltn 2>/dev/null | grep -q ":$PORT "; then bad "port $PORT is taken by something that is not the kit"
 else ok "port $PORT is free (kit not running)"; fi
 for ip in $(hostname -I 2>/dev/null); do echo "        phones use: http://$ip:$PORT/"; done

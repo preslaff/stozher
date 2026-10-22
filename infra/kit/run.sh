@@ -30,6 +30,18 @@ PORT="${STOZHER_API_PORT:-8000}"
 HOST="${STOZHER_API_HOST:-0.0.0.0}"
 MESH_PORT="${MESH_PORT:-}"
 [ -n "$MESH_PORT" ] || { echo "set MESH_PORT to the gateway's /dev/serial/by-id/... path, or MESH_PORT=none to run without a radio" >&2; exit 1; }
+# Optional second gateway, for a mesh on another LoRa band (a 433 MHz one next to 868 MHz; radios on different bands never
+# hear each other). It runs its own bridge with its own keys, spool, log and health port, and names itself in /health.
+MESH_PORT_2="${MESH_PORT_2:-}"
+MESH_NAME_2="${MESH_NAME_2:-433}"
+if [ -n "$MESH_PORT_2" ] && [ "$MESH_PORT_2" != "none" ]; then
+  [ "$MESH_PORT_2" != "$MESH_PORT" ] || { echo "MESH_PORT_2 is the same device as MESH_PORT: one radio, one bridge" >&2; exit 1; }
+  for v in STOZHER_SYSTEM_KEY_2 STOZHER_RESPONDER_KEY_2; do
+    [ -n "${!v:-}" ] || { echo "$v is missing in $ENV: run MESH_PORT_2=... infra/kit/init.sh (the second bridge has its own keys)" >&2; exit 1; }
+  done
+else
+  MESH_PORT_2=""
+fi
 
 DASH="$ROOT/web/dashboard/dist"
 if [ ! -f "$DASH/index.html" ] || [ ! -f "$DASH/assets/maplibre-gl-worker.mjs" ]; then
@@ -51,10 +63,19 @@ STOZHER_DASHBOARD_DIR="$DASH" setsid uv run uvicorn --factory stozher_api.main:a
 pids+=($!)
 setsid uv run python -m stozher_worker >"$STATE/worker.log" 2>&1 &
 pids+=($!)
-if [ "$MESH_PORT" != "none" ]; then
-  cmd="uv run --package stozher-mesh-bridge --extra radio python -m mesh_bridge --api http://127.0.0.1:$PORT --port '$MESH_PORT' run --health-port ${BRIDGE_HEALTH_PORT:-8766}"
-  if id -nG | tr ' ' '\n' | grep -qx dialout; then setsid bash -c "$cmd" >"$STATE/bridge.log" 2>&1 & else setsid sg dialout -c "$cmd" >"$STATE/bridge.log" 2>&1 & fi
+# start_bridge <device> <log> <health port> [extra bridge options]: the radio needs group dialout
+start_bridge() {
+  local cmd="uv run --package stozher-mesh-bridge --extra radio python -m mesh_bridge --api http://127.0.0.1:$PORT --port '$1' run --health-port $3 ${*:4}"
+  if id -nG | tr ' ' '\n' | grep -qx dialout; then setsid bash -c "$cmd" >"$STATE/$2" 2>&1 & else setsid sg dialout -c "$cmd" >"$STATE/$2" 2>&1 & fi
   pids+=($!)
+}
+if [ "$MESH_PORT" != "none" ]; then
+  start_bridge "$MESH_PORT" bridge.log "${BRIDGE_HEALTH_PORT:-8766}"
+fi
+if [ -n "$MESH_PORT_2" ]; then
+  STOZHER_SYSTEM_KEY="$STOZHER_SYSTEM_KEY_2" STOZHER_RESPONDER_KEY="$STOZHER_RESPONDER_KEY_2" \
+    start_bridge "$MESH_PORT_2" bridge-2.log "${BRIDGE_2_HEALTH_PORT:-8767}" \
+    --name "'$MESH_NAME_2'" --spool "'$STATE/mesh-spool-2.jsonl'"
 fi
 
 if [ "${ASSISTANT:-off}" = "on" ]; then
@@ -67,7 +88,7 @@ sleep 4
 echo
 echo "STOZHER field kit is running. Open it from this laptop or any device on the same network:"
 for ip in $(hostname -I 2>/dev/null); do echo "  http://$ip:$PORT/"; done
-echo "Sign in with an API key for your role. Logs: $STATE/{api,worker,bridge,assistant}.log"
+echo "Sign in with an API key for your role. Logs: $STATE/{api,worker,bridge,bridge-2,assistant}.log"
 echo "Ctrl-C to stop."
 wait -n "${pids[@]}" || true
 echo "a component exited; stopping the kit. See $STATE/*.log" >&2

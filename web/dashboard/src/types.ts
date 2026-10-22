@@ -95,6 +95,8 @@ export interface Health {
   status: string
   db: string
   modules: Record<string, 'present' | 'absent'>
+  /** One entry per gateway radio heard in the last day (`main`, or a name such as `433`); older APIs omit it. */
+  mesh_bridges?: Record<string, 'present' | 'absent'>
 }
 
 export interface TrustProps {

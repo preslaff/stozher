@@ -1,5 +1,5 @@
 import type { StreamState } from '../sse'
-import { ageText } from '../style'
+import { ageText, moduleChip } from '../style'
 import type { Health } from '../types'
 
 const STREAM_TEXT: Record<StreamState, string> = {
@@ -35,11 +35,14 @@ export function StatusBar({ stream, role, health, hasSim, lastLoad, now, onLogou
           </span>
         )}
         {health &&
-          Object.entries(health.modules).map(([name, state]) => (
-            <span key={name} className={`chip module ${state}`} title={`${name}: ${state}`}>
-              {name.replace('_', ' ')}
-            </span>
-          ))}
+          Object.entries(health.modules).map(([name, state]) => {
+            const chip = moduleChip(name, state, health.mesh_bridges)
+            return (
+              <span key={name} className={`chip module ${state}`} title={chip.title}>
+                {chip.label}
+              </span>
+            )
+          })}
       </div>
       <div className="right">
         <span className="muted small">updated {ageText(secs)}</span>

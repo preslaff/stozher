@@ -19,7 +19,9 @@ class HeartbeatPusher:
         *,
         interval_s: float = 30.0,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        instance: str | None = None,
     ) -> None:
+        self.instance = instance  # which bridge, when the kit runs one per LoRa band
         self.http, self.key, self.info, self.interval_s, self.sleep = (
             http,
             key,
@@ -36,7 +38,11 @@ class HeartbeatPusher:
             r = await self.http.post(
                 "/v1/system/heartbeat",
                 headers={"X-API-Key": self.key},
-                json={"module": "mesh_bridge", "info": self.info()},
+                json={
+                    "module": "mesh_bridge",
+                    "info": self.info(),
+                    **({"instance": self.instance} if self.instance else {}),
+                },
             )
             ok = r.status_code == 204
             self.last_error = None if ok else f"HTTP {r.status_code}"

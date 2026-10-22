@@ -108,3 +108,19 @@ export function deliveryText(
     ? `${held}. Node told${when}.`
     : `${held}. New records not yet acknowledged${when}.`
 }
+
+/** Label and tooltip of a module chip. With more than one mesh bridge (a gateway per LoRa band), say how many are up. */
+export function moduleChip(
+  name: string,
+  state: 'present' | 'absent',
+  bridges?: Record<string, 'present' | 'absent'>,
+): { label: string; title: string } {
+  const label = name.replace('_', ' ')
+  const list = name === 'mesh_bridge' && bridges ? Object.entries(bridges) : []
+  if (list.length < 2) return { label, title: `${name}: ${state}` }
+  const up = list.filter(([, s]) => s === 'present').length
+  return {
+    label: `${label} ${up}/${list.length}`,
+    title: list.map(([b, s]) => `${b}: ${s}`).join(', '),
+  }
+}

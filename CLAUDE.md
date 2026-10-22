@@ -266,7 +266,7 @@ Create these as Makefile targets early on Friday and keep them working:
 
 ```
 make kit-init      # first run: fill missing secrets in infra/.env, create the bridge and relay keys
-make kit           # field kit: API (serving the dashboard and offline map), worker, mesh bridge (MESH_PORT=/dev/serial/by-id/...)
+make kit           # field kit: API (serving the dashboard and offline map), worker, mesh bridge (MESH_PORT=/dev/serial/by-id/...; MESH_PORT_2 adds a gateway on another band)
 make migrate       # alembic upgrade head
 make test          # python tests + golden vectors + web lint
 make sim S=coastal # run the coastal crisis scenario against the local API

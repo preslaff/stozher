@@ -16,4 +16,9 @@ set -a; . "$ENV"; set +a
 (cd services/api && uv run alembic upgrade head) >/dev/null
 has STOZHER_SYSTEM_KEY || add STOZHER_SYSTEM_KEY "$(uv run python -m stozher_api.cli create-key --role system --label 'field kit mesh bridge')"
 has STOZHER_RESPONDER_KEY || add STOZHER_RESPONDER_KEY "$(uv run python -m stozher_api.cli create-key --role responder --label 'field kit alert relay')"
-echo "ready. Next: MESH_PORT=/dev/serial/by-id/<gateway> make kit   (MESH_PORT=none starts without a radio)"
+# a second gateway (MESH_PORT_2, another LoRa band) gets its own keys: one key per machine and purpose (docs/access.md)
+if [ -n "${MESH_PORT_2:-}" ] && [ "${MESH_PORT_2}" != none ]; then
+  has STOZHER_SYSTEM_KEY_2 || add STOZHER_SYSTEM_KEY_2 "$(uv run python -m stozher_api.cli create-key --role system --label "field kit mesh bridge ${MESH_NAME_2:-433}")"
+  has STOZHER_RESPONDER_KEY_2 || add STOZHER_RESPONDER_KEY_2 "$(uv run python -m stozher_api.cli create-key --role responder --label "field kit alert relay ${MESH_NAME_2:-433}")"
+fi
+echo "ready. Next: MESH_PORT=/dev/serial/by-id/<gateway> make kit   (MESH_PORT=none starts without a radio; MESH_PORT_2 adds a gateway on another band)"

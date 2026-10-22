@@ -250,6 +250,41 @@ async def test_modules_report_present_from_heartbeats_and_absent_when_stale(clie
     assert (await modules())["mesh_bridge"] == "absent"  # silent for minutes
 
 
+async def test_two_mesh_bridges_are_listed_and_one_with_a_radio_is_enough(client):  # type: ignore[no-untyped-def]
+    sys_h = hdr(client, "system")
+
+    async def health() -> dict:  # type: ignore[type-arg]
+        return (await client.get("/health")).json()  # type: ignore[no-any-return]
+
+    assert (await health())["mesh_bridges"] == {}
+    up = {"radio_connected": True}
+    down = {"radio_connected": False}
+    await client.post(
+        "/v1/system/heartbeat", headers=sys_h, json={"module": "mesh_bridge", "info": up}
+    )
+    beat_433 = {"module": "mesh_bridge", "instance": "433", "info": down}
+    assert (
+        await client.post("/v1/system/heartbeat", headers=sys_h, json=beat_433)
+    ).status_code == 204
+    h = await health()
+    assert h["mesh_bridges"] == {"433": "absent", "main": "present"}
+    assert h["modules"]["mesh_bridge"] == "present"  # the 868 MHz gateway still carries the mesh
+    await client.post(
+        "/v1/system/heartbeat", headers=sys_h, json={"module": "mesh_bridge", "info": down}
+    )
+    await client.post(
+        "/v1/system/heartbeat", headers=sys_h, json={**beat_433, "info": up}
+    )  # each bridge keeps its own row: the second beat does not overwrite the first
+    h = await health()
+    assert h["mesh_bridges"] == {"433": "present", "main": "absent"}
+    assert h["modules"]["mesh_bridge"] == "present"
+    for bad in ("main", "Bad Name", "x" * 17, ""):
+        r = await client.post(
+            "/v1/system/heartbeat", headers=sys_h, json={**beat_433, "instance": bad}
+        )
+        assert r.status_code == 422, bad
+
+
 async def test_the_worker_heartbeat_makes_the_worker_present(client):  # type: ignore[no-untyped-def]
     from stozher_api.heartbeat import beat
 

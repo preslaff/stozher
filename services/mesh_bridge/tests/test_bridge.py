@@ -523,3 +523,19 @@ async def test_heartbeat_reports_the_radio_state_and_survives_an_api_that_is_awa
     assert not await beats.beat() and beats.last_error == "ConnectError"
     up["on"] = True
     assert await beats.beat() and beats.last_error is None and (beats.sent, beats.errors) == (3, 1)
+    named = HeartbeatPusher(http, "k2", lambda: dict(state), instance="433")
+    assert await named.beat()  # a second bridge, e.g. the 433 MHz gateway, names itself
+    assert seen[-1]["body"] == {"module": "mesh_bridge", "info": state, "instance": "433"}
+    assert seen[-1]["key"] == "k2"
+
+
+def test_the_bridge_name_is_checked_on_the_command_line() -> None:
+    import argparse
+
+    import pytest
+    from mesh_bridge.cli import _bridge_name
+
+    assert _bridge_name("433") == "433" and _bridge_name("") is None
+    for bad in ("main", "Band 433", "x" * 17):
+        with pytest.raises(argparse.ArgumentTypeError):
+            _bridge_name(bad)

@@ -67,7 +67,7 @@ if [ ! -f infra/.env ]; then  # a new kit: its own database URL, never the examp
   echo "DATABASE_URL=postgresql+asyncpg://$ME@/$DB?host=/var/run/postgresql" >>infra/.env
 fi
 infra/kit/init.sh
-[ -f infra/kit/kit.env ] || printf '# Gateway radio: /dev/serial/by-id/<device>, or none to run without a radio\nMESH_PORT=none\n' >infra/kit/kit.env
+[ -f infra/kit/kit.env ] || printf '# Gateway radio: /dev/serial/by-id/<device>, or none to run without a radio\nMESH_PORT=none\n# Optional second gateway on another LoRa band (then run stozher-kit init once for its keys)\n# MESH_PORT_2=/dev/serial/by-id/<device>\n# MESH_NAME_2=433\n' >infra/kit/kit.env
 
 say "Command and (optional) service"
 mkdir -p "$HOME/.local/bin" && ln -sf "$DIR/infra/kit/stozher-kit" "$HOME/.local/bin/stozher-kit"

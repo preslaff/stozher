@@ -138,6 +138,7 @@ async def run_bridge(
     health_port: int | None = None,
     stale_after_s: float = 3 * 3600.0,
     http: httpx.AsyncClient | None = None,
+    name: str | None = None,
 ) -> None:
     own_http = http is None
     http = http or httpx.AsyncClient(base_url=api_url, timeout=15)
@@ -195,6 +196,7 @@ async def run_bridge(
                 "disabled": acks.disabled_reason,
             },
             "uptime_s": round(time.monotonic() - started),
+            "name": name,
         }
 
     server = await serve_health(health_port, snapshot) if health_port else None
@@ -202,6 +204,7 @@ async def run_bridge(
         http,
         system_key,
         lambda: {"radio_connected": supervisor.alive, "node_id": supervisor.node_id},
+        instance=name,
     )
     tasks = [
         asyncio.create_task(forwarder.run()),

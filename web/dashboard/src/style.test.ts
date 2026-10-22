@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { parseSse } from './sse'
-import { ageText, deliveryText, freshness, historyText, quietNote, TRUST_COLOR } from './style'
+import {
+  ageText,
+  deliveryText,
+  freshness,
+  historyText,
+  moduleChip,
+  quietNote,
+  TRUST_COLOR,
+} from './style'
 
 describe('parseSse', () => {
   it('parses CRLF events and keeps a partial tail', () => {
@@ -111,6 +119,23 @@ describe('delivery text', () => {
       ),
     ).toMatch(
       /^142 records held, 128 missing\. Ack stuck at seq 17 behind a gap: 126 not acknowledged \(last ack /,
+    )
+  })
+})
+
+describe('moduleChip', () => {
+  it('names a module, and counts mesh bridges when there is more than one', () => {
+    expect(moduleChip('mesh_bridge', 'present')).toEqual({
+      label: 'mesh bridge',
+      title: 'mesh_bridge: present',
+    })
+    expect(moduleChip('mesh_bridge', 'present', { main: 'present' }).label).toBe('mesh bridge')
+    expect(moduleChip('mesh_bridge', 'present', { '433': 'absent', main: 'present' })).toEqual({
+      label: 'mesh bridge 1/2',
+      title: '433: absent, main: present',
+    })
+    expect(moduleChip('worker', 'absent', { '433': 'absent', main: 'present' }).label).toBe(
+      'worker',
     )
   })
 })
