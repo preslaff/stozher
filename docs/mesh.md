@@ -12,6 +12,17 @@ witness T-Beam ~~LoRa mesh~~ gateway T-Beam --USB--> mesh_bridge --HTTP--> API
                                       +------- alert text (optional) <-----+  GET /v1/stream/alerts
 ```
 
+### A second band (433 MHz)
+
+Radios on different bands never hear each other, so a mesh on 433 MHz has its own gateway and bridge
+(`MESH_PORT_2`, `docs/field-kit.md`). Set up in October 2026: a LilyGO T3 V1.6.1 (ESP32-PICO-D4, 4 MB) on stock
+Meshtastic 2.8.2 built from the same checkout, region `EU_433`, the same private channel and key as the 868 MHz mesh
+(copied board to board, never printed) and the same modem preset (LONG_FAST, 3 hops). Its Meshtastic ID is
+`!06e4365b` (it showed `!605757d0` on first boot and changed after setup), name `STZ gateway 433`. The factory flash
+was backed up first (`data/firmware-backups/`, git-ignored). A T3 has no GNSS receiver, so it is a gateway, not a
+witness; a STOZHER node on 433 MHz needs a board with GNSS and our firmware. In Bulgaria use `EU_433` or `EU_868`
+only; 470 MHz is China's band.
+
 ## Transport ID
 
 A node's mesh transport ID is its Meshtastic node ID, `!` plus 8 lowercase hex digits (for
