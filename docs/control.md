@@ -78,41 +78,74 @@ same bytes for the same fields, and reject the invalid ones with the stated reas
 
 **Problem.** One record that never arrives pins `max_seq`. The mask reaches 16 further, so every later record beyond
 that window is never acknowledged, however many the cloud holds. Observed: a T-Beam whose sequence 1 never arrived
-has received the same ack (`max_seq` 0, mask full, covering 2 to 17) since 15 October 2026 while more than 250 records
-arrived. On the mesh path this costs only airtime (the node does not keep records). On the satellite path a node resends
-an unacknowledged record at most `max_resends` = 3 times at heartbeat time (`firmware/node/lib/stozher/stz_tx.h`), so the
-cost is up to three wasted transmissions per record, from a small daily budget, not a stuck queue. A mesh retransmission
-(`docs/decentralised-mesh.md`, step 3) would add the same cost there.
+has received the same ack (`max_seq` 0, mask full, covering 2 to 17) since 15 October 2026 while about 300 more sequence
+numbers were used. On the mesh path this costs only airtime: the node frees a record after sending it (at most 30 s for
+an event, `stz_mesh.cpp`). On the satellite path a node resends an unacknowledged event at most `max_resends` = 3 times
+at heartbeat time (`stz_tx.h`), so the cost is up to three wasted transmissions per event from a daily budget of 48, not
+a stuck queue. Mesh retransmission (`docs/decentralised-mesh.md`, step 3) would add the same cost there.
 
-**Rule.** A missing sequence `s` counts as *given up* once the cloud has held a later record (sequence greater than `s`)
-for at least `give_up_after` (proposed 6 h: longer than three heartbeat-time resends at the default 3600 s interval;
-configurable per deployment). Then:
+### Rule: the ack follows the newest record
 
-- `max_seq`: the highest N such that every sequence 1..N was received **or given up**.
-- `mask`: as today, computed above that `max_seq`.
+Let `H` be the highest sequence number the cloud holds for the node and key, and `W` = 17 (the mask's 16 bits plus the
+one missing sequence it starts after). A missing sequence `s` counts as *given up* once `s <= H - W`. Then:
 
-**Properties.**
+- `max_seq`: start at `max(0, H - W)` and extend through every following sequence that was received.
+  This equals today's value whenever `H - W` is below the contiguous run, so nothing changes for a node without old gaps.
+- `mask`: as today, computed above that `max_seq`. Because `max_seq >= H - W`, the mask always reaches `H`: the newest
+  record is always acknowledged, and the ack always describes the 17 most recent sequence numbers in full.
 
-- No wire, golden-vector or firmware change: nodes already drop `seq <= max_seq` (receive rule 5).
-- `max_seq` never goes backwards: gaps only age into given up, and a late arrival only fills one.
-- A late arrival is still ingested and stored normally; giving up concerns the ack only.
-- Loss stays visible: `missing` in `GET /v1/nodes` still counts given-up sequences.
-- Deterministic from the held sequence numbers, their arrival times and the signing time, so two signers holding the
-  same records sign the same `max_seq` once both windows have passed.
-- Cost: a node may drop a record the cloud never received, but only after it had `give_up_after` to resend it.
+In `stozher_core.control.summarize` this is one line: the loop starts at `max(0, max(have) - W)` instead of 0.
 
-**Tests to write once agreed** (`stozher_core.control`, pure function; API test through `GET /v1/acks`):
+### Why distance, not time
 
-| Held | Arrival of the later records | Expected `max_seq` |
-|---|---|---|
-| 2..30 (1 missing) | 1 h ago | 0 (window not passed; mask 2..17 as today) |
-| 2..30 (1 missing) | 7 h ago | 30 |
-| 1..5, 7..9 (6 missing), then 6 arrives late | 7 h ago | 9, and later signatures never lower it |
-| 1..3, 5..10 (4 missing, old), 12..14 (11 missing, recent) | 7 h ago / 1 h ago | 10, mask covers 12..14 |
-| simulated node | any | same rule, ack labelled `sim` as today |
+An earlier draft gave up a gap after it had been open for a fixed time (6 h). Distance is better:
 
-**Decisions needed:** adopt or not; the value of `give_up_after`; whether it is one deployment-wide setting or per node
-kind (satellite nodes resend for longer than mesh nodes).
+- **Same ack from every signer.** The result depends only on the set of records held, not on when each receiver
+  happened to get them, so a kit and the cloud holding the same records sign the same ack (fits several receivers and
+  peer sync, `docs/decentralised-mesh.md` steps 1 and 2). A time rule makes them disagree for hours, and nodes then
+  reject the lower ack as going backwards.
+- **No setting to tune** and no assumption about the heartbeat interval or resend count, which are build-time values.
+- **It matches what the ack can express.** A 16-bit mask cannot describe more than 17 sequence numbers behind the
+  newest, so anything older is outside what any ack of this format can acknowledge selectively anyway.
+
+### What it costs
+
+- **Meaning of `max_seq`.** It becomes "the node can forget everything up to here": received **or given up**. The cloud's
+  own view stays exact: `contiguous_seq` and `missing` in `GET /v1/nodes` still count given-up sequences as missing.
+- **Mesh path: nothing.** A mesh node frees each record within 30 s of creating it, far less than 17 sequence numbers.
+- **Satellite path: an old event can lose its remaining resends.** An event that has finished its burst stays queued
+  until acknowledged or evicted, and can be resent at up to 3 later heartbeats (about 3 h). If 17 newer sequence numbers
+  are used in that time and acks are freeing their slots, the event is given up while it still had resends left.
+  At normal rates (one heartbeat an hour, occasional events) that cannot happen; it needs a burst of more than about a
+  dozen events within 3 h, when newer events describe the same situation. Without acks today the queue (8 slots) evicts
+  the oldest finished entry first, so such an event is dropped by the node anyway.
+- **Closing that gap exactly (firmware, later):** let the node apply the same horizon: stop resending and free any
+  record that is `W` or more behind its own newest sequence. Then node and cloud give up at the same point by
+  construction. It is a few lines in `Tx::queue_resends` and the mesh queue, and belongs with the first KIM1 build, which
+  needs flashing anyway. Also a firmware invariant from now on: a node's queue holds at most 16 records (`STZ_TX_QUEUE` 8
+  and `STZ_MESH_QUEUE` 4 today); a larger store-and-forward queue needs a new ack format, not a larger window here.
+
+**Properties kept:** no wire, golden-vector or firmware change for the cloud side (nodes already drop `seq <= max_seq`,
+receive rule 5); `max_seq` never goes backwards (`H` only grows, and a late arrival only fills a gap); late records are
+still ingested and stored normally; only verified records count, so nobody without the node's key can push `H` up.
+
+### Tests to write once agreed
+
+`stozher_core.control.summarize` (pure, plus a property test that `max_seq` never decreases as records are added and that
+the mask always reaches the highest held sequence), and an API test through `GET /v1/acks` and `GET /v1/nodes`.
+
+| Held | Expected `max_seq`, mask |
+|---|---|
+| 2..10 (1 missing) | 0, mask 2..10 (within the window: as today) |
+| 2..17 (1 missing) | 0, mask full 2..17 (as today) |
+| 2..18 (1 missing) | 18, mask 0 (seq 1 is now 17 behind: given up) |
+| 2..30 (1 missing) | 30, mask 0 (the a4b0 case) |
+| 1..3, 5..10, 12..14 | 3, mask 5..10 and 12..14 (as today) |
+| 1..3, 5..40, 42..45 | 40, mask 42..45 (4 given up; 41 still inside the window) |
+| previous row, then 4 arrives late | unchanged: never lower |
+| simulated node | same rule, ack labelled `sim` as today |
+
+**Decisions needed:** adopt the distance rule or not; whether the matching firmware horizon goes into the first KIM1 build.
 
 ## Delivery
 
