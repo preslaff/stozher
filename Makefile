@@ -1,4 +1,4 @@
-.PHONY: up down field kit-bundle kit-doctor kit kit-init kit-build kit-stop migrate test lint sim sim-hazards assistant assistant-eval fw fw-test fw-vectors fw-upload worker api bridge
+.PHONY: up down field kit-bundle kit-doctor kit kit-init kit-build kit-stop migrate test lint sim sim-hazards assistant assistant-eval fw fw-test fw-vectors fw-sim fw-upload sim-dualband worker api bridge
 
 S ?= coastal
 
@@ -66,6 +66,16 @@ fw-vectors:  # regenerate the C++ test header from tests/vectors
 
 fw-test: fw-vectors  # codec and detection tests on the host, no hardware needed
 	pio test -d firmware/node -e native
+
+FW_SIM := firmware/node/.pio/sim/virtual_node
+fw-sim:  # the virtual dual-band node for the PC (firmware/node/sim), built from the same lib/stozher code
+	mkdir -p firmware/node/.pio/sim
+	gcc -O1 -c firmware/node/lib/tweetnacl/tweetnacl.c -o firmware/node/.pio/sim/tweetnacl.o
+	g++ -std=gnu++17 -O1 -Wall -Wextra -Werror -Ifirmware/node/lib/stozher -Ifirmware/node/lib/tweetnacl \
+	  firmware/node/sim/virtual_node.cpp firmware/node/lib/stozher/*.cpp firmware/node/.pio/sim/tweetnacl.o -o $(FW_SIM)
+
+sim-dualband: fw-sim  # simulated dual-band node through two simulated bridges (needs the API, operator and system keys)
+	uv run python -m simulator dualband $(ARGS)
 
 fw-upload:
 	pio run -d firmware/node -t upload

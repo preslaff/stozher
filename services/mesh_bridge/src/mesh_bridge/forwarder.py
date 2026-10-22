@@ -35,8 +35,10 @@ class Forwarder:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         on_handled: Callable[[str, str], None] | None = None,
+        sim: bool = False,
     ) -> None:
         self.http, self.key, self.spool = http, system_key, spool
+        self.sim = sim  # simulated radio: records go to /v1/ingest/sim, never to live ingest
         self.max_queue, self.dedupe_s = max_queue, dedupe_s
         self.retry_base_s, self.retry_max_s = retry_base_s, retry_max_s
         self.clock, self.sleep = clock, sleep
@@ -119,13 +121,21 @@ class Forwarder:
 
     async def send_one(self, item: dict[str, Any]) -> bool:
         """Deliver one record. True when the backend gave a final answer, False to retry later."""
-        body = {
-            "origin_node": item["from_id"],
-            "payload_hex": item["payload_hex"],
-            "hops": item.get("hops"),
-        }
+        if self.sim:
+            path = "/v1/ingest/sim"
+            body: dict[str, Any] = {
+                "external_id": item["from_id"],
+                "payload_hex": item["payload_hex"],
+            }
+        else:
+            path = "/v1/ingest/mesh"
+            body = {
+                "origin_node": item["from_id"],
+                "payload_hex": item["payload_hex"],
+                "hops": item.get("hops"),
+            }
         try:
-            r = await self.http.post("/v1/ingest/mesh", headers={"X-API-Key": self.key}, json=body)
+            r = await self.http.post(path, headers={"X-API-Key": self.key}, json=body)
         except httpx.HTTPError as exc:
             self.last_error = f"unreachable: {exc.__class__.__name__}"
             return False

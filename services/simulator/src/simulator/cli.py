@@ -78,6 +78,30 @@ async def _run_hazards(args: argparse.Namespace) -> int:
     return 0 if card.passed else 1
 
 
+async def _dualband(args: argparse.Namespace) -> int:
+    from .dualband import run as run_dualband
+
+    keys = {k: os.environ.get(f"STOZHER_{k.upper()}_KEY", "") for k in ("operator", "system")}
+    if not all(keys.values()):
+        print(
+            "set STOZHER_OPERATOR_KEY and STOZHER_SYSTEM_KEY (see docs/api.md section 3)",
+            file=sys.stderr,
+        )
+        return 2
+    node_args = ["--heartbeat-s", str(args.heartbeat_s), "--seed", str(args.seed)]
+    node_args += ["--jam-at", str(args.jam_at), "--jam-for", str(args.jam_for)]
+    for band in ("868", "433"):
+        drop = getattr(args, f"drop_{band}")
+        outage = getattr(args, f"outage_{band}")
+        if drop:
+            node_args += [f"--drop-{band}", str(drop)]
+        if outage:
+            node_args += [f"--outage-{band}", outage]
+    return await run_dualband(
+        args.api, keys["operator"], keys["system"], node_args, round(args.minutes * 60), args.reset
+    )
+
+
 async def _reset(args: argparse.Namespace) -> int:
     async with httpx.AsyncClient(base_url=args.api, timeout=30) as http:
         print(await SimClient(http, os.environ.get("STOZHER_OPERATOR_KEY", ""), "").reset())
@@ -141,6 +165,28 @@ def main() -> None:
     r.add_argument("--out", help="write the report as JSON")
     h = sub.add_parser("hazards", help="run the road-hazard scenario (needs a running worker)")
     h.add_argument("--keep", action="store_true", help="do not reset earlier simulated data first")
+    d = sub.add_parser(
+        "dualband",
+        help="a simulated dual-band node through two simulated bridges (SIM data; make fw-sim first)",
+    )
+    d.add_argument("--minutes", type=float, default=5.0)
+    d.add_argument(
+        "--heartbeat-s", type=int, default=60, help="heartbeat interval of the virtual node"
+    )
+    d.add_argument(
+        "--jam-at", type=int, default=120, help="seconds into the run the jamming episode starts"
+    )
+    d.add_argument("--jam-for", type=int, default=30)
+    for band in ("868", "433"):
+        d.add_argument(
+            f"--drop-{band}",
+            type=float,
+            default=0.0,
+            help=f"share of {band} MHz messages lost on air",
+        )
+        d.add_argument(f"--outage-{band}", default=None, help="FROM:TO seconds with the band down")
+    d.add_argument("--seed", type=int, default=1, help="seed of the simulated losses")
+    d.add_argument("--reset", action="store_true", help="delete all simulated data first")
     sub.add_parser("reset", help="delete all simulated data")
     k = sub.add_parser("packet", help="print one signed record as STZ1:<hex> mesh text (test data)")
     k.add_argument("--node-id", type=int, required=True, help="the node's uint32 id from the API")
@@ -159,4 +205,10 @@ def main() -> None:
     args = ap.parse_args()
     if args.cmd == "packet":
         sys.exit(cmd_packet(args))
-    sys.exit(asyncio.run({"run": _run, "hazards": _run_hazards}.get(args.cmd, _reset)(args)))
+    sys.exit(
+        asyncio.run(
+            {"run": _run, "hazards": _run_hazards, "dualband": _dualband}.get(args.cmd, _reset)(
+                args
+            )
+        )
+    )

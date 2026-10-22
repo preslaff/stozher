@@ -139,7 +139,10 @@ async def run_bridge(
     stale_after_s: float = 3 * 3600.0,
     http: httpx.AsyncClient | None = None,
     name: str | None = None,
+    sim: bool = False,
 ) -> None:
+    """`sim`: the radio is a simulated one (sim_radio.py). Records then go to /v1/ingest/sim, acks are looked up as
+    transport `sim`, and the bridge sends no heartbeat, so a simulated bridge never shows up as a real gateway."""
     own_http = http is None
     http = http or httpx.AsyncClient(base_url=api_url, timeout=15)
     loop = asyncio.get_running_loop()
@@ -149,7 +152,7 @@ async def run_bridge(
         if pusher_ref:
             pusher_ref[0].note(from_id, status)
 
-    forwarder = Forwarder(http, system_key, spool=spool, on_handled=handled)
+    forwarder = Forwarder(http, system_key, spool=spool, on_handled=handled, sim=sim)
 
     def on_text(msg: MeshText) -> None:  # called from the radio library's thread
         loop.call_soon_threadsafe(forwarder.submit, msg)
@@ -157,12 +160,21 @@ async def run_bridge(
     supervisor = RadioSupervisor(radio_factory, on_text, stale_after_s=stale_after_s)
     relay = (
         AlertRelay(
-            http, responder_key, supervisor, relay_sim=relay_sim, min_interval_s=relay_interval_s
+            http,
+            responder_key,
+            supervisor,
+            relay_sim=relay_sim
+            or sim,  # a simulated mesh may carry [SIM] alerts; a real radio only with --relay-sim
+            min_interval_s=relay_interval_s,
         )
         if responder_key
         else None
     )
-    acks = AckPusher(http, system_key, supervisor) if send_acks else None
+    acks = (
+        AckPusher(http, system_key, supervisor, transport="sim" if sim else "mesh")
+        if send_acks
+        else None
+    )
     if acks:
         pusher_ref.append(acks)
     started = time.monotonic()
@@ -197,6 +209,7 @@ async def run_bridge(
             },
             "uptime_s": round(time.monotonic() - started),
             "name": name,
+            "sim": sim,
         }
 
     server = await serve_health(health_port, snapshot) if health_port else None
@@ -209,8 +222,9 @@ async def run_bridge(
     tasks = [
         asyncio.create_task(forwarder.run()),
         asyncio.create_task(supervisor.run()),
-        asyncio.create_task(beats.run()),
     ]
+    if not sim:
+        tasks.append(asyncio.create_task(beats.run()))
     if relay:
         tasks.append(asyncio.create_task(relay.run()))
     if acks:

@@ -33,7 +33,9 @@ class AckPusher:
         channel: int = 0,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        transport: str = "mesh",
     ) -> None:
+        self.transport = transport  # "sim" for a simulated radio
         self.http, self.key, self.radio = http, key, radio
         self.delay_s, self.min_interval_s, self.retry_s, self.channel = (
             delay_s,
@@ -62,7 +64,7 @@ class AckPusher:
         try:
             r = await self.http.get(
                 "/v1/acks",
-                params={"transport": "mesh", "external_id": from_id},
+                params={"transport": self.transport, "external_id": from_id},
                 headers={"X-API-Key": self.key},
             )
         except httpx.HTTPError:

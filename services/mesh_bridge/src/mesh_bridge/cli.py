@@ -8,6 +8,8 @@ from pathlib import Path
 
 from .app import run_bridge
 from .radio import FakeRadio, Radio
+from .sim_radio import SimTcpRadio
+from .sim_radio import parse_port as parse_sim_port
 
 DEFAULT_PORT = "/dev/ttyUSB0"
 
@@ -25,6 +27,9 @@ def _bridge_name(v: str) -> str | None:
 def _radio_factory(args: argparse.Namespace):  # type: ignore[no-untyped-def]
     if args.port == "fake":
         return lambda: FakeRadio()
+    sim = parse_sim_port(args.port)
+    if sim is not None:
+        return lambda: SimTcpRadio(*sim)
     from .meshtastic_radio import MeshtasticRadio  # needs the optional `radio` extra
 
     return lambda: MeshtasticRadio(args.port)
@@ -64,7 +69,12 @@ def cmd_run(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    if args.port != "fake":
+    try:
+        sim = parse_sim_port(args.port) is not None
+    except ValueError as exc:
+        print(f"--port: {exc}", file=sys.stderr)
+        return 2
+    if args.port != "fake" and not sim:
         _need_radio_extra()
     spool = None if args.no_spool else Path(args.spool).expanduser()
     try:
@@ -79,8 +89,9 @@ def cmd_run(args: argparse.Namespace) -> int:
                 relay_interval_s=args.relay_interval,
                 send_acks=not args.no_acks,
                 health_port=args.health_port,
-                stale_after_s=args.stale_after,
                 name=args.name,
+                sim=sim,
+                stale_after_s=0 if sim else args.stale_after,
             )
         )
     except KeyboardInterrupt:
@@ -124,7 +135,8 @@ def main() -> None:
     ap.add_argument(
         "--port",
         default=os.environ.get("MESH_PORT", DEFAULT_PORT),
-        help="serial device of the gateway T-Beam, or 'fake' for no hardware",
+        help="serial device of the gateway T-Beam, 'fake' for no hardware, or sim-tcp:127.0.0.1:<port> for a "
+        "simulated radio (records then go to /v1/ingest/sim)",
     )
     ap.add_argument("-v", "--verbose", action="store_true")
     sub = ap.add_subparsers(dest="cmd", required=True)
