@@ -55,7 +55,7 @@ make kit-stop        # or Ctrl-C in the terminal that runs it
 ```
 `MESH_PORT=none` starts the kit without a radio (for example to look at stored data). The script migrates the database,
 starts the API (bound to all interfaces, port 8000, override with `STOZHER_API_HOST` and `STOZHER_API_PORT`), the worker and the
-bridge, prints the addresses, and stops everything on exit. Logs: `~/.local/state/stozher/{api,worker,bridge}.log`.
+bridge, prints the addresses, and stops everything on exit. Logs: `~/.local/state/stozher/{api,worker,bridge}.log`, appended across restarts (each start is marked `===== kit start <time> =====`; a log over 20 MB moves to `<name>.log.1`), so a restart never erases the evidence of what went before it.
 
 **A second gateway on another LoRa band.** Radios on different bands never hear each other (a 433 MHz board cannot
 reach the 868 MHz mesh, whatever its firmware), so a mesh on each band needs its own gateway on the laptop. Set

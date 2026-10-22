@@ -54,33 +54,42 @@ echo "migrating the database..."
 (cd services/api && uv run alembic upgrade head) >/dev/null || { echo "cannot reach the local PostgreSQL (see DATABASE_URL in $ENV)" >&2; exit 1; }
 
 echo $$ >"$STATE/kit.pid"
+# Logs are appended, never overwritten: a restart must not erase what happened before it (lost records are diagnosed
+# from the bridge log). logto <name> marks the start in <name>.log, first moving a log over 20 MB to <name>.log.1.
+logto() {
+  local log="$STATE/$1.log"
+  if [ -f "$log" ] && [ "$(stat -c %s "$log")" -gt 20000000 ]; then mv -f "$log" "$log.1"; fi
+  printf '\n===== kit start %s =====\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >>"$log"
+  printf '%s' "$log"
+}
 pids=()
 # each part runs in its own process group (setsid), so stopping it also stops the processes it started (uv, sg, python)
 stop() { trap - INT TERM EXIT; for p in "${pids[@]:-}"; do [ -n "$p" ] && { kill -- "-$p" 2>/dev/null || kill "$p" 2>/dev/null || true; }; done; rm -f "$STATE/kit.pid"; }
 trap stop INT TERM EXIT
 
-STOZHER_DASHBOARD_DIR="$DASH" setsid uv run uvicorn --factory stozher_api.main:app_factory --host "$HOST" --port "$PORT" >"$STATE/api.log" 2>&1 &
+STOZHER_DASHBOARD_DIR="$DASH" setsid uv run uvicorn --factory stozher_api.main:app_factory --host "$HOST" --port "$PORT" >>"$(logto api)" 2>&1 &
 pids+=($!)
-setsid uv run python -m stozher_worker >"$STATE/worker.log" 2>&1 &
+setsid uv run python -m stozher_worker >>"$(logto worker)" 2>&1 &
 pids+=($!)
-# start_bridge <device> <log> <health port> [extra bridge options]: the radio needs group dialout
+# start_bridge <device> <log name> <health port> [extra bridge options]: the radio needs group dialout
 start_bridge() {
+  local log; log="$(logto "$2")"
   local cmd="uv run --package stozher-mesh-bridge --extra radio python -m mesh_bridge --api http://127.0.0.1:$PORT --port '$1' run --health-port $3 ${*:4}"
-  if id -nG | tr ' ' '\n' | grep -qx dialout; then setsid bash -c "$cmd" >"$STATE/$2" 2>&1 & else setsid sg dialout -c "$cmd" >"$STATE/$2" 2>&1 & fi
+  if id -nG | tr ' ' '\n' | grep -qx dialout; then setsid bash -c "$cmd" >>"$log" 2>&1 & else setsid sg dialout -c "$cmd" >>"$log" 2>&1 & fi
   pids+=($!)
 }
 if [ "$MESH_PORT" != "none" ]; then
-  start_bridge "$MESH_PORT" bridge.log "${BRIDGE_HEALTH_PORT:-8766}"
+  start_bridge "$MESH_PORT" bridge "${BRIDGE_HEALTH_PORT:-8766}"
 fi
 if [ -n "$MESH_PORT_2" ]; then
   STOZHER_SYSTEM_KEY="$STOZHER_SYSTEM_KEY_2" STOZHER_RESPONDER_KEY="$STOZHER_RESPONDER_KEY_2" \
-    start_bridge "$MESH_PORT_2" bridge-2.log "${BRIDGE_2_HEALTH_PORT:-8767}" \
+    start_bridge "$MESH_PORT_2" bridge-2 "${BRIDGE_2_HEALTH_PORT:-8767}" \
     --name "'$MESH_NAME_2'" --spool "'$STATE/mesh-spool-2.jsonl'"
 fi
 
 if [ "${ASSISTANT:-off}" = "on" ]; then
   # optional: answers questions through the API with the asker's own key; the core runs without it
-  setsid uv run python -m assistant >"$STATE/assistant.log" 2>&1 &
+  setsid uv run python -m assistant >>"$(logto assistant)" 2>&1 &
   pids+=($!)
 fi
 
