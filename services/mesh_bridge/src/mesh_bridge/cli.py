@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from .app import run_bridge
+from .meshtastic_radio import parse_tcp_port
 from .radio import FakeRadio, Radio
 from .sim_radio import SimTcpRadio
 from .sim_radio import parse_port as parse_sim_port
@@ -47,7 +48,8 @@ def _open(args: argparse.Namespace) -> Radio:
         )
     except OSError as exc:
         sys.exit(
-            f"Cannot open {args.port}: {exc}. Is the T-Beam plugged in, and is nothing else (a serial monitor, the Meshtastic app) using it?"
+            f"Cannot open {args.port}: {exc}. Is the gateway plugged in (or reachable on the network), and is nothing else "
+            "(a serial monitor, the Meshtastic app) using it?"
         )
     return radio
 
@@ -71,6 +73,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 2
     try:
         sim = parse_sim_port(args.port) is not None
+        parse_tcp_port(args.port)
     except ValueError as exc:
         print(f"--port: {exc}", file=sys.stderr)
         return 2
@@ -135,8 +138,9 @@ def main() -> None:
     ap.add_argument(
         "--port",
         default=os.environ.get("MESH_PORT", DEFAULT_PORT),
-        help="serial device of the gateway T-Beam, 'fake' for no hardware, or sim-tcp:127.0.0.1:<port> for a "
-        "simulated radio (records then go to /v1/ingest/sim)",
+        help="the gateway: its serial device (/dev/serial/by-id/...), tcp:<host>[:<port>] for a gateway on the "
+        "network (Meshtastic's API over Wi-Fi, no authentication: private networks only), 'fake' for no hardware, or "
+        "sim-tcp:127.0.0.1:<port> for a simulated radio (records then go to /v1/ingest/sim)",
     )
     ap.add_argument("-v", "--verbose", action="store_true")
     sub = ap.add_subparsers(dest="cmd", required=True)

@@ -48,9 +48,20 @@ echo "Radio"
 if id -nG | tr ' ' '\n' | grep -qx dialout; then ok "user is in group dialout"; else warn "user is not in group dialout: sudo usermod -aG dialout $USER, then log in again"; fi
 ports=(/dev/serial/by-id/*)
 if [ -e "${ports[0]}" ]; then for p in "${ports[@]}"; do ok "serial device: ${p##*/}"; done; else warn "no serial device plugged in (MESH_PORT=none runs without a radio)"; fi
-if [ -n "${MESH_PORT:-}" ] && [ "$MESH_PORT" != none ]; then [ -e "$MESH_PORT" ] && ok "MESH_PORT exists" || bad "MESH_PORT $MESH_PORT is not there"; fi
+# gateway <name> <value>: a serial device must exist; tcp:<host>[:<port>] must answer (Meshtastic's network API, 4403)
+gateway() {
+  case "$2" in
+    tcp:*)
+      local hp="${2#tcp:}" host port
+      host="${hp%%:*}"; port="${hp#*:}"; [ "$port" = "$hp" ] && port=4403
+      if timeout 3 bash -c "exec 3<>/dev/tcp/$host/$port" 2>/dev/null; then ok "$1 answers on $host:$port"; else bad "$1: nothing answers on $host:$port"; fi
+      warn "$1 is a gateway on the network: Meshtastic's network API has no authentication, use only the kit's private network" ;;
+    *) [ -e "$2" ] && ok "$1 exists" || bad "$1 $2 is not there" ;;
+  esac
+}
+if [ -n "${MESH_PORT:-}" ] && [ "$MESH_PORT" != none ]; then gateway MESH_PORT "$MESH_PORT"; fi
 if [ -n "${MESH_PORT_2:-}" ] && [ "$MESH_PORT_2" != none ]; then
-  [ -e "$MESH_PORT_2" ] && ok "MESH_PORT_2 exists (second gateway, ${MESH_NAME_2:-433})" || bad "MESH_PORT_2 $MESH_PORT_2 is not there"
+  gateway "MESH_PORT_2 (second gateway, ${MESH_NAME_2:-433})" "$MESH_PORT_2"
   [ "$MESH_PORT_2" != "${MESH_PORT:-}" ] || bad "MESH_PORT_2 is the same device as MESH_PORT"
   grep -q -E "^STOZHER_SYSTEM_KEY_2=.+" infra/.env 2>/dev/null && grep -q -E "^STOZHER_RESPONDER_KEY_2=.+" infra/.env 2>/dev/null \
     && ok "second bridge keys present" || bad "second bridge keys missing: MESH_PORT_2=... infra/kit/init.sh"

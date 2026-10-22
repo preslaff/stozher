@@ -29,7 +29,7 @@ done
 PORT="${STOZHER_API_PORT:-8000}"
 HOST="${STOZHER_API_HOST:-0.0.0.0}"
 MESH_PORT="${MESH_PORT:-}"
-[ -n "$MESH_PORT" ] || { echo "set MESH_PORT to the gateway's /dev/serial/by-id/... path, or MESH_PORT=none to run without a radio" >&2; exit 1; }
+[ -n "$MESH_PORT" ] || { echo "set MESH_PORT to the gateway's /dev/serial/by-id/... path, tcp:<host> for a gateway on the kit's network, or MESH_PORT=none to run without a radio" >&2; exit 1; }
 # Optional second gateway, for a mesh on another LoRa band (a 433 MHz one next to 868 MHz; radios on different bands never
 # hear each other). It runs its own bridge with its own keys, spool, log and health port, and names itself in /health.
 MESH_PORT_2="${MESH_PORT_2:-}"

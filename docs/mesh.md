@@ -27,6 +27,19 @@ was backed up first (`data/firmware-backups/`, git-ignored). A T3 has no GNSS re
 witness; a STOZHER node on 433 MHz needs a board with GNSS and our firmware. In Bulgaria use `EU_433` or `EU_868`
 only; 470 MHz is China's band.
 
+### A gateway on the network (Wi-Fi)
+
+An ESP32 gateway (T3, T-Beam, the WROOM board) can join a Wi-Fi network and offer Meshtastic's client API there (TCP port
+4403) instead of USB: `--port tcp:<host>[:<port>]`, or `MESH_PORT=tcp:192.168.4.20` in the kit. The bridge then works as
+over USB (link supervisor, acks, the witness-as-gateway copy of its own records). The board's Wi-Fi name and password are
+set on the board by its owner (`meshtastic --set network.wifi_ssid ... --set network.wifi_psk ...`, a secret: not in this
+repository). **Meshtastic's network API has no authentication**: anyone on that network can read the channel, already
+decrypted, and change the radio's settings. Use it only on the kit's own private WPA2 network, never a shared one; the
+bridge logs a warning and `make kit-doctor` checks that the gateway answers and repeats the warning. Wi-Fi costs about
+100 mA (mains or USB power, not a battery witness) and does not run together with Bluetooth on the ESP32. On a T-Beam the
+Wi-Fi antenna is centimetres from the GPS antenna: compare C/N0 and noise with Wi-Fi on and off (`STOZHER_EPOCH_LOG_S`)
+before trusting a witness that uses it. Built and unit-tested; not yet run against a board.
+
 ### Simulated radios (sim mode)
 
 `--port sim-tcp:127.0.0.1:<port>` gives the bridge a simulated gateway radio (`mesh_bridge/sim_radio.py`) instead of a USB

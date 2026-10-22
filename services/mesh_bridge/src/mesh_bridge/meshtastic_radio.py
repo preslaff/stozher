@@ -1,15 +1,37 @@
 """Real radio through the Meshtastic Python library (GPL-3.0; see LICENSE-NOTE.md).
 
-The library is imported lazily so everything else in the bridge works without it.
+The library is imported lazily so everything else in the bridge works without it. The gateway is reached over USB serial
+(`/dev/serial/by-id/...`) or over the network (`tcp:<host>[:<port>]`, Meshtastic's client API on an ESP32 with Wi-Fi,
+port 4403 by default). Meshtastic's network API has no authentication: anyone on that network can read the channel and
+change the radio's settings, so use it only on the kit's own private network.
 """
 
 import logging
+import re
 from collections.abc import Callable
 from typing import Any
 
 from .protocol import MeshText, to_mesh_text
 
 log = logging.getLogger("stozher.mesh")
+
+TCP_PREFIX = "tcp:"
+TCP_DEFAULT_PORT = 4403  # Meshtastic's client API over the network
+
+
+def parse_tcp_port(port: str) -> tuple[str, int] | None:
+    """`tcp:192.168.4.20` or `tcp:gateway.local:4403` -> (host, port); None for a serial device path."""
+    if not port.startswith(TCP_PREFIX):
+        return None
+    rest = port[len(TCP_PREFIX) :]
+    host, sep, num = rest.rpartition(":")
+    if not sep:
+        host, num = rest, str(TCP_DEFAULT_PORT)
+    if not host or not re.fullmatch(r"[A-Za-z0-9.-]{1,253}", host):
+        raise ValueError(f"not a host name or IPv4 address: {host!r}")
+    if not num.isdigit() or not 1 <= int(num) <= 65535:
+        raise ValueError(f"not a TCP port: {num!r}")
+    return host, int(num)
 
 
 class MeshtasticRadio:
@@ -25,14 +47,26 @@ class MeshtasticRadio:
         return self._alive
 
     def start(self, on_text: Callable[[MeshText], None]) -> None:
-        from meshtastic.serial_interface import SerialInterface  # GPL-3.0, imported on use
         from pubsub import pub
 
+        tcp = parse_tcp_port(self.port)
         self._on_text = on_text
         # Subscribe first so no early packet is missed; weak refs mean we must keep these bound methods.
         pub.subscribe(self._on_receive, "meshtastic.receive.text")
         pub.subscribe(self._on_lost, "meshtastic.connection.lost")
-        self._iface = SerialInterface(devPath=self.port)
+        if tcp is not None:
+            from meshtastic.tcp_interface import TCPInterface  # GPL-3.0, imported on use
+
+            log.warning(
+                "gateway over the network (%s:%d): Meshtastic's network API has no authentication; "
+                "use it only on the kit's private network",
+                *tcp,
+            )
+            self._iface = TCPInterface(hostname=tcp[0], portNumber=tcp[1])
+        else:
+            from meshtastic.serial_interface import SerialInterface  # GPL-3.0, imported on use
+
+            self._iface = SerialInterface(devPath=self.port)
         info = self._iface.myInfo
         self.node_id = f"!{info.my_node_num:08x}" if info is not None else "?"
         self._alive = True

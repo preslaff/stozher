@@ -53,7 +53,7 @@ node with the same node ID and master key as the cloud (`POST /v1/nodes`), over 
 MESH_PORT=/dev/serial/by-id/usb-Silicon_Labs_CP2104_..._02066B17-if00-port0 make kit
 make kit-stop        # or Ctrl-C in the terminal that runs it
 ```
-`MESH_PORT=none` starts the kit without a radio (for example to look at stored data). The script migrates the database,
+`MESH_PORT=tcp:<address>` uses a gateway on the kit's network over Wi-Fi instead of USB (private network only: Meshtastic's network API has no authentication, `docs/mesh.md`). `MESH_PORT=none` starts the kit without a radio (for example to look at stored data). The script migrates the database,
 starts the API (bound to all interfaces, port 8000, override with `STOZHER_API_HOST` and `STOZHER_API_PORT`), the worker and the
 bridge, prints the addresses, and stops everything on exit. Logs: `~/.local/state/stozher/{api,worker,bridge}.log`, appended across restarts (each start is marked `===== kit start <time> =====`; a log over 20 MB moves to `<name>.log.1`), so a restart never erases the evidence of what went before it.
 
