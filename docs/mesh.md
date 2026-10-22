@@ -23,6 +23,16 @@ was backed up first (`data/firmware-backups/`, git-ignored). A T3 has no GNSS re
 witness; a STOZHER node on 433 MHz needs a board with GNSS and our firmware. In Bulgaria use `EU_433` or `EU_868`
 only; 470 MHz is China's band.
 
+### Simulated radios (sim mode)
+
+`--port sim-tcp:127.0.0.1:<port>` gives the bridge a simulated gateway radio (`mesh_bridge/sim_radio.py`) instead of a USB
+board: a TCP server on loopback only, one connection per simulated node radio, which first sends `SIMID:<id>` (the
+transport ID its radio on that band would have) and then one text message per line, as the Serial module does. A bridge
+with a simulated radio is in **sim mode**: records go to `/v1/ingest/sim` (never live ingest; the API also rejects a SIM
+node on live mesh ingest, `sim_mismatch`), acks are looked up as transport `sim`, alert texts carry `[SIM]`, and it sends
+no heartbeat, so it never shows up in `/health` or the dashboard next to the real gateways. Used by the dual-band run
+(`docs/scenario.md`).
+
 ## Transport ID
 
 A node's mesh transport ID is its Meshtastic node ID, `!` plus 8 lowercase hex digits (for

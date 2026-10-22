@@ -61,3 +61,25 @@ driving north along the coast road (2000–3200 s), a spoofing zone at the weste
 (2400–3000 s), a scintillation episode at three southern nodes (1200–1500 s), 3 wrong-key and 2
 bit-flipped records, and 2 resent records. Reference result: all 3 sources found, 0 merged,
 0 false alarms, 7/7 forged or replayed records handled correctly, 364 packets.
+
+## Dual-band run
+
+A simulated witness node with two radios, one per LoRa band (`docs/firmware.md`, "Dual-band node"), sending every record on
+both bands, each through its own simulated bridge (`docs/mesh.md`, "Simulated radios"). All data is SIM: the node is
+`kind: sim` with the public test key, records arrive through `/v1/ingest/sim`, and the kit's real bridges and radios are
+not touched.
+
+```
+make sim-dualband ARGS="--minutes 4 --outage-868 50:170"     # needs the API, STOZHER_OPERATOR_KEY and STOZHER_SYSTEM_KEY
+```
+
+`make fw-sim` builds the virtual node (`firmware/node/sim/virtual_node.cpp`, the real node code with TCP instead of
+radios). The runner registers (or reuses) node `dual-band-1` with transport IDs `sim:dual-band-1-868` and
+`sim:dual-band-1-433`, starts two bridges in sim mode (radios on 127.0.0.1:47868 and :47433, health on 8768 and 8769,
+logs and spools in `~/.local/state/stozher/sim-dualband/`), runs the node with real UTC time and a jamming episode, then
+prints what was made, stored and missing, per band what the radio delivered or lost and what the bridge accepted or saw as
+a duplicate, and the acks the node applied. Options: `--minutes`, `--heartbeat-s`, `--jam-at`, `--jam-for`,
+`--drop-868`/`--drop-433` (share lost on air, seeded by `--seed`), `--outage-868`/`--outage-433` (`FROM:TO` seconds),
+`--reset` (delete all SIM data first). The node's sequence numbers are kept between runs, as on a real node. Exit code 1
+when a record is missing or an event is not labelled SIM.
+

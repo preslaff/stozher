@@ -150,6 +150,26 @@ channel message is. If it is not, acks will not arrive over this path and the sa
 policy still works. The node cannot probe the Serial module at boot (it has no handshake), so "mesh present" comes
 from configuration, not detection.
 
+## Dual-band node: two mesh radios (Oct 2026, host-tested and simulated)
+
+LoRa radios are band-locked by their hardware (an 868 MHz board cannot serve a 433 MHz mesh, `docs/mesh.md`), so a node that
+reaches both meshes drives **two stock Meshtastic radios**, one per band, each over its own serial line.
+
+- `Node(cfg, tx, mesh, mesh2)`: with two links the node owns a `mesh::Fanout` sink. Every record goes to both links with the
+  same bytes and sequence number (the cloud keeps the first copy and counts the other as `duplicate`); a verified ack heard on
+  either band goes to `Tx::on_ack`, which hands it to both links, so it frees the record on the other band and stops the
+  satellite repeats. The same ack again from the other band is an equal, harmless repeat (`docs/control.md`, rule 4).
+- Each link keeps its own queue, spacing and hourly cap (40 a hour fits EU_433's 10% duty cycle at about 1.5 s a message);
+  a dead or unplugged radio never delays the other. A send on either radio blanks the detector for that radio's airtime.
+- Single-radio builds are unchanged; `STZ_NO_MESH` builds (Leonardo) compile the second radio out.
+- Tests: `test_mesh` (same bytes on both radios, an ack on one band frees the other band and the KIM1 queue, a dead radio,
+  blanking from either radio).
+- **Simulated end to end without hardware** (`docs/scenario.md`, "Dual-band run"): `firmware/node/sim/virtual_node.cpp` is
+  this code on the PC, with each band a loopback TCP connection to a simulated gateway radio. `make fw-sim` builds it.
+- **Not wired on a board yet.** The XIAO ESP32-S3 has three UARTs, all in use (mesh, GNSS, KIM1): the second radio needs
+  software serial at 9600 (EspSoftwareSerial, LGPL-2.1, to declare when added) or the KIM1 UART on a node without
+  satellite, and the second radio's Serial module in TEXTMSG mode.
+
 ## T-Beam fork: STOZHER inside Meshtastic (analysis and step 2)
 
 **Why.** The T-Beam is an ESP32 running Meshtastic; a STOZHER module inside that firmware would replace the
