@@ -19,6 +19,8 @@
 #ifndef STZ_TX_QUEUE
 #define STZ_TX_QUEUE 8  // entries; 4 is enough on the Leonardo
 #endif
+// An ack cannot describe more than 16 records behind the newest: a larger queue needs a new ack format.
+static_assert(STZ_TX_QUEUE <= 16, "STZ_TX_QUEUE must stay within the ack window");
 
 namespace stz {
 
@@ -114,7 +116,7 @@ class Tx {
   void advance_buckets(uint32_t now_ms);
   void start_next(uint32_t now_ms);
   void finish(bool ok, uint32_t now_ms);
-  void queue_resends(uint32_t now_ms);
+  void queue_resends(uint32_t now_ms, uint16_t newest);  // also drops entries kAckWindow behind `newest`
   void observe(uint32_t now_ms);
 
   TxConfig cfg_;

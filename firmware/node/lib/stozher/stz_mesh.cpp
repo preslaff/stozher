@@ -21,6 +21,8 @@ size_t build_text(const uint8_t* record, size_t len, char* out, size_t cap) {
 
 void Link::on_record(TxKind kind, uint16_t seq, const uint8_t* raw, size_t len, uint32_t now_ms) {
   if (len == 0 || len > kMaxLen) return;
+  for (Slot& s : q_)  // the cloud has given these up (kAckWindow)
+    if (s.used && beyond_ack_window(s.seq, seq)) s.used = false;
   Slot* slot = nullptr;
   for (Slot& s : q_)
     if (!s.used) { slot = &s; break; }

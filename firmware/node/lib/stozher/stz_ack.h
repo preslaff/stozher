@@ -23,6 +23,12 @@ struct Ack {
   uint32_t signed_at = 0;
 };
 
+// The distance rule (docs/control.md, "Giving up on old gaps"): the cloud gives up a missing record once the newest
+// record is kAckWindow or more ahead of it, because an ack (max_seq plus a 16-bit mask) describes only the newest
+// kAckWindow sequence numbers. A node gives up at the same point, so neither waits for the other.
+constexpr uint16_t kAckWindow = 17;
+inline bool beyond_ack_window(uint16_t seq, uint16_t newest) { return newest >= kAckWindow && seq <= newest - kAckWindow; }
+
 struct CloudKey {
   uint8_t id;
   uint8_t pub[32];

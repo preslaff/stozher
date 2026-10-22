@@ -94,6 +94,9 @@ Leonardo the whole path (reader, epochs, detector, USB report) is 19.7 KB flash 
     events keep room. The budget lives in RAM, so a reboot forgets it.
   - **Acks:** `on_ack` takes an already verified acknowledgement and applies control.md step 3-5: for this node and
     key, not older than the newest accepted, `max_seq` not going backwards; frees `seq <= max_seq` and the masked ones.
+  - **Ack horizon:** at heartbeat time an entry 17 or more behind the newest sequence is freed (`kAckWindow`), the same
+    point at which the cloud gives a gap up (`docs/control.md`, distance rule); the mesh queue does it on queueing.
+    Queues stay at most 16 (`static_assert`). Left out of the Leonardo build (`STZ_NO_ACK_HORIZON`, no flash left).
   - **Blanking:** `blanked()` is true from the AT+TX command until `+TX_INFO` (or the timeout), while TX_STATUS is
     high, for 3 s after it falls, and after the node's own mesh transmissions. `+TX_INFO: 1` only means the local
     transmission ended; delivery is known only from an acknowledgement.

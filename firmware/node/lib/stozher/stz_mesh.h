@@ -11,6 +11,7 @@
 #ifndef STZ_MESH_QUEUE
 #define STZ_MESH_QUEUE 4
 #endif
+static_assert(STZ_MESH_QUEUE <= 16, "STZ_MESH_QUEUE must stay within the ack window");
 
 namespace stz {
 namespace mesh {

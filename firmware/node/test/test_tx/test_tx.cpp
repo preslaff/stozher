@@ -287,6 +287,28 @@ void test_an_acknowledgement_stops_the_repeats_and_frees_the_slot() {
   TEST_ASSERT_EQUAL(1, r.modem.commands);
 }
 
+void test_an_entry_17_behind_the_newest_is_given_up_like_the_cloud_does() {
+  Rig r;
+  r.send(TxKind::Event);  // seq 1, never acknowledged
+  r.run(2000);
+  r.run(3 * 900000);  // the burst is done; the event waits for an ack and rides along with heartbeats
+  TEST_ASSERT_EQUAL(1, r.tx->pending());
+  r.store.save(0, 17);
+  r.send(TxKind::Heartbeat);  // seq 17: 1 is 16 behind, still inside the ack window, so it is resent
+  r.run(60000);
+  TEST_ASSERT_EQUAL(1, r.tx->pending());
+  uint32_t sent = r.modem.commands;
+  r.send(TxKind::Heartbeat);  // seq 18: 1 is 17 behind, given up at heartbeat time
+  r.run(60000);
+  TEST_ASSERT_EQUAL(0, r.tx->pending());
+  TEST_ASSERT_EQUAL(sent + 1, r.modem.commands);  // only the heartbeat went out
+  Ack a;  // and the cloud's ack for {1, 17, 18} says the same: max_seq 18
+  a.node_id = kNode;
+  a.max_seq = 18;
+  a.signed_at = 100;
+  TEST_ASSERT_EQUAL(AckResult::Applied, r.tx->on_ack(a));
+}
+
 void test_a_selective_acknowledgement_frees_only_the_marked_ones() {
   Rig r;
   r.modem.reply = FakeKim1::Reply::Silent;
@@ -642,6 +664,7 @@ int main() {
   RUN_TEST(test_an_event_repeats_twice_spread_over_time_then_stops);
   RUN_TEST(test_a_status_change_is_sent_once);
   RUN_TEST(test_an_acknowledgement_stops_the_repeats_and_frees_the_slot);
+  RUN_TEST(test_an_entry_17_behind_the_newest_is_given_up_like_the_cloud_does);
   RUN_TEST(test_a_selective_acknowledgement_frees_only_the_marked_ones);
   RUN_TEST(test_acknowledgements_for_someone_else_or_stale_are_ignored);
   RUN_TEST(test_a_failed_transmission_is_retried_after_a_backoff);

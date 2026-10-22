@@ -127,7 +127,7 @@ void test_a_full_queue_drops_heartbeats_before_events() {
   Mesh m;
   m.port.fail_writes = true;
   for (int i = 0; i < STZ_MESH_QUEUE; i++) m.record(TxKind::Heartbeat, (uint16_t)(i + 1));
-  m.record(TxKind::Event, 99);
+  m.record(TxKind::Event, (uint16_t)(STZ_MESH_QUEUE + 1));
   TEST_ASSERT_EQUAL(STZ_MESH_QUEUE, (int)m.link.pending());
   m.port.fail_writes = false;
   m.step(300);
@@ -136,7 +136,7 @@ void test_a_full_queue_drops_heartbeats_before_events() {
   Mesh n;
   n.port.fail_writes = true;
   for (int i = 0; i < STZ_MESH_QUEUE; i++) n.record(TxKind::Event, (uint16_t)(i + 1));
-  n.record(TxKind::Heartbeat, 50);
+  n.record(TxKind::Heartbeat, (uint16_t)(STZ_MESH_QUEUE + 1));
   TEST_ASSERT_EQUAL(STZ_MESH_QUEUE, (int)n.link.pending());
 }
 
@@ -200,6 +200,16 @@ void test_an_ack_drops_the_pending_mesh_sends() {
   a.max_seq = 2;
   m.link.on_ack(a);
   TEST_ASSERT_EQUAL(1, (int)m.link.pending());
+}
+
+void test_a_slot_17_behind_the_newest_record_is_given_up() {
+  Mesh m;
+  m.port.fail_writes = true;
+  m.record(TxKind::Event, 1);
+  m.record(TxKind::Event, 17);  // 1 is 16 behind: kept
+  TEST_ASSERT_EQUAL(2, (int)m.link.pending());
+  m.record(TxKind::Event, 18);  // 1 is 17 behind: given up, as the cloud does
+  TEST_ASSERT_EQUAL(2, (int)m.link.pending());
 }
 
 // ---- the whole node ----
@@ -350,6 +360,7 @@ int main() {
   RUN_TEST(test_forged_and_malformed_ack_lines_are_ignored);
   RUN_TEST(test_chat_garbage_and_partial_lines_do_not_confuse_it);
   RUN_TEST(test_an_ack_drops_the_pending_mesh_sends);
+  RUN_TEST(test_a_slot_17_behind_the_newest_record_is_given_up);
   RUN_TEST(test_one_event_reaches_both_the_satellite_and_the_mesh_with_the_same_bytes);
   RUN_TEST(test_the_mesh_flag_is_set_on_records_when_a_mesh_radio_is_present);
   RUN_TEST(test_an_ack_over_the_mesh_stops_the_satellite_repeats_too);
