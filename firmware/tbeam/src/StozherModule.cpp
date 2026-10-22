@@ -256,8 +256,19 @@ bool StozherModule::sendText(const char *text, size_t len)
     p->decoded.want_response = false;
     p->decoded.payload.size = len;
     memcpy(p->decoded.payload.bytes, text, len);
+    // Gateway use: a computer on our client API (the STOZHER mesh bridge over USB) hears every other node's records,
+    // but Meshtastic never shows it what this node sends itself. While a client is connected, hand it a copy, as a packet
+    // received from us; the bridge forwards it like any other record (a copy that also arrives via another gateway is a
+    // duplicate in the API). With no client nothing is copied, so nothing piles up. The bridge's ack comes back as a
+    // direct message to this node, which Meshtastic delivers locally to handleReceived().
+    meshtastic_MeshPacket *copy = service->api_state != MeshService::STATE_DISCONNECTED ? packetPool.allocCopy(*p) : nullptr;
     service->sendToMesh(p);
-    LOG_INFO("STOZHER: sent %u bytes to the mesh (%.5s...)", (unsigned)len, text);
+    if (copy) {
+        service->sendToPhone(copy);
+        LOG_INFO("STOZHER: sent %u bytes to the mesh and to the connected client (%.5s...)", (unsigned)len, text);
+    } else {
+        LOG_INFO("STOZHER: sent %u bytes to the mesh (%.5s...)", (unsigned)len, text);
+    }
     return true;
 }
 

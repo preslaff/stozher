@@ -20,6 +20,13 @@ What is here (the Meshtastic checkout itself is not vendored; it is GPL-3.0 and 
   receivers, adapted from Meshtastic's DIY v1: GNSS on GPIO 16/17 (not the strapping pin 12), SX1276 only, BOOT button on
   GPIO 0, no floating battery or power-detect pins. Wiring: SCK 5, MISO 19, MOSI 27, NSS 18, RESET 23, DIO0 26, DIO1 33.
   Built, not yet run on the board.
+- **Witness and gateway in one board.** Every board with the STOZHER module broadcasts its records over LoRa, so any
+  gateway in range forwards them. The same board can also *be* the gateway for other nodes: plugged into a computer running
+  the bridge, other nodes' records pass through to it as with stock Meshtastic. Meshtastic never shows the connected
+  client what the node sends itself, so while a client is connected (`service->api_state`) the module also hands each of its
+  own records to it (`sendToPhone`, a copy of the broadcast); the API counts a copy that also arrives via another gateway as
+  a duplicate. The bridge's ack to the node's own ID is delivered locally (`Router::sendLocal`). No setting to switch: the
+  role follows from whether a client is connected. Built for both boards; **not yet checked on hardware**.
 - `apply.sh`: links `firmware/node/lib/{stozher,tweetnacl}` into the checkout's `lib/`, copies the tap and the extra
   boards, applies the patches.
 

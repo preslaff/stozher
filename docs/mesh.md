@@ -12,6 +12,10 @@ witness T-Beam ~~LoRa mesh~~ gateway T-Beam --USB--> mesh_bridge --HTTP--> API
                                       +------- alert text (optional) <-----+  GET /v1/stream/alerts
 ```
 
+A STOZHER witness board (T-Beam or WROOM fork, `firmware/tbeam`) can also serve as the gateway: plug it into the kit and
+point `MESH_PORT` at it. It forwards other nodes' records, and while the bridge is connected it hands over its own records
+too (Meshtastic would not show them otherwise), so one board is witness and gateway at once. Not yet checked on hardware.
+
 ### A second band (433 MHz)
 
 Radios on different bands never hear each other, so a mesh on 433 MHz has its own gateway and bridge
