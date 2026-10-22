@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Put the STOZHER pieces into a Meshtastic firmware checkout (use a git worktree on its own branch).
 #   firmware/tbeam/apply.sh /path/to/Meshtastic-firmware-stozher
-# Then build:  pio run -e tbeam-stozher    (in that checkout)
+# Then build:  pio run -e tbeam-stozher   or   pio run -e diy-wroom-stozher    (in that checkout)
 set -euo pipefail
 DEST=$(cd "${1:?usage: apply.sh <meshtastic checkout>}" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -11,6 +11,11 @@ mkdir -p "$DEST/lib"
 ln -sfn "$ROOT/firmware/node/lib/stozher" "$DEST/lib/stozher"
 ln -sfn "$ROOT/firmware/node/lib/tweetnacl" "$DEST/lib/tweetnacl"
 cp "$HERE"/src/*.h "$HERE"/src/*.cpp "$DEST/src/gps/"
+# extra boards for the STOZHER module (Meshtastic picks up variants/*/diy/*/platformio.ini by itself)
+for v in "$HERE"/variants/*/; do
+  mkdir -p "$DEST/variants/esp32/diy/$(basename "$v")"
+  cp "$v"* "$DEST/variants/esp32/diy/$(basename "$v")/"
+done
 EXCLUDE=$(git -C "$DEST" rev-parse --git-path info/exclude)
 grep -qx 'lib/' "$EXCLUDE" 2>/dev/null || echo 'lib/' >> "$EXCLUDE"
 

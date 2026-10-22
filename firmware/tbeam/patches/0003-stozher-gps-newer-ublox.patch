@@ -1,0 +1,43 @@
+--- a/src/gps/GPS.cpp
++++ b/src/gps/GPS.cpp
+@@ -1119,6 +1119,24 @@
+             SEND_UBX_PACKET(0x06, 0x01, _message_VTG, "disable NMEA VTG", 500);
+             SEND_UBX_PACKET(0x06, 0x01, _message_RMC, "enable NMEA RMC", 500);
+             SEND_UBX_PACKET(0x06, 0x01, _message_GGA, "enable NMEA GGA", 500);
++#ifdef STOZHER_TAP
++            {
++                // STOZHER: per-satellite signal strength (NAV-SVINFO on u-blox 7, NAV-SAT on 8/9) and the receiver's noise,
++                // AGC and jamming indicator (MON-HW on 7/8, MON-RF on 9), once a second on UART1
++                static const uint8_t _message_STZ_SVINFO[] = {0x01, 0x30, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
++                static const uint8_t _message_STZ_NAVSAT[] = {0x01, 0x35, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
++                static const uint8_t _message_STZ_MONHW[] = {0x0A, 0x09, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
++                static const uint8_t _message_STZ_MONRF[] = {0x0A, 0x38, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00};
++                if (gnssModel == GNSS_MODEL_UBLOX7)
++                    SEND_UBX_PACKET(0x06, 0x01, _message_STZ_SVINFO, "enable UBX NAV-SVINFO", 500);
++                else
++                    SEND_UBX_PACKET(0x06, 0x01, _message_STZ_NAVSAT, "enable UBX NAV-SAT", 500);
++                if (gnssModel == GNSS_MODEL_UBLOX9)
++                    SEND_UBX_PACKET(0x06, 0x01, _message_STZ_MONRF, "enable UBX MON-RF", 500);
++                else
++                    SEND_UBX_PACKET(0x06, 0x01, _message_STZ_MONHW, "enable UBX MON-HW", 500);
++            }
++#endif
+ 
+             if (ublox_info.protocol_version >= 18) {
+                 clearBuffer();
+@@ -1167,6 +1185,15 @@
+             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_ITFM_BBR, "enable jam detection M10 GPS BBR", 300);
+             delay(750);
+             // Here is where the init commands should go to do further M10 initialization.
++#ifdef STOZHER_TAP
++            {
++                // STOZHER: NAV-SAT and MON-RF on UART1 once a second, in RAM (set again at every boot)
++                static const uint8_t _message_STZ_VALSET_M10[] = {0x00, 0x01, 0x00, 0x00, 0x16, 0x00, 0x91,
++                                                                  0x20, 0x01, 0x5a, 0x03, 0x91, 0x20, 0x01};
++                SEND_UBX_PACKET(0x06, 0x8A, _message_STZ_VALSET_M10, "enable UBX NAV-SAT and MON-RF on M10 RAM", 300);
++                delay(750);
++            }
++#endif
+             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_SBAS_RAM, "disable SBAS M10 GPS RAM", 300);
+             delay(750); // will cause a receiver restart so wait a bit
+             SEND_UBX_PACKET(0x06, 0x8A, _message_VALSET_DISABLE_SBAS_BBR, "disable SBAS M10 GPS BBR", 300);

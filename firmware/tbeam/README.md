@@ -12,15 +12,25 @@ What is here (the Meshtastic checkout itself is not vendored; it is GPL-3.0 and 
 - `patches/0001-stozher-gps-tap.patch`: three small edits to the Meshtastic checkout: the tap call in
   `GPS::whileActive()`, two CFG-MSG commands in the NEO-6 branch that turn on NAV-SVINFO and MON-HW, and a build
   environment `tbeam-stozher`. Everything is behind `-D STOZHER_TAP=1`.
-- `apply.sh`: links `firmware/node/lib/{stozher,tweetnacl}` into the checkout's `lib/`, copies the tap, applies the patch.
+- `patches/0003-stozher-gps-newer-ublox.patch`: the same for newer u-blox receivers, in Meshtastic's own setup branch for
+  each: u-blox 7 gets NAV-SVINFO + MON-HW, 8 gets NAV-SAT + MON-HW, 9 gets NAV-SAT + MON-RF (all by CFG-MSG), 10 gets
+  NAV-SAT + MON-RF by CFG-VALSET in RAM (set again at every boot). The tap and `stz::ubx::Reader` already read both
+  generations of messages, so u-blox 6, 7, 8, 9 and 10 all feed the detector. Only u-blox 6 is checked on hardware.
+- `variants/stozher_wroom/`: board `diy-wroom-stozher`, an ESP32-WROOM-32 DevKit + RFM95W (SX1276) + any of those u-blox
+  receivers, adapted from Meshtastic's DIY v1: GNSS on GPIO 16/17 (not the strapping pin 12), SX1276 only, BOOT button on
+  GPIO 0, no floating battery or power-detect pins. Wiring: SCK 5, MISO 19, MOSI 27, NSS 18, RESET 23, DIO0 26, DIO1 33.
+  Built, not yet run on the board.
+- `apply.sh`: links `firmware/node/lib/{stozher,tweetnacl}` into the checkout's `lib/`, copies the tap and the extra
+  boards, applies the patches.
 
 ```
 git -C ../Meshtastic-firmware worktree add ../Meshtastic-firmware-stozher -b stozher   # once
 firmware/tbeam/apply.sh ../Meshtastic-firmware-stozher
-cd ../Meshtastic-firmware-stozher && pio run -e tbeam-stozher
+cd ../Meshtastic-firmware-stozher && pio run -e tbeam-stozher        # or -e diy-wroom-stozher
 ```
 
-Flashing a board is a separate, deliberate step (back up the flash first, see docs/firmware.md). The stock firmware
+Building one environment with different `PLATFORMIO_BUILD_FLAGS` makes PlatformIO clean the other environments' builds:
+copy an image you want to keep (e.g. to the git-ignored `data/firmware-builds/`). Flashing a board is a separate, deliberate step (back up the flash first, see docs/firmware.md). The stock firmware
 binaries in `firmware/node/` restore a board.
 
 ## Build options (all `-D` flags, e.g. `PLATFORMIO_BUILD_FLAGS="-DSTOZHER_NODE_ID=4242" pio run -e tbeam-stozher`)
