@@ -84,5 +84,26 @@ class Link : public RecordSink {
 #endif
 };
 
+// More than one radio, one per LoRa band (a 433 MHz and an 868 MHz mesh never hear each other): every record and every
+// verified acknowledgement goes to each link, so an ack heard on one band frees the record on all of them. Each link keeps
+// its own queue, spacing and hourly cap, so a dead radio never delays the other.
+class Fanout : public RecordSink {
+ public:
+  static constexpr size_t kMaxRadios = 2;
+  void add(Link* l) {
+    if (l && n_ < kMaxRadios) links_[n_++] = l;
+  }
+  void on_record(TxKind kind, uint16_t seq, const uint8_t* raw, size_t len, uint32_t now_ms) override {
+    for (size_t i = 0; i < n_; i++) links_[i]->on_record(kind, seq, raw, len, now_ms);
+  }
+  void on_ack(const Ack& a) override {
+    for (size_t i = 0; i < n_; i++) links_[i]->on_ack(a);
+  }
+
+ private:
+  Link* links_[kMaxRadios] = {};
+  size_t n_ = 0;
+};
+
 }  // namespace mesh
 }  // namespace stz

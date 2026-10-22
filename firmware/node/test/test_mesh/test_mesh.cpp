@@ -321,6 +321,115 @@ void test_our_own_mesh_burst_blanks_the_detector() {
   TEST_ASSERT_FALSE(f.tx->blanked(f.now + 9000));
 }
 
+// ---- two radios, one per LoRa band ----
+
+struct Dual {
+  FakeKim1 kim;
+  FakeMesh p868, p433;
+  FakeStore store;
+  Keys keys;
+  TxConfig tc;
+  CloudKey ck = cloud_key();
+  mesh::Link* l868;
+  mesh::Link* l433;
+  Tx* tx;
+  Node* node;
+  uint32_t now = 1000;
+  Epoch base;
+  Dual() {
+    uint8_t m[16];
+    for (int i = 0; i < 16; i++) m[i] = (uint8_t)i;
+    tc.node_id = 1;
+    derive_keys(m, 1, 0, keys);
+    tx = new Tx(tc, keys, kim, store);
+    l868 = new mesh::Link(mesh::MeshConfig{}, p868, &ck, 1);
+    l433 = new mesh::Link(mesh::MeshConfig{}, p433, &ck, 1);
+    DetectConfig dc;
+    dc.fixed_node = true;
+    dc.surveyed_lat_e7 = 425000000;
+    dc.surveyed_lon_e7 = 270000000;
+    node = new Node(dc, *tx, l868, l433);
+    base.fix_ok = true;
+    base.lat_e7 = 425000000;
+    base.lon_e7 = 270000000;
+    base.sats_tracked = 12;
+    base.cn0_mean = 42;
+    base.cn0_spread_x10 = 38;
+    base.jam_state = 1;
+    base.spoof_state = 1;
+    base.sensor_stationary = true;
+  }
+  ~Dual() { delete node; delete l433; delete l868; delete tx; }
+  void second(Epoch e) {
+    e.utc_s = 1795775405u + (now - 1000) / 1000;
+    e.mono_ms = now;
+    node->on_epoch(e, now);
+    for (int i = 0; i < 10; i++) {
+      now += 100;
+      kim.step(now);
+      node->tick(now);
+    }
+  }
+  void jam(int seconds) {
+    Epoch hit = base;
+    hit.cn0_mean = 25;
+    hit.jam_ind = 40;
+    for (int i = 0; i < seconds; i++) second(hit);
+  }
+};
+
+void test_two_radios_send_every_record_with_the_same_bytes() {
+  Dual d;
+  for (int i = 0; i < 40; i++) d.second(d.base);
+  d.jam(10);
+  TEST_ASSERT_EQUAL(kJamming, d.node->current_class());
+  TEST_ASSERT_TRUE(d.node->mesh_present());
+  TEST_ASSERT_TRUE(d.p868.writes >= 2);  // the boot heartbeat and the event, on each band
+  TEST_ASSERT_EQUAL(d.p868.writes, d.p433.writes);
+  d.p868.out[d.p868.out_len] = 0;
+  d.p433.out[d.p433.out_len] = 0;
+  TEST_ASSERT_EQUAL_STRING(d.p868.out, d.p433.out);  // same records, same order, same bytes
+}
+
+void test_an_ack_on_one_band_frees_the_other_band_and_the_satellite() {
+  Dual d;
+  for (int i = 0; i < 40; i++) d.second(d.base);
+  d.p868.fail_writes = true;  // keep the 868 copy queued so the ack has something to free
+  d.jam(6);
+  TEST_ASSERT_TRUE(d.l868->pending() >= 1);
+  TEST_ASSERT_TRUE(d.tx->pending() >= 1);
+  d.p433.say(kValidAcks[0].text);  // ack_basic: node 1, key 0, max_seq 5, heard on 433 only
+  d.p433.say("\n");
+  d.jam(2);
+  TEST_ASSERT_EQUAL(0, (int)d.l868->pending());
+  TEST_ASSERT_EQUAL(0, (int)d.tx->pending());
+  uint32_t applied = d.tx->acks_applied();
+  d.p868.fail_writes = false;
+  d.p868.say(kValidAcks[0].text);  // the same ack again, from the 868 gateway: a harmless repeat
+  d.p868.say("\n");
+  d.jam(2);
+  TEST_ASSERT_EQUAL(applied + 1, d.tx->acks_applied());
+  TEST_ASSERT_EQUAL(0, (int)d.tx->pending());
+}
+
+void test_a_dead_radio_does_not_hold_back_the_other() {
+  Dual d;
+  d.p868.fail_writes = true;  // unplugged T-Beam: every write fails
+  for (int i = 0; i < 40; i++) d.second(d.base);
+  d.jam(10);
+  TEST_ASSERT_EQUAL(0, d.p868.writes);
+  TEST_ASSERT_TRUE(d.p433.writes >= 2);  // boot heartbeat and the event went out on 433 on time
+  TEST_ASSERT_EQUAL(0, strncmp(d.p433.last_line(), "STZ1:", 5));
+}
+
+void test_a_burst_on_either_radio_blanks_the_detector() {
+  Dual d;
+  d.p868.fail_writes = true;  // only the 433 radio transmits
+  d.second(d.base);           // the boot heartbeat goes out on 433
+  TEST_ASSERT_TRUE(d.p433.writes >= 1);
+  TEST_ASSERT_TRUE(d.tx->blanked(d.now));
+}
+
 void test_without_a_mesh_radio_nothing_changes() {
   FakeKim1 kim;
   FakeStore store;
@@ -366,5 +475,9 @@ int main() {
   RUN_TEST(test_an_ack_over_the_mesh_stops_the_satellite_repeats_too);
   RUN_TEST(test_our_own_mesh_burst_blanks_the_detector);
   RUN_TEST(test_without_a_mesh_radio_nothing_changes);
+  RUN_TEST(test_two_radios_send_every_record_with_the_same_bytes);
+  RUN_TEST(test_an_ack_on_one_band_frees_the_other_band_and_the_satellite);
+  RUN_TEST(test_a_dead_radio_does_not_hold_back_the_other);
+  RUN_TEST(test_a_burst_on_either_radio_blanks_the_detector);
   return UNITY_END();
 }

@@ -7,6 +7,9 @@
 #include "stz_recover.h"
 #include "stz_gnss.h"
 #include "stz_tx.h"
+#ifndef STZ_NO_MESH
+#include "stz_mesh.h"
+#endif
 
 namespace stz {
 
@@ -19,7 +22,9 @@ class Node {
   // `mesh` is optional: without it the node is exactly the satellite-only node. With it, every queued record is
   // also sent as mesh text, and verified acknowledgements arriving by mesh reach the uplink.
   // Define STZ_NO_MESH to leave the mesh code out of the image altogether (the Leonardo build does).
-  Node(const DetectConfig& cfg, Tx& tx, mesh::Link* mesh = nullptr);
+  // `mesh2` is a second radio on another LoRa band (docs/firmware.md, dual-band node): every record goes out on both,
+  // and an ack from either frees it everywhere.
+  Node(const DetectConfig& cfg, Tx& tx, mesh::Link* mesh = nullptr, mesh::Link* mesh2 = nullptr);
 
   // One finished GNSS epoch. Marks it blanked while our own transmitters are active, runs the rules, and queues
   // an event when a class starts (or changes) and a status change when it ends. Returns the verdict.
@@ -32,7 +37,7 @@ class Node {
 #ifdef STZ_NO_MESH
     return false;
 #else
-    return mesh_ != nullptr;
+    return mesh_ != nullptr || mesh2_ != nullptr;
 #endif
   }
   // Records built from synthetic epochs must never pass as live ones: in test mode every record is type `test`.
@@ -56,6 +61,10 @@ class Node {
   Detector detector_;
   Tx& tx_;
   mesh::Link* mesh_;
+#ifndef STZ_NO_MESH
+  mesh::Link* mesh2_;
+  mesh::Fanout fanout_;
+#endif
   Epoch last_epoch_;
   bool have_epoch_ = false;
   bool test_mode_ = false;

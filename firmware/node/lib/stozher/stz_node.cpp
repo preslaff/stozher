@@ -6,9 +6,22 @@
 
 namespace stz {
 
-Node::Node(const DetectConfig& cfg, Tx& tx, mesh::Link* mesh) : detector_(cfg), tx_(tx), mesh_(mesh) {
+Node::Node(const DetectConfig& cfg, Tx& tx, mesh::Link* mesh, mesh::Link* mesh2)
+    : detector_(cfg), tx_(tx), mesh_(mesh)
 #ifndef STZ_NO_MESH
-  if (mesh_) tx_.set_sink(mesh_);
+      , mesh2_(mesh2)
+#endif
+{
+#ifndef STZ_NO_MESH
+  if (mesh_ && mesh2_) {
+    fanout_.add(mesh_);
+    fanout_.add(mesh2_);
+    tx_.set_sink(&fanout_);
+  } else if (mesh_ || mesh2_) {
+    tx_.set_sink(mesh_ ? mesh_ : mesh2_);
+  }
+#else
+  (void)mesh2;
 #endif
 }
 
@@ -57,10 +70,12 @@ void Node::tick(uint32_t now_ms) {
   }
   tx_.poll(now_ms);
 #ifndef STZ_NO_MESH
-  if (mesh_) {
-    mesh::PollResult m = mesh_->poll(now_ms);
-    if (m.sent) tx_.note_mesh_tx(now_ms, mesh_->config().airtime_ms);  // our own LoRa burst is not evidence
-    if (m.ack) tx_.on_ack(m.ack_data);
+  mesh::Link* links[2] = {mesh_, mesh2_};
+  for (mesh::Link* link : links) {
+    if (!link) continue;
+    mesh::PollResult m = link->poll(now_ms);
+    if (m.sent) tx_.note_mesh_tx(now_ms, link->config().airtime_ms);  // our own LoRa burst is not evidence
+    if (m.ack) tx_.on_ack(m.ack_data);  // Tx passes it on to every link through the sink
   }
 #endif
 }
