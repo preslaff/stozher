@@ -1,6 +1,6 @@
 # Decentralised operation: design note (proposal)
 
-> **Status: proposal for team review.** Steps 0 and 0b are built; steps 1 to 5 are proposals. The note changes no contract; where a
+> **Status: proposal for team review.** Steps 0, 0b and 3 are built; steps 1, 2, 4 and 5 are proposals. The note changes no contract; where a
 > step would change one (`docs/control.md`, `docs/api.md`), the step says so and needs a team decision first.
 
 STOZHER should keep working when parts of it are missing: a receiver switched off, a relay node gone, the cloud unreachable,
@@ -39,10 +39,9 @@ witness nodes ~~LoRa mesh~~ ONE gateway --USB--> ONE machine: bridge -> API -> O
 
 - **One receiver.** One gateway radio on one machine. If it sleeps, crashes or loses USB, records sent meanwhile are lost
   beyond the few (8) a stock gateway holds for its client. A store-and-forward gateway (step 0b) keeps them.
-- **No retransmission on the mesh path.** The node's mesh queue holds 4 records; an event is sent twice 30 s apart,
-  a heartbeat once, then the slot is freed whether or not an ack came (`firmware/node/lib/stozher/stz_mesh.*`, used unchanged
-  by the T-Beam module in `firmware/tbeam`). The satellite path does retry (`stz_tx.*`). The heartbeat interval is 3600 s,
-  a build-time default.
+- **Mesh retransmission is new and not yet on a board.** Until October 2026 the node's mesh queue held 4 records and freed
+  a slot after its sends, ack or not; step 3 (below, built) keeps events and status until acked. The heartbeat interval is
+  3600 s, a build-time default.
 - **One ack signer.** Acks are Ed25519-signed with key id 1 by default (`config.py` `cloud_key_id`). The T-Beam module trusts
   exactly one public key (`StozherModule.cpp`, `cloud[1]`). `infra/kit/init.sh` generates a new signing seed on every kit, still
   under id 1, so a node provisioned with one kit's or the cloud's key rejects any other kit's ack as a bad signature.
@@ -106,7 +105,7 @@ Each step is useful on its own. Order is by cost and by how much it removes.
 - **Test:** three API instances against three test databases; a record ingested at A reaches C through B; partition and
   rejoin converge to the same `(node_id, key_id, seq)` set and the same trust grid.
 
-### Step 3. Nodes keep records until acknowledged (firmware)
+### Step 3. Nodes keep records until acknowledged (firmware; built and host-tested, October 2026, not yet on a board)
 
 - **What:** on the mesh path, keep a record in the queue until an ack covers it, and resend unacknowledged records with the
   next heartbeat, as the satellite path already does. Bounded by the existing limits (5 s between messages, 40 per hour)
@@ -117,8 +116,11 @@ Each step is useful on its own. Order is by cost and by how much it removes.
 - **Depends on:** acks that move past a lost record. **Built** (`docs/control.md`, "Giving up on old gaps"): the ack
   gives up a gap 17 behind the newest record, and the node's mesh queue does the same, so one lost record no longer
   keeps every later one unacknowledged.
-- **Limit:** a queue of 4 covers minutes to hours of outage, not ten hours of hourly heartbeats; a larger queue or a
-  shorter heartbeat interval is a separate, measured decision (airtime and duty cycle).
+- **Built:** `stz_mesh` keeps events and status (not heartbeats) after their sends, resends each with the next 3
+  heartbeats, frees them on an ack or by the distance rule; queue 16; a full queue drops records already waiting first
+  (`docs/firmware.md`, "Mesh uplink"). Prompted by record 416 (23 October 2026), lost on air and heard by no gateway.
+- **Limit:** a queue of 16 with three heartbeat resends covers a few hours of outage, not a night of events; a larger
+  queue or a shorter heartbeat interval is a separate, measured decision (airtime and duty cycle).
 
 ### Step 4. More than one ack signer
 

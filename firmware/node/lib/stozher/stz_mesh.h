@@ -9,7 +9,7 @@
 #include "stz_tx.h"
 
 #ifndef STZ_MESH_QUEUE
-#define STZ_MESH_QUEUE 4
+#define STZ_MESH_QUEUE 16  // records waiting for an ack fill it too (they are resent with heartbeats)
 #endif
 static_assert(STZ_MESH_QUEUE <= 16, "STZ_MESH_QUEUE must stay within the ack window");
 
@@ -33,6 +33,7 @@ struct MeshConfig {
   uint32_t min_gap_ms = 5000;     // between two messages: shared airtime
   uint16_t hourly_cap = 40;
   uint32_t airtime_ms = 2000;     // how long one message disturbs our own receiver (told to the blanking logic)
+  uint8_t max_resends = 3;        // an event or status not acknowledged is sent once more with each heartbeat, this often
 };
 
 struct PollResult {
@@ -44,6 +45,9 @@ struct PollResult {
 class Link : public RecordSink {
  public:
   // `keys`: the cloud public keys this node trusts; with none (or on a board that cannot verify) acks are ignored.
+  // With keys, an event or status stays queued after its planned sends until an ack covers it (or the distance rule
+  // gives it up), and is resent with heartbeats (docs/firmware.md, "Mesh uplink"); heartbeats are never resent, the
+  // next one supersedes them. Without keys nothing could ever free a record, so it is dropped after its sends.
   Link(const MeshConfig& cfg, Port& port, const CloudKey* keys, size_t n_keys)
       : cfg_(cfg), port_(port), keys_(keys), n_keys_(n_keys) {}
 
@@ -51,7 +55,7 @@ class Link : public RecordSink {
   void on_ack(const Ack& a) override;
   PollResult poll(uint32_t now_ms);
 
-  size_t pending() const;
+  size_t pending() const;  // records not yet acknowledged, waiting to be sent or for an ack
   const MeshConfig& config() const { return cfg_; }
 
  private:
@@ -62,8 +66,11 @@ class Link : public RecordSink {
     uint16_t seq = 0;
     TxKind kind = TxKind::Heartbeat;
     uint8_t sent = 0;
+    uint8_t resends = 0;
+    bool waiting = false;  // planned sends done, kept for an ack
     uint32_t due_ms = 0;
   };
+  bool keeps_for_ack() const;
   uint8_t planned(const Slot& s) const { return s.kind == TxKind::Event ? cfg_.event_sends : 1; }
   bool read_ack(PollResult& out);
 

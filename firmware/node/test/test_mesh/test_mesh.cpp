@@ -75,7 +75,52 @@ void test_an_event_goes_out_at_once_and_once_more_a_little_later() {
   TEST_ASSERT_EQUAL(2, m.port.writes);
   m.step(600000);
   TEST_ASSERT_EQUAL(2, m.port.writes);
+  TEST_ASSERT_EQUAL(1, (int)m.link.pending());  // sent twice, kept until an ack covers it
+}
+
+void test_an_unacknowledged_event_is_resent_with_each_heartbeat_until_acked() {
+  Mesh m;
+  m.record(TxKind::Event, 1);
+  m.step(60000);
+  TEST_ASSERT_EQUAL(2, m.port.writes);
+  for (uint16_t hb = 2; hb <= 6; hb++) {  // five heartbeats: the event rides along with the first three only
+    m.record(TxKind::Heartbeat, hb);
+    m.step(60000);
+  }
+  TEST_ASSERT_EQUAL(2 + 5 + m.cfg.max_resends, m.port.writes);
+  TEST_ASSERT_EQUAL(1, (int)m.link.pending());  // still kept: only an ack or the distance rule frees it
+  Ack a;
+  a.max_seq = 6;
+  m.link.on_ack(a);
   TEST_ASSERT_EQUAL(0, (int)m.link.pending());
+  m.record(TxKind::Heartbeat, 7);
+  m.step(60000);
+  TEST_ASSERT_EQUAL(2 + 5 + m.cfg.max_resends + 1, m.port.writes);  // only the new heartbeat
+}
+
+void test_without_trusted_keys_nothing_waits_for_an_ack() {
+  FakeMesh port;
+  mesh::MeshConfig cfg;
+  mesh::Link link(cfg, port, nullptr, 0);
+  uint8_t raw[28] = {0};
+  uint32_t now = 1000;
+  link.on_record(TxKind::Event, 1, raw, 28, now);
+  for (int t = 0; t < 600; t++) link.poll(now += 100);
+  TEST_ASSERT_EQUAL(2, port.writes);
+  TEST_ASSERT_EQUAL(0, (int)link.pending());
+}
+
+void test_a_queue_full_of_unacknowledged_events_still_sends_every_new_record() {
+  Mesh m;
+  for (int i = 0; i < STZ_MESH_QUEUE; i++) m.record(TxKind::Event, (uint16_t)(i + 1));
+  m.step(STZ_MESH_QUEUE * 2 * 6000 + 60000);  // all sent twice (5 s spacing), all waiting: acks never come
+  TEST_ASSERT_EQUAL(STZ_MESH_QUEUE, (int)m.link.pending());
+  int before = m.port.writes;
+  m.record(TxKind::Heartbeat, (uint16_t)(STZ_MESH_QUEUE + 1));  // replaces the oldest waiting event; three resends ride along
+  m.step(120000);
+  TEST_ASSERT_TRUE(m.port.writes > before);
+  TEST_ASSERT_NOT_NULL(strstr(m.port.last_line(), "STZ1:"));
+  TEST_ASSERT_EQUAL(STZ_MESH_QUEUE, (int)m.link.pending());
 }
 
 void test_status_and_heartbeat_are_sent_once_and_events_first() {
@@ -464,6 +509,9 @@ int main() {
   RUN_TEST(test_status_and_heartbeat_are_sent_once_and_events_first);
   RUN_TEST(test_messages_are_spaced_and_capped_per_hour);
   RUN_TEST(test_a_failing_port_never_blocks_and_retries);
+  RUN_TEST(test_an_unacknowledged_event_is_resent_with_each_heartbeat_until_acked);
+  RUN_TEST(test_without_trusted_keys_nothing_waits_for_an_ack);
+  RUN_TEST(test_a_queue_full_of_unacknowledged_events_still_sends_every_new_record);
   RUN_TEST(test_a_full_queue_drops_heartbeats_before_events);
   RUN_TEST(test_valid_signed_acks_are_accepted_from_the_serial_module);
   RUN_TEST(test_forged_and_malformed_ack_lines_are_ignored);

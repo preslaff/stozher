@@ -19,14 +19,35 @@ size_t build_text(const uint8_t* record, size_t len, char* out, size_t cap) {
   return o;
 }
 
+bool Link::keeps_for_ack() const {
+#ifdef STZ_NO_ACK_VERIFY
+  return false;
+#else
+  return keys_ != nullptr && n_keys_ > 0;
+#endif
+}
+
 void Link::on_record(TxKind kind, uint16_t seq, const uint8_t* raw, size_t len, uint32_t now_ms) {
   if (len == 0 || len > kMaxLen) return;
   for (Slot& s : q_)  // the cloud has given these up (kAckWindow)
     if (s.used && beyond_ack_window(s.seq, seq)) s.used = false;
+  if (kind == TxKind::Heartbeat)  // a heartbeat is the moment to try the unacknowledged ones again
+    for (Slot& s : q_)
+      if (s.used && s.waiting && s.resends < cfg_.max_resends) {
+        s.waiting = false;
+        s.resends++;
+        s.sent = (uint8_t)(planned(s) - 1);  // exactly one more send
+        s.due_ms = now_ms;
+      }
   Slot* slot = nullptr;
   for (Slot& s : q_)
     if (!s.used) { slot = &s; break; }
-  if (!slot) {  // full: drop the lowest-priority, then the oldest
+  if (!slot) {  // full: a record already sent and waiting for an ack goes first (lowest priority, then oldest), so a
+                // node whose acks never arrive still sends every new record at least once
+    for (Slot& s : q_)
+      if (s.waiting && (!slot || (uint8_t)s.kind > (uint8_t)slot->kind || (s.kind == slot->kind && s.seq < slot->seq))) slot = &s;
+  }
+  if (!slot) {  // full of unsent records: drop the lowest-priority, then the oldest
     for (Slot& s : q_)
       if (!slot || (uint8_t)s.kind > (uint8_t)slot->kind || (s.kind == slot->kind && s.seq < slot->seq)) slot = &s;
     if ((uint8_t)slot->kind < (uint8_t)kind) return;  // everything queued matters more than this
@@ -37,6 +58,8 @@ void Link::on_record(TxKind kind, uint16_t seq, const uint8_t* raw, size_t len, 
   slot->seq = seq;
   slot->kind = kind;
   slot->sent = 0;
+  slot->resends = 0;
+  slot->waiting = false;
   slot->due_ms = now_ms;
 }
 
@@ -105,7 +128,7 @@ PollResult Link::poll(uint32_t now_ms) {
 
   Slot* best = nullptr;
   for (Slot& s : q_) {
-    if (!s.used || (int32_t)(now_ms - s.due_ms) < 0) continue;
+    if (!s.used || s.waiting || (int32_t)(now_ms - s.due_ms) < 0) continue;
     if (!best || (uint8_t)s.kind < (uint8_t)best->kind || (s.kind == best->kind && s.seq < best->seq)) best = &s;
   }
   if (!best) return r;
@@ -120,8 +143,12 @@ PollResult Link::poll(uint32_t now_ms) {
   last_send_ms_ = now_ms;
   window_count_++;
   r.sent = true;
-  if (++best->sent >= planned(*best)) best->used = false;
-  else best->due_ms = now_ms + cfg_.repeat_gap_s * 1000u;
+  if (++best->sent >= planned(*best)) {
+    if (best->kind != TxKind::Heartbeat && keeps_for_ack()) best->waiting = true;  // until an ack covers it
+    else best->used = false;
+  } else {
+    best->due_ms = now_ms + cfg_.repeat_gap_s * 1000u;
+  }
   return r;
 }
 

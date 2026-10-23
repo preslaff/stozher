@@ -128,6 +128,12 @@ the specification says (we write no mesh firmware, `docs/mesh.md`). `stz_mesh`:
   sends one message per line). The text equals `"STZ1:"` + the golden vector hex for all valid vectors. An event
   goes out at once and once more after 30 s; status changes and heartbeats once; messages are at least 5 s apart
   and capped at 40 an hour, because LoRa airtime is shared. A write that fails is retried, never waited for.
+  **Kept until acknowledged** (October 2026): with trusted keys, an event or status stays queued after its planned
+  sends until an ack covers it or the distance rule gives it up (17 behind the newest), and is sent once more with
+  each of the next 3 heartbeats (`MeshConfig::max_resends`); heartbeats are never resent, the next one supersedes them.
+  The queue holds 16 (`STZ_MESH_QUEUE`); when it is full, a record already sent and waiting goes first, so a node whose
+  acks never arrive (a wrong trusted key) still sends every new record at least once. Without trusted keys nothing
+  could free a record, so it is dropped after its sends as before.
   The gateway and the API already drop mesh repeats (same sender, same bytes).
 - **Back:** lines from the Serial module are read; only a line that is `STZA1:` + a valid cloud signature (the
   same verification as for any ack, `stz_ack`) counts. Chat, other apps, half lines, over-long lines and forged
