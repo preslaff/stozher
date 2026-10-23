@@ -37,7 +37,8 @@ def _radio_factory(args: argparse.Namespace):  # type: ignore[no-untyped-def]
         return lambda: SimTcpRadio(*sim)
     from .meshtastic_radio import MeshtasticRadio  # needs the optional `radio` extra
 
-    return lambda: MeshtasticRadio(args.port)
+    device_log = getattr(args, "device_log", None)
+    return lambda: MeshtasticRadio(args.port, Path(device_log).expanduser() if device_log else None)
 
 
 def _open(args: argparse.Namespace) -> Radio:
@@ -105,6 +106,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 name=args.name,
                 sim=sim,
                 stale_after_s=0 if sim else args.stale_after,
+                quiet_after_s=0 if sim else args.quiet_after,
             )
         )
     except KeyboardInterrupt:
@@ -184,6 +186,18 @@ def main() -> None:
         type=float,
         default=3 * 3600.0,
         help="reopen the radio link after this many seconds without a text (0: never); it is also reopened after the machine sleeps",
+    )
+    r.add_argument(
+        "--quiet-after",
+        type=float,
+        default=45 * 60.0,
+        help="reopen the radio link after this many seconds with no packet of any kind from it (0: never)",
+    )
+    r.add_argument(
+        "--device-log",
+        default=None,
+        help="append the gateway's own log to this file (needs security.debug_log_api_enabled on the radio; "
+        "lines that could hold a position or key are dropped)",
     )
     r.add_argument(
         "--name",

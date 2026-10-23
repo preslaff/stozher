@@ -33,7 +33,12 @@ class RadioSupervisor:
     A serial link can die without the radio library noticing (seen after the machine suspended: the bridge said
     "connected" for hours while the gateway held the node's messages), so the link is also reopened
     - after the machine resumes from sleep: the monotonic clock stops during suspend, the boot clock does not;
-    - after `stale_after_s` with no text from the radio (0 turns this off). Reopening a healthy link costs a second.
+    - after `stale_after_s` with no text from the radio (0 turns this off);
+    - after `quiet_after_s` with no packet of any kind (0 turns this off), for radios that report packets
+      (`last_packet_mono`). A gateway sends its own telemetry and relays node info every ~30 min, so total silence means
+      the client link is dead even though the port is open (seen with a 2.8.2 gateway, Oct 2026). Reopening
+      re-handshakes the client API, and a store-and-forward gateway then hands over what it kept.
+    Reopening a healthy link costs a second.
     """
 
     def __init__(
@@ -45,9 +50,12 @@ class RadioSupervisor:
         resume_gap_s: float = 30.0,
         mono: Callable[[], float] = time.monotonic,
         boot: Callable[[], float] = _boot_clock,
+        quiet_after_s: float = 45 * 60.0,
     ) -> None:
         self.factory, self.retry_s = factory, retry_s
         self.stale_after_s, self.resume_gap_s = stale_after_s, resume_gap_s
+        self.quiet_after_s = quiet_after_s
+        self._connected_mono = mono()
         self._mono, self._boot = mono, boot
         self._deliver = on_text
         self.radio: Radio | None = None
@@ -65,6 +73,14 @@ class RadioSupervisor:
     def last_rx_age_s(self) -> float:
         return self._boot() - self._last_rx
 
+    @property
+    def last_packet_age_s(self) -> float | None:
+        """Seconds since the last packet of any kind (or since the connect), None if the radio does not report packets."""
+        if self.radio is None or not hasattr(self.radio, "last_packet_mono"):
+            return None
+        last = getattr(self.radio, "last_packet_mono", None)
+        return self._mono() - max(last if last is not None else 0.0, self._connected_mono)
+
     def stale_reason(self) -> str | None:
         """Why the current link should be reopened, if it should. Also advances the sleep detector."""
         mono, boot = self._mono(), self._boot()
@@ -76,6 +92,9 @@ class RadioSupervisor:
             return f"the machine slept for about {round(slept)} s"
         if self.stale_after_s > 0 and boot - self._last_rx > self.stale_after_s:
             return f"no text from the radio for {round(boot - self._last_rx)} s"
+        quiet = self.last_packet_age_s
+        if self.quiet_after_s > 0 and quiet is not None and quiet > self.quiet_after_s:
+            return f"no packet of any kind from the radio for {round(quiet)} s"
         return None
 
     def reopen(self, reason: str) -> None:
@@ -116,6 +135,7 @@ class RadioSupervisor:
                     await asyncio.to_thread(radio.start, self.on_text)  # opening the port can block
                     self.radio, self.last_error = radio, None
                     self._last_rx = self._boot()
+                    self._connected_mono = self._mono()
                     log.info("radio connected as %s", radio.node_id)
                 except Exception as exc:  # a missing or busy port must not stop the bridge
                     self.radio, self.last_error = None, f"{exc.__class__.__name__}: {exc}"[:200]
@@ -137,6 +157,7 @@ async def run_bridge(
     send_acks: bool = True,
     health_port: int | None = None,
     stale_after_s: float = 3 * 3600.0,
+    quiet_after_s: float = 45 * 60.0,
     http: httpx.AsyncClient | None = None,
     name: str | None = None,
     sim: bool = False,
@@ -157,7 +178,9 @@ async def run_bridge(
     def on_text(msg: MeshText) -> None:  # called from the radio library's thread
         loop.call_soon_threadsafe(forwarder.submit, msg)
 
-    supervisor = RadioSupervisor(radio_factory, on_text, stale_after_s=stale_after_s)
+    supervisor = RadioSupervisor(
+        radio_factory, on_text, stale_after_s=stale_after_s, quiet_after_s=quiet_after_s
+    )
     relay = (
         AlertRelay(
             http,
@@ -187,6 +210,9 @@ async def run_bridge(
                 "node_id": supervisor.node_id,
                 "last_error": supervisor.last_error,
                 "last_text_age_s": round(supervisor.last_rx_age_s),
+                "last_packet_age_s": None
+                if (q := supervisor.last_packet_age_s) is None
+                else round(q),
                 "reconnects": supervisor.reconnects,
                 "last_reconnect_reason": supervisor.last_reconnect_reason,
             },

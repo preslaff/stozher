@@ -8,12 +8,19 @@ change the radio's settings, so use it only on the kit's own private network.
 
 import logging
 import re
+import time
 from collections.abc import Callable
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from .protocol import MeshText, to_mesh_text
 
 log = logging.getLogger("stozher.mesh")
+
+# Device log lines that could carry a position or key material are never written (docs/mesh.md, device log).
+_PRIVATE = re.compile(r"lat|lon|posit|psk|key|secret|passw", re.I)
+DEVICE_LOG_MAX_BYTES = 50 * 1024 * 1024  # then the file is moved to <name>.1 and started again
 
 TCP_PREFIX = "tcp:"
 TCP_DEFAULT_PORT = 4403  # Meshtastic's client API over the network
@@ -35,12 +42,16 @@ def parse_tcp_port(port: str) -> tuple[str, int] | None:
 
 
 class MeshtasticRadio:
-    def __init__(self, port: str) -> None:
+    def __init__(self, port: str, device_log: Path | None = None) -> None:
         self.port = port
         self.node_id = "?"
         self._iface: Any = None
         self._alive = False
         self._on_text: Callable[[MeshText], None] | None = None
+        self.device_log = device_log
+        # time.monotonic() of the last packet of any kind from the radio (the gateway's own telemetry, node info, ...):
+        # the supervisor reopens a link that has gone completely quiet (app.py, quiet_after_s).
+        self.last_packet_mono: float | None = None
 
     @property
     def alive(self) -> bool:
@@ -53,7 +64,10 @@ class MeshtasticRadio:
         self._on_text = on_text
         # Subscribe first so no early packet is missed; weak refs mean we must keep these bound methods.
         pub.subscribe(self._on_receive, "meshtastic.receive.text")
+        pub.subscribe(self._on_any, "meshtastic.receive")
         pub.subscribe(self._on_lost, "meshtastic.connection.lost")
+        if self.device_log is not None:
+            pub.subscribe(self._on_log, "meshtastic.log.line")
         if tcp is not None:
             from meshtastic.tcp_interface import TCPInterface  # GPL-3.0, imported on use
 
@@ -78,6 +92,30 @@ class MeshtasticRadio:
         msg = to_mesh_text(packet)
         if msg is not None and self._on_text is not None:
             self._on_text(msg)
+
+    def _on_any(self, packet: dict[str, Any] | None = None, interface: Any = None) -> None:
+        if interface is self._iface:
+            self.last_packet_mono = time.monotonic()
+
+    def _on_log(self, line: str = "", interface: Any = None) -> None:
+        """The gateway's own log (needs `security.debug_log_api_enabled` on the radio), for diagnosing the radio."""
+        if (
+            interface is not self._iface
+            or self.device_log is None
+            or not line
+            or _PRIVATE.search(line)
+        ):
+            return
+        try:
+            path = self.device_log
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists() and path.stat().st_size > DEVICE_LOG_MAX_BYTES:
+                path.replace(path.with_name(path.name + ".1"))
+            stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            with path.open("a") as f:
+                f.write(f"{stamp} {line.rstrip()}\n")
+        except OSError:
+            log.debug("device log write failed", exc_info=True)
 
     def _on_lost(self, interface: Any = None) -> None:
         if interface is self._iface:
@@ -120,6 +158,9 @@ class MeshtasticRadio:
             from pubsub import pub
 
             pub.unsubscribe(self._on_receive, "meshtastic.receive.text")
+            pub.unsubscribe(self._on_any, "meshtastic.receive")
             pub.unsubscribe(self._on_lost, "meshtastic.connection.lost")
+            if self.device_log is not None:
+                pub.unsubscribe(self._on_log, "meshtastic.log.line")
         except Exception:
             pass

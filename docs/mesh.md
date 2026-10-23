@@ -143,7 +143,10 @@ Setting `STOZHER_RESPONDER_KEY` also relays alerts to the mesh (below).
 - **A stale link is reopened.** A serial link can die without the radio library noticing: after the machine
   suspended, the bridge reported "connected" for hours while the gateway held the node's messages. The bridge reopens the
   link when the machine resumes from sleep (the monotonic clock stops during suspend, the boot clock does not) and after
-  `--stale-after` seconds with no text from the radio (default 3 h, 0 = never). Health shows `reconnects`,
+  `--stale-after` seconds with no text from the radio (default 3 h, 0 = never), and after `--quiet-after` seconds with no
+  packet of any kind (default 45 min, 0 = never): a gateway relays node info and sends its own telemetry every ~30 min, so
+  total silence means its client link is dead even though the port is open (a 2.8.2 gateway did this on 23 October 2026:
+  connected, nothing delivered; its store kept the records). Health shows `reconnects`, `last_packet_age_s`,
   `last_reconnect_reason` and `last_text_age_s`. Records the gateway did not keep while the link was dead are lost (a stock
   gateway keeps 8; a store-and-forward gateway keeps them, above).
 - **Alerts to the mesh (optional).** With a responder key the bridge listens to the alert stream and
@@ -159,6 +162,11 @@ Setting `STOZHER_RESPONDER_KEY` also relays alerts to the mesh (below).
   until the node confirms: on the bench, single-shot direct messages were lost about half the time on the
   shared LoRa channel, and with the link-layer ack 4 of 4 arrived. The bridge only relays: it cannot sign, and nodes verify with the cloud public key. Without
   `STOZHER_ED25519_SEED` on the API the pusher turns itself off with one warning; `--no-acks` disables it.
+
+- **Device log (diagnosis).** `--device-log FILE` (the kit uses `~/.local/state/stozher/device-main.log` and
+  `device-2.log`) appends the gateway's own log lines. They arrive only when the radio has
+  `security.debug_log_api_enabled` set, which is off by default. Lines that could hold a position or key are dropped
+  before writing; the file is moved to `.1` at 50 MB.
 
 ## Health
 

@@ -79,12 +79,13 @@ start_bridge() {
   pids+=($!)
 }
 if [ "$MESH_PORT" != "none" ]; then
-  start_bridge "$MESH_PORT" bridge "${BRIDGE_HEALTH_PORT:-8766}"
+  # --device-log: the gateway's own log, written only when the radio has security.debug_log_api_enabled (docs/mesh.md)
+  start_bridge "$MESH_PORT" bridge "${BRIDGE_HEALTH_PORT:-8766}" --device-log "'$STATE/device-main.log'"
 fi
 if [ -n "$MESH_PORT_2" ]; then
   STOZHER_SYSTEM_KEY="$STOZHER_SYSTEM_KEY_2" STOZHER_RESPONDER_KEY="$STOZHER_RESPONDER_KEY_2" \
     start_bridge "$MESH_PORT_2" bridge-2 "${BRIDGE_2_HEALTH_PORT:-8767}" \
-    --name "'$MESH_NAME_2'" --spool "'$STATE/mesh-spool-2.jsonl'"
+    --name "'$MESH_NAME_2'" --spool "'$STATE/mesh-spool-2.jsonl'" --device-log "'$STATE/device-2.log'"
 fi
 
 if [ "${ASSISTANT:-off}" = "on" ]; then

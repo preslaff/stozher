@@ -74,6 +74,10 @@ H="$(curl -s -m 3 "http://127.0.0.1:$PORT/health" 2>/dev/null || true)"
 if [ -n "$H" ]; then
   ok "kit is running on port $PORT"
   printf '%s' "$H" | python3 -c 'import json,sys; h=json.load(sys.stdin); m=h.get("modules",{}); b=h.get("mesh_bridges",{}); print("        modules: "+", ".join(k+"="+str(v) for k,v in m.items())); b and print("        mesh bridges: "+", ".join(k+"="+str(v) for k,v in b.items()))' 2>/dev/null || true
+  # Each bridge's own health: a link with no packet of any kind for long is dead even if "connected" (docs/mesh.md)
+  for hp in "${BRIDGE_HEALTH_PORT:-8766}" "${BRIDGE_2_HEALTH_PORT:-8767}"; do
+    curl -s -m 2 "http://127.0.0.1:$hp/" 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); r=d["radio"]; q=r.get("last_packet_age_s"); print("        bridge %s: %s, last packet %s, last record text %s s ago, reconnects %s" % (d.get("name") or "main", "connected" if r.get("connected") else "NOT connected", "?" if q is None else str(q)+" s ago", r.get("last_text_age_s"), r.get("reconnects")))' 2>/dev/null || true
+  done
   # The key boards must trust for this kit's acks: its fingerprint (first 8 hex digits) is what a board prints at boot.
   K="$(curl -s -m 3 "http://127.0.0.1:$PORT/v1/control/public-key" 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["cloud_key_id"], d["public_key_hex"])' 2>/dev/null || true)"
   if [ -n "$K" ]; then
