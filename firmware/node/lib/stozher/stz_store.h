@@ -81,6 +81,7 @@ class Store {
   size_t expire(uint32_t now, uint32_t max_age_s);
 
   size_t held_from(uint32_t from) const;
+  uint32_t last_order() const { return next_order_ - 1; }  // the newest arrival so far (0 = none)
   const Counts& counts() const { return c_; }
 
  private:

@@ -11,6 +11,7 @@
 
 #include <Preferences.h>
 
+#include "StozherKeys.h"
 #include "stz_codec.h"
 #include "stz_kim1.h"
 #include "stz_mesh.h"
@@ -68,9 +69,6 @@ StozherModule *stozherModule = nullptr;
 
 namespace
 {
-// The public half of the test cloud key (tests/vectors/ack_messages.json).
-const char kCloudPublicHex[] = "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8";
-
 class PrefsSeqStore : public stz::SeqStore
 {
   public:
@@ -214,9 +212,9 @@ StozherModule::StozherModule() : SinglePortModule("stozher", meshtastic_PortNum_
     stz::derive_keys(master, tc.node_id, tc.key_id, impl->keys);
     impl->tx = new stz::Tx(tc, impl->keys, kimPort, impl->store);
 
-    impl->cloud[0].id = 1;
+    impl->cloud[0].id = kStozherCloudKeyId;
     size_t n = 0;
-    stz::from_hex(kCloudPublicHex, strlen(kCloudPublicHex), impl->cloud[0].pub, 32, n);
+    stz::from_hex(kStozherCloudPublicHex, strlen(kStozherCloudPublicHex), impl->cloud[0].pub, 32, n);
     impl->link = new stz::mesh::Link(stz::mesh::MeshConfig{}, impl->port, impl->cloud, 1);
     impl->node = new stz::Node(stz::DetectConfig{}, *impl->tx, impl->link);
 

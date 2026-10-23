@@ -1,0 +1,54 @@
+--- a/src/modules/Modules.cpp
++++ b/src/modules/Modules.cpp
+@@ -1,4 +1,7 @@
+ #include "configuration.h"
++#if defined(STOZHER_STORE) || defined(STOZHER_TAP)
++#include "gps/StozherStore.h" // STOZHER store and forward (on by default with the witness module)
++#endif
+ #if !MESHTASTIC_EXCLUDE_INPUTBROKER
+ #include "buzz/BuzzerFeedbackThread.h"
+ #include "modules/SystemCommandsModule.h"
+@@ -305,6 +308,9 @@
+ #if defined(HAS_HARDWARE_WATCHDOG)
+     watchdogThread = new WatchdogThread();
+ #endif
++#ifdef STOZHER_STORE
++    new StozherStoreModule(); // STOZHER: keeps witness records for the next bridge, see the STOZHER repository firmware/tbeam
++#endif
+     // Anything dropped into src/modules/optional/. Undefined, so compiled away, unless a module is
+     // actually present.
+ #ifdef OPTIONAL_MODULES_SETUP
+--- a/src/mesh/MeshService.h
++++ b/src/mesh/MeshService.h
+@@ -128,6 +128,9 @@
+     /// last few packets if needs to.
+     meshtastic_MeshPacket *getForPhone() { return toPhoneQueue.dequeuePtr(0); }
+ 
++    /// STOZHER: free places in the queue to the client (the gateway store paces its replay with it)
++    size_t toPhoneFree() { return toPhoneQueue.numFree(); }
++
+     /// Allows the bluetooth handler to free packets after they have been sent
+     void releaseToPool(meshtastic_MeshPacket *p) { packetPool.release(p); }
+ 
+--- a/src/mesh/MeshService.cpp
++++ b/src/mesh/MeshService.cpp
+@@ -68,6 +68,9 @@
+ 
+ #include "PositionPrecision.h"
+ #include "Router.h"
++#if defined(STOZHER_STORE) || defined(STOZHER_TAP)
++#include "gps/StozherStore.h"
++#endif
+ 
+ MeshService::MeshService()
+ #ifdef ARCH_PORTDUINO
+@@ -319,6 +322,9 @@
+ 
+     // Record the time the packet arrived from the phone.
+     stampRxTime(&p);
++#ifdef STOZHER_STORE
++    stozherStoreNoteClientPacket(p); // STOZHER: a signed ack from the bridge frees the stored records it covers
++#endif
+ 
+     IF_SCREEN(if (p.decoded.portnum == meshtastic_PortNum_TEXT_MESSAGE_APP && p.decoded.payload.size > 0 &&
+                   p.to != NODENUM_BROADCAST && p.to != 0) // DM only

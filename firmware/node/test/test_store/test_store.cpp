@@ -228,6 +228,7 @@ void test_the_store_survives_a_reboot_and_drops_damaged_slots() {
   uint32_t last = 0;
   for (uint32_t after = 0; st.next(after, e); after = e.order) last = e.order;
   TEST_ASSERT_EQUAL(4, last);  // arrival order continues after the reboot, never reused
+  TEST_ASSERT_EQUAL(4, st.last_order());
 }
 
 void test_a_failed_flash_write_stores_nothing() {

@@ -1,8 +1,10 @@
 #include "StozherTap.h"
+#include "configuration.h"
+
+#ifdef STOZHER_TAP // a gateway-only build (STOZHER_STORE alone) has no GPS tap
 
 #include "TinyGPS++.h"
 #include "StozherModule.h"
-#include "configuration.h"
 #include "stz_gnss.h"
 #include "stz_ubx.h"
 
@@ -86,3 +88,5 @@ void stozherGpsByte(uint8_t b, TinyGPSPlus &gps)
                  (unsigned)counts[(int)Kind::Other], (unsigned)counts[(int)Kind::BadChecksum]);
     }
 }
+
+#endif
