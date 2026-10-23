@@ -1,6 +1,6 @@
 # Decentralised operation: design note (proposal)
 
-> **Status: proposal for team review.** Only step 0 is built; steps 1 to 5 are proposals. The note changes no contract; where a
+> **Status: proposal for team review.** Steps 0 and 0b are built; steps 1 to 5 are proposals. The note changes no contract; where a
 > step would change one (`docs/control.md`, `docs/api.md`), the step says so and needs a team decision first.
 
 STOZHER should keep working when parts of it are missing: a receiver switched off, a relay node gone, the cloud unreachable,
@@ -38,7 +38,7 @@ witness nodes ~~LoRa mesh~~ ONE gateway --USB--> ONE machine: bridge -> API -> O
 ```
 
 - **One receiver.** One gateway radio on one machine. If it sleeps, crashes or loses USB, records sent meanwhile are lost
-  beyond the few the gateway holds for its client.
+  beyond the few (8) a stock gateway holds for its client. A store-and-forward gateway (step 0b) keeps them.
 - **No retransmission on the mesh path.** The node's mesh queue holds 4 records; an event is sent twice 30 s apart,
   a heartbeat once, then the slot is freed whether or not an ack came (`firmware/node/lib/stozher/stz_mesh.*`, used unchanged
   by the T-Beam module in `firmware/tbeam`). The satellite path does retry (`stz_tx.*`). The heartbeat interval is 3600 s,
@@ -71,6 +71,17 @@ Each step is useful on its own. Order is by cost and by how much it removes.
 - **Stale link:** the bridge reopens the radio link after the machine resumes from sleep and after `--stale-after` seconds
   (default 3 h) with no text from the radio; health shows the reconnects and their reasons (`docs/mesh.md`, Behaviour).
 - **What it does not fix:** a crash, a pulled cable or a dead gateway still lose records. That is what steps 1 to 3 are for.
+
+### Step 0b. The gateway keeps records for the next bridge (built, October 2026)
+
+- **What:** a gateway running the fork (`STOZHER_STORE`) writes every witness record it hears to its flash and hands the
+  stored records to whichever bridge connects next, over USB or Wi-Fi, until a signed ack the bridge sends shows the backend
+  has them (`docs/mesh.md`, "Store and forward on the gateway"). Prompted by the second night lost (22-23 October 2026,
+  records 335-355: the receiving machine was suspended by hand, which the sleep lock does not prevent).
+- **Contracts:** none. Stored records are the signed bytes; replays are ordinary `STZ1:` texts; a second copy is `duplicate`.
+- **Limits:** the gateway itself must stay powered (a USB charger, not the kit computer's port); 1024 records, a quarter per
+  sender; deleting needs the kit's public key built in (step 4 would allow several). A gateway that is off, or out of range,
+  still misses records: step 3 (the node keeps them) covers that.
 
 ### Step 1. Several receivers on one mesh
 
@@ -151,6 +162,7 @@ deployment). Peer kits authenticate each other with system keys labelled by orga
 |---|---|
 | Switch off the acking receiver for an hour | the second receiver keeps ingesting; after step 4 it acks; no gap in `/v1/nodes` delivery |
 | Try to suspend the receiver while the kit runs | refused by the sleep lock (step 0) |
+| Stop the bridge overnight, gateway powered | a store-and-forward gateway (step 0b) hands over every record on reconnect; no gap in `/v1/nodes` |
 | Suspend every receiver for an hour (lock off) | the link is reopened on resume (step 0); the gateway hands over what it held; with step 3 the node resends the rest |
 | Remove a relay node | records still arrive by another path, or the gap is visible in delivery |
 | Partition two kits for a day, then reconnect | after step 2 both hold the same record set and show the same trust grid |

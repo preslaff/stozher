@@ -27,13 +27,21 @@ What is here (the Meshtastic checkout itself is not vendored; it is GPL-3.0 and 
   own records to it (`sendToPhone`, a copy of the broadcast); the API counts a copy that also arrives via another gateway as
   a duplicate. The bridge's ack to the node's own ID is delivered locally (`Router::sendLocal`). No setting to switch: the
   role follows from whether a client is connected. Built for both boards; **not yet checked on hardware**.
+- **Store and forward** (`src/StozherStore.{h,cpp}`, `patches/0004-stozher-store.patch`, `docs/mesh.md`): keeps every
+  witness record the board hears (and its own) in a LittleFS file `/stozher/store.bin`, hands them to the next bridge that
+  connects over serial, Wi-Fi or Ethernet, and deletes them when an ack the bridge sends verifies and covers them. The patch
+  registers the module, passes the client's packets to it (`MeshService::handleToRadio`, where the bridge's acks are still
+  plain text) and adds `MeshService::toPhoneFree()` for pacing. On by default with the witness module; alone with
+  `-D STOZHER_STORE=1`. `variants/stozher_t3/`: `tlora-v2-1-1_6-stozher-gw`, a LilyGO T3 V1.6.1 as a gateway with the
+  store (Meshtastic's own T3 board files). Built, **not yet run on a board**.
+- `src/StozherKeys.h`: the cloud public key the boards trust for acks (both modules).
 - `apply.sh`: links `firmware/node/lib/{stozher,tweetnacl}` into the checkout's `lib/`, copies the tap and the extra
   boards, applies the patches.
 
 ```
 git -C ../Meshtastic-firmware worktree add ../Meshtastic-firmware-stozher -b stozher   # once
 firmware/tbeam/apply.sh ../Meshtastic-firmware-stozher
-cd ../Meshtastic-firmware-stozher && pio run -e tbeam-stozher        # or -e diy-wroom-stozher
+cd ../Meshtastic-firmware-stozher && pio run -e tbeam-stozher        # or -e diy-wroom-stozher, -e tlora-v2-1-1_6-stozher-gw
 ```
 
 Building one environment with different `PLATFORMIO_BUILD_FLAGS` makes PlatformIO clean the other environments' builds:
@@ -46,6 +54,10 @@ binaries in `firmware/node/` restore a board.
 |---|---|
 | `STOZHER_BUILD` | the git short hash of this repository (`-DSTOZHER_BUILD=$(git rev-parse --short HEAD)`, unquoted); printed at boot with the detector revision (`stz::kDetectorRev`, bumped on every rule or threshold change), so a log says exactly what runs |
 | `STOZHER_NODE_ID` | the node id registered in the backend (default 1); the master key is the PUBLIC test key until provisioning exists. After a flash the Meshtastic radio ID may change: re-bind the node (docs/mesh.md, "After reflashing a device") |
+| `STOZHER_CLOUD_PUBLIC_HEX` | the cloud public key (64 hex digits, unquoted) the board trusts for acks; default the PUBLIC test key. A kit signs with its own key: take it from that kit's `GET /v1/control/public-key`, or the board ignores its acks |
+| `STOZHER_STORE=1` / `STOZHER_NO_STORE` | store and forward on (gateway-only builds) / off on a witness build |
+| `STOZHER_STORE_MAX_AGE_S` | stored records older than this go (default 7 days; only when the board knows the time) |
+| `STZ_STORE_SLOTS` | stored records (default 1024, 48 bytes each in flash and 8 in RAM) |
 | `STOZHER_SELFTEST_AT_S=N` | N seconds after boot, feed a synthetic jamming episode; every record built from it is type `test` |
 | `MESHTASTIC_EXCLUDE_BLUETOOTH=1` | Meshtastic's own flag (not ours): leave the Bluetooth stack out. Used on the test board after the stack asserted in `ld_acl.c` and rebooted it (Oct 2026). Image 1.86 MB instead of 2.08 MB. We use no phone app |
 | `STOZHER_EPOCH_LOG_S=N` | log the detector's numbers (C/N0, drop, baseline, jamming indicator, class; no position) every N seconds, for tuning the rules on real data |

@@ -40,6 +40,39 @@ bridge logs a warning and `make kit-doctor` checks that the gateway answers and 
 Wi-Fi antenna is centimetres from the GPS antenna: compare C/N0 and noise with Wi-Fi on and off (`STOZHER_EPOCH_LOG_S`)
 before trusting a witness that uses it. Built and unit-tested; not yet run against a board.
 
+### Store and forward on the gateway
+
+A stock gateway keeps only **8** messages for a client that is not connected (`MAX_RX_TOPHONE` on a classic ESP32), so a
+bridge that is down for a night loses the rest (22-23 October 2026: the kit computer slept 7 hours and a4b0's records 335-355
+were lost). A gateway running our fork keeps them (`firmware/tbeam`, `STOZHER_STORE`; the T3 build is
+`tlora-v2-1-1_6-stozher-gw`, and every witness board has it too):
+
+- **Keep.** Every `STZ1:` record heard on the primary channel, and the board's own records if it is a witness, is written
+  to a file in the board's flash (1024 slots of 48 bytes) with the sender's Meshtastic ID and the time it was heard. The
+  same sender, key id and sequence number again (a mesh repeat) is kept once. The records are the opaque signed bytes: the
+  gateway holds no node keys and no signing key, so it cannot read, change or invent one, and a stolen gateway shows only
+  sender IDs and counts.
+- **Room.** At most a quarter of the slots per sender, so one noisy or bogus channel member cannot push the others out.
+  When a sender is at its quota (or the store is full, then the sender holding the most), its oldest heartbeat goes first,
+  then its oldest record. Records older than 7 days go (when the gateway knows the time). The store survives a reboot; a
+  slot damaged by a power cut is dropped.
+- **Hand over.** When a bridge connects over USB, Wi-Fi or Ethernet (not a phone over Bluetooth), the gateway hands it every
+  stored record, oldest first, as a packet from the original sender, a few at a time so the client queue keeps room for live
+  traffic. **Any** kit's bridge gets them: a field kit or a command kit, whichever connects first. Copies the API already
+  holds are answered `duplicate`, so nothing is counted twice. Records that arrive during the hand-over come live.
+- **Forget.** A stored record is deleted only when an ack the connected bridge sends (`STZA1:`) verifies under the trusted
+  cloud key and shows the backend has it. `max_seq` means "received or given up" (`docs/control.md`), so the gateway deletes
+  only what is known to be received: sequence numbers above the give-up point (17 behind the newest) up to `max_seq`, and
+  those marked in the mask. A gap the cloud gave up stays in the store, so a later hand-over can still fill it. Unsigned or
+  invalid acks change nothing; acks other gateways transmit are usually encrypted for their node and are not used.
+- **Trusted key.** The board trusts one cloud public key, set at build time (`STOZHER_CLOUD_PUBLIC_HEX`, default the test
+  key). A kit signs with its own key (`infra/kit/init.sh`), so build with that kit's `GET /v1/control/public-key`; with the
+  wrong key nothing is ever deleted by acks (records then go by age or for room, and every hand-over repeats them).
+- **Log.** Counts only (held, senders, kept, repeats, deleted by ack, pushed out, expired, handed over), never record
+  contents or positions.
+
+Built and host-tested (`make fw-test`, `test_store`); the T3, T-Beam and WROOM images build. Not yet run on a board.
+
 ### Simulated radios (sim mode)
 
 `--port sim-tcp:127.0.0.1:<port>` gives the bridge a simulated gateway radio (`mesh_bridge/sim_radio.py`) instead of a USB
@@ -105,7 +138,8 @@ Setting `STOZHER_RESPONDER_KEY` also relays alerts to the mesh (below).
   suspended, the bridge reported "connected" for hours while the gateway held the node's messages. The bridge reopens the
   link when the machine resumes from sleep (the monotonic clock stops during suspend, the boot clock does not) and after
   `--stale-after` seconds with no text from the radio (default 3 h, 0 = never). Health shows `reconnects`,
-  `last_reconnect_reason` and `last_text_age_s`. Records the gateway did not keep while the link was dead are lost.
+  `last_reconnect_reason` and `last_text_age_s`. Records the gateway did not keep while the link was dead are lost (a stock
+  gateway keeps 8; a store-and-forward gateway keeps them, above).
 - **Alerts to the mesh (optional).** With a responder key the bridge listens to the alert stream and
   sends `STOZHER <LEVEL>: <message>` (at most 200 bytes) on channel 0, warnings and critical only,
   at most one per `--relay-interval` (default 60 s) because LoRa airtime is shared. Simulated

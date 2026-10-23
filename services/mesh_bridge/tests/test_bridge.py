@@ -61,6 +61,21 @@ def test_packet_conversion() -> None:
     assert to_mesh_text({"fromId": "!a", "decoded": {"portnum": "TELEMETRY_APP"}}) is None
 
 
+def test_a_record_replayed_from_a_gateway_store_reads_like_a_live_one() -> None:
+    # A store-and-forward gateway hands a stored record over as a packet from its original sender, with the time it
+    # heard it and no radio details (docs/mesh.md): it is forwarded as usual, and the API answers duplicate for a copy.
+    p = {
+        "from": 0x0B533538,
+        "to": 0xFFFFFFFF,
+        "rxTime": 1795860000,
+        "channel": 0,
+        "decoded": {"portnum": "TEXT_MESSAGE_APP", "text": "STZ1:" + HEX28},
+    }
+    m = to_mesh_text(p)
+    assert m == MeshText("!0b533538", "STZ1:" + HEX28, hops=None, snr=None, rssi=None, channel=0)
+    assert m is not None and extract_record(m.text) == HEX28
+
+
 def test_alert_text_rules() -> None:
     a = {
         "level": "critical",
