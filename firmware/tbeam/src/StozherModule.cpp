@@ -221,6 +221,7 @@ StozherModule::StozherModule() : SinglePortModule("stozher", meshtastic_PortNum_
     LOG_WARN("STOZHER: node id %u with the PUBLIC TEST KEY, uplink: mesh%s. Not a real node.", (unsigned)tc.node_id,
              tc.satellite_enabled ? " + KIM1 (untested on hardware)" : " only (no KIM1)");
     LOG_INFO("STOZHER build %s detector rev %u", STOZHER_STR(STOZHER_BUILD), (unsigned)stz::kDetectorRev);
+    STOZHER_LOG_TRUSTED_KEY("witness");
     stozherModule = this;
 }
 

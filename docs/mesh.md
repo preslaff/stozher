@@ -67,7 +67,9 @@ were lost). A gateway running our fork keeps them (`firmware/tbeam`, `STOZHER_ST
   invalid acks change nothing; acks other gateways transmit are usually encrypted for their node and are not used.
 - **Trusted key.** The board trusts one cloud public key, set at build time (`STOZHER_CLOUD_PUBLIC_HEX`, default the test
   key). A kit signs with its own key (`infra/kit/init.sh`), so build with that kit's `GET /v1/control/public-key`; with the
-  wrong key nothing is ever deleted by acks (records then go by age or for room, and every hand-over repeats them).
+  wrong key nothing is ever deleted by acks (records then go by age or for room, and every hand-over repeats them). Every
+  STOZHER board prints `acks trusted from key <id> <first 8 hex digits>` at boot and `make kit-doctor` prints the kit's
+  fingerprint the same way, so a mismatch shows at a glance; the test key is named as such.
 - **Log.** Counts only (held, senders, kept, repeats, deleted by ack, pushed out, expired, handed over), never record
   contents or positions.
 

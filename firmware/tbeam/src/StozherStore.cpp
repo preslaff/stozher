@@ -129,6 +129,7 @@ StozherStoreModule::StozherStoreModule() : SinglePortModule("stozherstore", mesh
     stz::from_hex(kStozherCloudPublicHex, strlen(kStozherCloudPublicHex), impl->cloud[0].pub, 32, n);
     if (!impl->backend.ready)
         LOG_ERROR("STOZHER store: no file system space, records are NOT kept for the next bridge");
+    STOZHER_LOG_TRUSTED_KEY("store");
     LOG_INFO("STOZHER store: %u records held from %u senders (%u slots)", (unsigned)impl->store.counts().held,
              (unsigned)impl->store.counts().senders, (unsigned)STZ_STORE_SLOTS);
     stozherStoreModule = this;

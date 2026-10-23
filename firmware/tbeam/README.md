@@ -54,7 +54,7 @@ binaries in `firmware/node/` restore a board.
 |---|---|
 | `STOZHER_BUILD` | the git short hash of this repository (`-DSTOZHER_BUILD=$(git rev-parse --short HEAD)`, unquoted); printed at boot with the detector revision (`stz::kDetectorRev`, bumped on every rule or threshold change), so a log says exactly what runs |
 | `STOZHER_NODE_ID` | the node id registered in the backend (default 1); the master key is the PUBLIC test key until provisioning exists. After a flash the Meshtastic radio ID may change: re-bind the node (docs/mesh.md, "After reflashing a device") |
-| `STOZHER_CLOUD_PUBLIC_HEX` | the cloud public key (64 hex digits, unquoted) the board trusts for acks; default the PUBLIC test key. A kit signs with its own key: take it from that kit's `GET /v1/control/public-key`, or the board ignores its acks |
+| `STOZHER_CLOUD_PUBLIC_HEX` | the cloud public key (64 hex digits, unquoted) the board trusts for acks; default the PUBLIC test key. A kit signs with its own key: take it from that kit's `GET /v1/control/public-key`, or the board ignores its acks. The boot log prints `acks trusted from key 1 <first 8 hex digits>`; compare with `make kit-doctor` |
 | `STOZHER_STORE=1` / `STOZHER_NO_STORE` | store and forward on (gateway-only builds) / off on a witness build |
 | `STOZHER_STORE_MAX_AGE_S` | stored records older than this go (default 7 days; only when the board knows the time) |
 | `STZ_STORE_SLOTS` | stored records (default 1024, 48 bytes each in flash and 8 in RAM) |

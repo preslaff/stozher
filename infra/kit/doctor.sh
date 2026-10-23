@@ -6,6 +6,7 @@ cd "$(dirname "$0")/../.."
 . infra/kit/lib.sh
 ENV=infra/.env
 fails=0
+STZ_TEST_CLOUD_PUBLIC_HEX=03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8  # tests/vectors/ack_messages.json
 ok()   { printf '  \033[32mok\033[0m    %s\n' "$*"; }
 warn() { printf '  \033[33mwarn\033[0m  %s\n' "$*"; }
 bad()  { printf '  \033[31mFAIL\033[0m  %s\n' "$*"; fails=$((fails+1)); }
@@ -73,6 +74,19 @@ H="$(curl -s -m 3 "http://127.0.0.1:$PORT/health" 2>/dev/null || true)"
 if [ -n "$H" ]; then
   ok "kit is running on port $PORT"
   printf '%s' "$H" | python3 -c 'import json,sys; h=json.load(sys.stdin); m=h.get("modules",{}); b=h.get("mesh_bridges",{}); print("        modules: "+", ".join(k+"="+str(v) for k,v in m.items())); b and print("        mesh bridges: "+", ".join(k+"="+str(v) for k,v in b.items()))' 2>/dev/null || true
+  # The key boards must trust for this kit's acks: its fingerprint (first 8 hex digits) is what a board prints at boot.
+  K="$(curl -s -m 3 "http://127.0.0.1:$PORT/v1/control/public-key" 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["cloud_key_id"], d["public_key_hex"])' 2>/dev/null || true)"
+  if [ -n "$K" ]; then
+    kid="${K%% *}"; pub="${K#* }"
+    if [ "$pub" = "$STZ_TEST_CLOUD_PUBLIC_HEX" ]; then
+      warn "acks are signed with the PUBLIC TEST key (key $kid): anyone can forge them; run infra/kit/init.sh for a kit key"
+    else
+      ok "acks signed with key $kid, fingerprint ${pub:0:8}: boards must print 'acks trusted from key $kid ${pub:0:8}' at boot"
+      echo "        build them with -D STOZHER_CLOUD_PUBLIC_HEX=<public_key_hex of http://127.0.0.1:$PORT/v1/control/public-key>"
+    fi
+  else
+    warn "acks are off (no signing key): run infra/kit/init.sh"
+  fi
 elif ss -ltn 2>/dev/null | grep -q ":$PORT "; then bad "port $PORT is taken by something that is not the kit"
 else ok "port $PORT is free (kit not running)"; fi
 for ip in $(hostname -I 2>/dev/null); do echo "        phones use: http://$ip:$PORT/"; done

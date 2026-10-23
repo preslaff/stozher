@@ -42,7 +42,8 @@ Running it again with a newer bundle upgrades the code and keeps `infra/.env` an
 
 Afterwards: put the gateway's `/dev/serial/by-id/...` path in `infra/kit/kit.env` (`MESH_PORT=...`), then
 `stozher-kit start | stop | status | doctor | logs`. `make kit-doctor` / `stozher-kit doctor` checks secrets, database, map, radio, ports and
-prints the addresses phones use; run it before a deployment and whenever something does not start.
+prints the addresses phones use, and the fingerprint of the kit's ack key (boards print the key they trust at boot: the two
+must match, or the boards ignore this kit's acks; `docs/mesh.md`); run it before a deployment and whenever something does not start.
 
 **Nodes are not in the bundle.** Their master keys are sealed with the KEK of the laptop that holds them, so a new laptop starts with none.
 Create an operator key there (`uv run python -m stozher_api.cli create-key --role operator --label "<team>, setup"`) and register each
