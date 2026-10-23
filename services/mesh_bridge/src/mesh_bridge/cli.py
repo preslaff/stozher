@@ -13,12 +13,16 @@ from .sim_radio import SimTcpRadio
 from .sim_radio import parse_port as parse_sim_port
 
 DEFAULT_PORT = "/dev/ttyUSB0"
+# The API's rule for a heartbeat `instance` (HeartbeatIn in services/api) and its name for the unnamed copy; a bridge
+# test checks both against the API source, so a name the bridge accepts is never refused by the API.
+BRIDGE_NAME_PATTERN = r"[a-z0-9][a-z0-9_-]{0,15}"
+DEFAULT_BRIDGE_NAME = "main"
 
 
 def _bridge_name(v: str) -> str | None:
     if not v:
         return None
-    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,15}", v) or v == "main":
+    if not re.fullmatch(BRIDGE_NAME_PATTERN, v) or v == DEFAULT_BRIDGE_NAME:
         raise argparse.ArgumentTypeError(
             "lowercase letters, digits, - and _, at most 16, not 'main' (that is the unnamed bridge)"
         )
@@ -79,7 +83,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 2
     if args.port != "fake" and not sim:
         _need_radio_extra()
-    spool = None if args.no_spool else Path(args.spool).expanduser()
+    # A sim bridge never shares the live bridge's default spool (the forwarder also refuses other-mode lines).
+    default = (
+        "~/.local/state/stozher/mesh-spool-sim.jsonl"
+        if sim
+        else "~/.local/state/stozher/mesh-spool.jsonl"
+    )
+    spool = None if args.no_spool else Path(args.spool or default).expanduser()
     try:
         asyncio.run(
             run_bridge(
@@ -148,7 +158,9 @@ def main() -> None:
         "run", help="forward mesh records to the API (and optionally alerts to the mesh)"
     )
     r.add_argument(
-        "--spool", default="~/.local/state/stozher/mesh-spool.jsonl", help="store-and-forward file"
+        "--spool",
+        default=None,
+        help="store-and-forward file (default ~/.local/state/stozher/mesh-spool.jsonl, -sim.jsonl in sim mode)",
     )
     r.add_argument("--no-spool", action="store_true")
     r.add_argument(

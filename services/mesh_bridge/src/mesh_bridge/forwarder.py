@@ -83,7 +83,7 @@ class Forwarder:
             )
             return False
         self._seen[key] = now
-        item = {"from_id": msg.from_id, "payload_hex": record, "hops": msg.hops}
+        item = {"from_id": msg.from_id, "payload_hex": record, "hops": msg.hops, "sim": self.sim}
         if len(self.queue) >= self.max_queue:
             self.queue.popleft()
             self.stats["dropped_full"] += 1
@@ -99,11 +99,31 @@ class Forwarder:
     def _load_spool(self) -> None:
         if self.spool is None or not self.spool.exists():
             return
+        other: list[str] = []
         for line in self.spool.read_text().splitlines():
             try:
-                self.queue.append(json.loads(line))
+                item = json.loads(line)
             except json.JSONDecodeError:
                 log.warning("skipping a damaged spool line")
+                continue
+            # A record spooled in the other mode never goes to this mode's ingest (simulated data stays simulated,
+            # CLAUDE.md rule 8). Lines from before the tag were written by a live bridge.
+            if bool(item.get("sim", False)) != self.sim:
+                other.append(line)
+                continue
+            self.queue.append(item)
+        if other:
+            aside = self.spool.with_name(self.spool.name + (".live" if self.sim else ".sim"))
+            with aside.open("a") as f:
+                f.write("".join(line + "\n" for line in other))
+            log.warning(
+                "%d spooled %s records belong to a %s bridge: moved to %s, not sent",
+                len(other),
+                "live" if self.sim else "simulated",
+                "live" if self.sim else "sim",
+                aside,
+            )
+            self.spool.write_text("".join(json.dumps(i) + "\n" for i in self.queue))
         if self.queue:
             log.info("replaying %d spooled records", len(self.queue))
 
