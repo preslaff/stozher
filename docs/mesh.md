@@ -49,22 +49,26 @@ were lost). A gateway running our fork keeps them (`firmware/tbeam`, `STOZHER_ST
 
 - **Keep.** Every `STZ1:` record heard on the primary channel, and the board's own records if it is a witness, is written
   to a file in the board's flash (1024 slots of 48 bytes) with the sender's Meshtastic ID and the time it was heard. The
-  same sender, key id and sequence number again (a mesh repeat) is kept once. The records are the opaque signed bytes: the
+  same sender and the same bytes again (a mesh repeat) is kept once; the same sequence number with other bytes (a re-bound
+  device that started again) is kept as another record. The records are the opaque signed bytes: the
   gateway holds no node keys and no signing key, so it cannot read, change or invent one, and a stolen gateway shows only
   sender IDs and counts.
 - **Room.** At most a quarter of the slots per sender, so one noisy or bogus channel member cannot push the others out.
   When a sender is at its quota (or the store is full, then the sender holding the most), its oldest heartbeat goes first,
   then its oldest record. Records older than 7 days go (when the gateway knows the time). The store survives a reboot; a
   slot damaged by a power cut is dropped.
-- **Hand over.** When a bridge connects over USB, Wi-Fi or Ethernet (not a phone over Bluetooth), the gateway hands it every
+- **Hand over.** When a bridge connects over USB, Wi-Fi or Ethernet (not a phone over Bluetooth, which also never gets a
+  witness board's copies of its own records), the gateway hands it every
   stored record, oldest first, as a packet from the original sender, a few at a time so the client queue keeps room for live
   traffic. **Any** kit's bridge gets them: a field kit or a command kit, whichever connects first. Copies the API already
   holds are answered `duplicate`, so nothing is counted twice. Records that arrive during the hand-over come live.
 - **Forget.** A stored record is deleted only when an ack the connected bridge sends (`STZA1:`) verifies under the trusted
   cloud key and shows the backend has it. `max_seq` means "received or given up" (`docs/control.md`), so the gateway deletes
-  only what is known to be received: sequence numbers above the give-up point (17 behind the newest) up to `max_seq`, and
-  those marked in the mask. A gap the cloud gave up stays in the store, so a later hand-over can still fill it. Unsigned or
-  invalid acks change nothing; acks other gateways transmit are usually encrypted for their node and are not used.
+  sequence numbers above the give-up point (17 behind the newest) up to `max_seq`, those marked in the mask, and, at or below
+  the give-up point, those it has already handed to a bridge (live or in a replay: the backend has them, or the bridge holds
+  them in its spool). A record no bridge has seen stays, so a later hand-over can still fill a gap the cloud gave up. Which
+  records were handed over is kept in RAM only: after a reboot everything is handed over again before an ack deletes it.
+  Unsigned or invalid acks change nothing; acks other gateways transmit are usually encrypted for their node and are not used.
 - **Trusted key.** The board trusts one cloud public key, set at build time (`STOZHER_CLOUD_PUBLIC_HEX`, default the test
   key). A kit signs with its own key (`infra/kit/init.sh`), so build with that kit's `GET /v1/control/public-key`; with the
   wrong key nothing is ever deleted by acks (records then go by age or for room, and every hand-over repeats them). Every

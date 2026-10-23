@@ -64,6 +64,7 @@ void Store::begin() {
       continue;
     }
     m_[i].order = get32(s + 10);
+    m_[i].rx_time = get32(s + 6);
     m_[i].seq = seq_of(s + kRawAt);
     m_[i].sender = (uint8_t)who;
     m_[i].flags = flags_of(s + kRawAt);
@@ -101,6 +102,7 @@ bool Store::read_entry(size_t slot, Entry& e) {
   uint8_t s[kSlotBytes];
   if (!m_[slot].order || !b_.read(slot, s) || s[0] != kMarker) return false;
   if (crc16(s, kCrcAt) != (uint16_t)(s[kCrcAt] | s[kCrcAt + 1] << 8)) return false;
+  if ((s[1] != kCoreLen && s[1] != kExtLen) || get32(s + 10) != m_[slot].order) return false;  // changed under us
   e.from = get32(s + 2);
   e.rx_time = get32(s + 6);
   e.order = get32(s + 10);
@@ -124,14 +126,17 @@ int Store::pick_victim(int sender) const {
   return best;
 }
 
-AddResult Store::add(uint32_t from, uint32_t rx_time, const uint8_t* raw, size_t len) {
+AddResult Store::add(uint32_t from, uint32_t rx_time, const uint8_t* raw, size_t len, bool handed) {
   if (!raw || from == 0 || !valid_record(raw, len)) return AddResult::Invalid;
   int who = sender_index(from, false);
   if (who >= 0) {
     uint16_t seq = seq_of(raw);
     uint8_t key = raw[3] & 0xF0;
-    for (size_t i = 0; i < STZ_STORE_SLOTS; i++)  // the same sequence number again: a mesh repeat (or a reuse the API rejects)
-      if (m_[i].order && m_[i].sender == who && m_[i].seq == seq && (m_[i].flags & 0xF0) == key) {
+    Entry e;
+    for (size_t i = 0; i < STZ_STORE_SLOTS; i++)  // the same bytes again: a mesh repeat
+      if (m_[i].order && m_[i].sender == who && m_[i].seq == seq && (m_[i].flags & 0xF0) == key && read_entry(i, e) &&
+          e.len == len && memcmp(e.raw, raw, len) == 0) {
+        if (handed) m_[i].flags |= 2;
         c_.duplicates++;
         return AddResult::Duplicate;
       }
@@ -173,9 +178,10 @@ AddResult Store::add(uint32_t from, uint32_t rx_time, const uint8_t* raw, size_t
 
   Meta& m = m_[slot];
   m.order = next_order_++;
+  m.rx_time = rx_time;
   m.seq = seq_of(raw);
   m.sender = (uint8_t)who;
-  m.flags = flags_of(raw);
+  m.flags = (uint8_t)(flags_of(raw) | (handed ? 2 : 0));
   if (!per_sender_[who]) c_.senders++;
   per_sender_[who]++;
   c_.held++;
@@ -194,6 +200,14 @@ bool Store::next(uint32_t after_order, Entry& out) {
   }
 }
 
+void Store::mark_handed(uint32_t order) {
+  for (Meta& m : m_)
+    if (m.order == order) {
+      m.flags |= 2;
+      return;
+    }
+}
+
 size_t Store::apply_ack(uint32_t dest, const Ack& a) {
   int who = sender_index(dest, false);
   if (who < 0) return 0;
@@ -201,13 +215,14 @@ size_t Store::apply_ack(uint32_t dest, const Ack& a) {
   uint32_t newest = a.max_seq;
   for (int bit = 15; bit >= 0; bit--)
     if ((a.mask >> bit) & 1) { newest = (uint32_t)a.max_seq + 2 + (uint32_t)bit; break; }
-  // Everything up to max_seq was received *or given up*; only above the give-up point is it known to be received.
+  // Everything up to max_seq was received *or given up*; only above the give-up point is it known to be received. At or
+  // below it, a record a bridge was handed is done with too; one no bridge has seen may fill a given-up gap later.
   uint32_t gave_up_to = newest >= kAckWindow ? newest - kAckWindow : 0;
   size_t n = 0;
   for (size_t i = 0; i < STZ_STORE_SLOTS; i++) {
     Meta& m = m_[i];
     if (!m.order || m.sender != who || (m.flags >> 4) != a.key_id) continue;
-    bool have = m.seq > gave_up_to && m.seq <= a.max_seq;
+    bool have = m.seq <= a.max_seq && (m.seq > gave_up_to || (m.flags & 2));
     if (!have && m.seq >= (uint32_t)a.max_seq + 2) {
       uint32_t off = m.seq - ((uint32_t)a.max_seq + 2);
       have = off < 16 && ((a.mask >> off) & 1);
@@ -230,10 +245,9 @@ int Store::apply_ack_text(uint32_t dest, const char* text, size_t n, const Cloud
 size_t Store::expire(uint32_t now, uint32_t max_age_s) {
   if (now == 0) return 0;
   size_t n = 0;
-  Entry e;
   for (size_t i = 0; i < STZ_STORE_SLOTS; i++) {
-    if (!m_[i].order || !read_entry(i, e)) continue;
-    if (e.rx_time != 0 && e.rx_time <= now && now - e.rx_time > max_age_s) {
+    uint32_t t = m_[i].rx_time;
+    if (m_[i].order && t != 0 && t <= now && now - t > max_age_s) {
       clear(i);
       n++;
     }

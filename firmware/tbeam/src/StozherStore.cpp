@@ -100,11 +100,6 @@ class FileBackend : public stz::store::Backend
     File f_;
 };
 
-bool replayTarget(MeshService::APIState s)
-{
-    // A bridge on USB or the network. Not a phone over Bluetooth: it would only see a list of hex lines.
-    return s == MeshService::STATE_SERIAL || s == MeshService::STATE_WIFI || s == MeshService::STATE_ETH;
-}
 } // namespace
 
 struct StozherStoreModule::Impl {
@@ -145,7 +140,8 @@ ProcessMessage StozherStoreModule::handleReceived(const meshtastic_MeshPacket &m
     if (!stz::store::parse_text((const char *)mp.decoded.payload.bytes, mp.decoded.payload.size, raw, len))
         return ProcessMessage::CONTINUE;
     uint32_t when = mp.rx_time ? mp.rx_time : getValidTime(RTCQualityFromNet);
-    stz::store::AddResult r = impl->store.add(getFrom(&mp), when, raw, len);
+    // With a bridge connected, Meshtastic hands it this packet itself (our own ones, the witness module's copy).
+    stz::store::AddResult r = impl->store.add(getFrom(&mp), when, raw, len, stozherBridgeConnected());
     if (r == stz::store::AddResult::Stored)
         LOG_DEBUG("STOZHER store: record from !%08x kept (%u held)", (unsigned)getFrom(&mp), (unsigned)impl->store.counts().held);
     else if (r == stz::store::AddResult::NoRoom)
@@ -170,7 +166,7 @@ void StozherStoreModule::noteClientPacket(const meshtastic_MeshPacket &p)
 int32_t StozherStoreModule::runOnce()
 {
     uint32_t now = millis();
-    bool connected = replayTarget(service->api_state);
+    bool connected = stozherBridgeConnected();
     if (connected && !impl->connected) {
         impl->replaying = impl->store.counts().held > 0;
         impl->cursor = 0;
@@ -193,16 +189,16 @@ int32_t StozherStoreModule::runOnce()
             LOG_INFO("STOZHER store: handed over %u stored records (%u since boot)", (unsigned)impl->replayed, (unsigned)impl->replayedTotal);
             break;
         }
-        impl->cursor = e.order;
-        meshtastic_MeshPacket *p = allocDataPacket();
-        if (!p)
-            break;
         char text[5 + 2 * stz::kMaxLen + 1];
         size_t n = stz::mesh::build_text(e.raw, e.len, text, sizeof text);
         if (n < 2) {
-            packetPool.release(p);
+            impl->cursor = e.order; // cannot happen for a stored record (28 or 32 bytes); skip it rather than stall
             continue;
         }
+        meshtastic_MeshPacket *p = allocDataPacket();
+        if (!p)
+            break; // no packet free: the same record again on the next pass
+        impl->cursor = e.order;
         n--; // no newline in a packet
         p->from = e.from;
         p->to = NODENUM_BROADCAST;
@@ -211,6 +207,7 @@ int32_t StozherStoreModule::runOnce()
         p->decoded.payload.size = n;
         memcpy(p->decoded.payload.bytes, text, n);
         service->sendToPhone(p);
+        impl->store.mark_handed(e.order);
         impl->replayed++;
         impl->replayedTotal++;
     }

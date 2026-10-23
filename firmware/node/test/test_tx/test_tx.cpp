@@ -309,6 +309,19 @@ void test_an_entry_17_behind_the_newest_is_given_up_like_the_cloud_does() {
   TEST_ASSERT_EQUAL(AckResult::Applied, r.tx->on_ack(a));
 }
 
+void test_an_event_burst_gives_up_old_entries_without_waiting_for_a_heartbeat() {
+  Rig r;
+  r.send(TxKind::Event);  // seq 1, never acknowledged
+  r.run(2000);
+  r.run(3 * 900000);
+  TEST_ASSERT_EQUAL(1, r.tx->pending());
+  r.store.save(0, 17);
+  r.send(TxKind::Event);  // seq 17: 1 is 16 behind, kept
+  TEST_ASSERT_EQUAL(2, r.tx->pending());
+  r.send(TxKind::Event);  // seq 18: 1 is 17 behind, given up now, not at the next heartbeat
+  TEST_ASSERT_EQUAL(2, r.tx->pending());
+}
+
 void test_a_selective_acknowledgement_frees_only_the_marked_ones() {
   Rig r;
   r.modem.reply = FakeKim1::Reply::Silent;
@@ -665,6 +678,7 @@ int main() {
   RUN_TEST(test_a_status_change_is_sent_once);
   RUN_TEST(test_an_acknowledgement_stops_the_repeats_and_frees_the_slot);
   RUN_TEST(test_an_entry_17_behind_the_newest_is_given_up_like_the_cloud_does);
+  RUN_TEST(test_an_event_burst_gives_up_old_entries_without_waiting_for_a_heartbeat);
   RUN_TEST(test_a_selective_acknowledgement_frees_only_the_marked_ones);
   RUN_TEST(test_acknowledgements_for_someone_else_or_stale_are_ignored);
   RUN_TEST(test_a_failed_transmission_is_retried_after_a_backoff);

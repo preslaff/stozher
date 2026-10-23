@@ -10,7 +10,7 @@
 #include "stz_codec.h"
 
 #ifndef STZ_STORE_SLOTS
-#define STZ_STORE_SLOTS 1024  // 48 bytes each in flash, 8 bytes each in RAM
+#define STZ_STORE_SLOTS 1024  // 48 bytes each in flash, 12 bytes each in RAM
 #endif
 #ifndef STZ_STORE_SENDERS
 #define STZ_STORE_SENDERS 32
@@ -62,17 +62,23 @@ class Store {
   // Reads every slot back (after a reboot) and rebuilds the index. Damaged slots are cleared.
   void begin();
 
-  // A record heard from `from`. The same sender, key id and sequence number again is a mesh repeat (`Duplicate`). When the
-  // sender is at its quota, its own oldest heartbeat gives way, else its oldest record; when the whole store is full, the
-  // same happens to the sender holding the most.
-  AddResult add(uint32_t from, uint32_t rx_time, const uint8_t* raw, size_t len);
+  // A record heard from `from`. The same sender and the same bytes again is a mesh repeat (`Duplicate`); the same sequence
+  // number with other bytes is kept as another record (a re-bound device that started again, or a reuse the API rejects).
+  // When the sender is at its quota, its own oldest heartbeat gives way, else its oldest record; when the whole store is
+  // full, the same happens to the sender holding the most. `handed`: a connected bridge got it live.
+  AddResult add(uint32_t from, uint32_t rx_time, const uint8_t* raw, size_t len, bool handed = false);
+
+  // The record with this arrival order went to a connected bridge (a replay). Not kept across a reboot: after one,
+  // everything is handed over again before an ack can delete it.
+  void mark_handed(uint32_t order);
 
   // The stored record that arrived next after `after_order` (0 = from the start). False when there is none.
   bool next(uint32_t after_order, Entry& out);
 
   // A verified ack sent to the node `dest`: deletes the stored records from `dest` it shows the backend has. Returns the
-  // number deleted. Records the cloud has given up (17 or more behind its newest) are kept: the store may still fill
-  // the gap, so they go only by age or room.
+  // number deleted. `max_seq` means "received or given up" (docs/control.md): above the give-up point (17 behind the
+  // newest) it means received; at or below it, a record a bridge was handed is deleted (the backend has it, or the bridge
+  // holds it in its spool), and one no bridge has seen is kept, because it may still fill a gap the cloud gave up.
   size_t apply_ack(uint32_t dest, const Ack& a);
   // The same from the `STZA1:` text, verified with `keys` first; -1 if it does not verify (nothing changes).
   int apply_ack_text(uint32_t dest, const char* text, size_t n, const CloudKey* keys, size_t n_keys);
@@ -86,10 +92,11 @@ class Store {
 
  private:
   struct Meta {  // the RAM index, one per slot
-    uint32_t order = 0;  // 0 = empty
+    uint32_t order = 0;    // 0 = empty
+    uint32_t rx_time = 0;  // as stored, so expiry needs no flash reads
     uint16_t seq = 0;
-    uint8_t sender = 0;  // index into senders_
-    uint8_t flags = 0;   // bit 0 heartbeat, bits 4-7 key id
+    uint8_t sender = 0;    // index into senders_
+    uint8_t flags = 0;     // bit 0 heartbeat, bit 1 handed to a bridge, bits 4-7 key id
   };
   int sender_index(uint32_t from, bool create);
   bool read_entry(size_t slot, Entry& e);

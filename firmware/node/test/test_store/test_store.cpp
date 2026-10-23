@@ -42,10 +42,18 @@ static void rec(uint8_t out[28], uint8_t type, uint16_t seq, uint8_t key = 0, ui
   out[2] = (uint8_t)seq;
   out[3] = (uint8_t)(key << 4);
 }
-static AddResult add(uint32_t from, uint8_t type, uint16_t seq, uint8_t key = 0, uint32_t t = 1795860000u) {
+static AddResult add(uint32_t from, uint8_t type, uint16_t seq, uint8_t key = 0, uint32_t t = 1795860000u, bool handed = false) {
   uint8_t r[28];
   rec(r, type, seq, key);
-  return st.add(from, t, r, 28);
+  return st.add(from, t, r, 28, handed);
+}
+static uint16_t crc16(const uint8_t* d, size_t n) {  // the slot CRC (CCITT-FALSE), to forge a consistent bad slot
+  uint16_t c = 0xFFFF;
+  for (size_t i = 0; i < n; i++) {
+    c ^= (uint16_t)d[i] << 8;
+    for (int b = 0; b < 8; b++) c = (c & 0x8000) ? (uint16_t)((c << 1) ^ 0x1021) : (uint16_t)(c << 1);
+  }
+  return c;
 }
 static bool holds(uint32_t from, uint16_t seq, uint8_t key = 0) {
   Entry e;
@@ -158,6 +166,55 @@ void test_records_the_cloud_gave_up_are_kept_to_fill_the_gap() {
   TEST_ASSERT_FALSE(holds(A, 40));
 }
 
+void test_after_a_long_outage_an_ack_deletes_what_a_bridge_was_handed() {
+  // 200 records stored while no bridge was there; 1..150 handed over in a replay, 151..200 not (the bridge left).
+  for (uint16_t s = 1; s <= 200; s++) add(A, 1, s);
+  Entry e;
+  for (uint32_t after = 0; st.next(after, e) && (uint16_t)(e.raw[1] << 8 | e.raw[2]) <= 150; after = e.order) st.mark_handed(e.order);
+  // The cloud holds 1..150 and 184..200 (via another gateway) and gave 151..183 up: max_seq 200, mask 0.
+  // Deleted: the 150 handed over and the 17 known received; kept: 151..183, which no bridge has seen.
+  TEST_ASSERT_EQUAL(167, st.apply_ack(A, ack(0, 200, 0)));
+  TEST_ASSERT_EQUAL(33, st.held_from(A));
+  TEST_ASSERT_TRUE(holds(A, 151));
+  TEST_ASSERT_TRUE(holds(A, 183));
+  TEST_ASSERT_FALSE(holds(A, 150));
+  TEST_ASSERT_FALSE(holds(A, 184));
+  // Not handed and 17 or more behind: kept, it may fill a gap the cloud gave up.
+  for (uint16_t s = 1; s <= 5; s++) add(B, 1, s);
+  add(B, 1, 6, 0, 1795860000u, true);  // heard while a bridge was connected: handed live
+  TEST_ASSERT_EQUAL(1, st.apply_ack(B, ack(0, 40, 0)));
+  TEST_ASSERT_EQUAL(5, st.held_from(B));
+  TEST_ASSERT_FALSE(holds(B, 6));
+  add(B, 1, 3, 0, 1795860000u, true);  // a repeat heard live marks the stored copy handed
+  TEST_ASSERT_EQUAL(1, st.apply_ack(B, ack(0, 40, 0)));
+  TEST_ASSERT_FALSE(holds(B, 3));
+}
+
+void test_the_same_seq_with_other_bytes_is_another_record() {
+  uint8_t r1[28], r2[28];
+  rec(r1, 1, 1, 0, 0x11);
+  rec(r2, 1, 1, 0, 0x22);  // a re-bound device that started again at 1 (or a reuse the API rejects as seq_reuse)
+  TEST_ASSERT_EQUAL(AddResult::Stored, st.add(A, 0, r1, 28));
+  TEST_ASSERT_EQUAL(AddResult::Duplicate, st.add(A, 0, r1, 28));
+  TEST_ASSERT_EQUAL(AddResult::Stored, st.add(A, 0, r2, 28));
+  TEST_ASSERT_EQUAL(2, st.held_from(A));
+}
+
+void test_a_slot_with_a_bad_length_and_a_good_crc_is_never_copied() {
+  add(A, 1, 1);
+  add(A, 1, 2);
+  uint8_t* s = ram.slots[0];  // after begin(): someone wrote length 200 with a matching CRC
+  s[1] = 200;
+  uint16_t c = crc16(s, 46);
+  s[46] = (uint8_t)c;
+  s[47] = (uint8_t)(c >> 8);
+  Entry e;
+  TEST_ASSERT_TRUE(st.next(0, e));  // the bad slot is dropped, the next one comes
+  TEST_ASSERT_EQUAL(28, e.len);
+  TEST_ASSERT_EQUAL(2, (uint16_t)(e.raw[1] << 8 | e.raw[2]));
+  TEST_ASSERT_EQUAL(1, st.counts().held);
+}
+
 void test_only_a_verified_ack_text_changes_anything() {
   CloudKey k;
   size_t n = 0;
@@ -256,6 +313,9 @@ int main() {
   RUN_TEST(test_invalid_input_is_refused);
   RUN_TEST(test_an_ack_deletes_exactly_what_the_backend_has);
   RUN_TEST(test_records_the_cloud_gave_up_are_kept_to_fill_the_gap);
+  RUN_TEST(test_after_a_long_outage_an_ack_deletes_what_a_bridge_was_handed);
+  RUN_TEST(test_the_same_seq_with_other_bytes_is_another_record);
+  RUN_TEST(test_a_slot_with_a_bad_length_and_a_good_crc_is_never_copied);
   RUN_TEST(test_only_a_verified_ack_text_changes_anything);
   RUN_TEST(test_a_sender_at_its_quota_loses_its_oldest_heartbeat_first);
   RUN_TEST(test_a_full_store_makes_the_sender_with_the_most_give_way);

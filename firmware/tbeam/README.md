@@ -57,7 +57,7 @@ binaries in `firmware/node/` restore a board.
 | `STOZHER_CLOUD_PUBLIC_HEX` | the cloud public key (64 hex digits, unquoted) the board trusts for acks; default the PUBLIC test key. A kit signs with its own key: take it from that kit's `GET /v1/control/public-key`, or the board ignores its acks. The boot log prints `acks trusted from key 1 <first 8 hex digits>`; compare with `make kit-doctor` |
 | `STOZHER_STORE=1` / `STOZHER_NO_STORE` | store and forward on (gateway-only builds) / off on a witness build |
 | `STOZHER_STORE_MAX_AGE_S` | stored records older than this go (default 7 days; only when the board knows the time) |
-| `STZ_STORE_SLOTS` | stored records (default 1024, 48 bytes each in flash and 8 in RAM) |
+| `STZ_STORE_SLOTS` | stored records (default 1024, 48 bytes each in flash and 12 in RAM) |
 | `STOZHER_SELFTEST_AT_S=N` | N seconds after boot, feed a synthetic jamming episode; every record built from it is type `test` |
 | `MESHTASTIC_EXCLUDE_BLUETOOTH=1` | Meshtastic's own flag (not ours): leave the Bluetooth stack out. Used on the test board after the stack asserted in `ld_acl.c` and rebooted it (Oct 2026). Image 1.86 MB instead of 2.08 MB. We use no phone app |
 | `STOZHER_EPOCH_LOG_S=N` | log the detector's numbers (C/N0, drop, baseline, jamming indicator, class; no position) every N seconds, for tuning the rules on real data |

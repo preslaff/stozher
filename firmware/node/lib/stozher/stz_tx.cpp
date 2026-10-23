@@ -47,17 +47,16 @@ Tx::Entry* Tx::free_slot(TxKind incoming) {
   return victim;
 }
 
-void Tx::queue_resends(uint32_t now_ms, uint16_t newest) {
+#ifndef STZ_NO_ACK_HORIZON
+void Tx::drop_given_up(uint16_t newest) {
+  for (Entry& e : q_)  // the cloud has given these up (kAckWindow): so does the node, on every record as the mesh queue does
+    if (e.used && &e != current_ && beyond_ack_window(e.seq, newest)) e.used = false;
+}
+#endif
+
+void Tx::queue_resends(uint32_t now_ms) {
   for (Entry& e : q_) {
     if (!e.used || &e == current_) continue;
-#ifndef STZ_NO_ACK_HORIZON
-    if (beyond_ack_window(e.seq, newest)) {  // the cloud has given it up (kAckWindow): so does the node
-      e.used = false;
-      continue;
-    }
-#else
-    (void)newest;
-#endif
     if (e.kind == TxKind::Heartbeat || e.sent < planned(e) || e.resends >= cfg_.max_resends) continue;
     e.resends++;
     e.sent = (uint8_t)(planned(e) - 1);  // exactly one more send
@@ -85,10 +84,13 @@ SubmitResult Tx::submit(TxKind kind, Record& r, uint32_t now_ms) {
   e.kind = kind;
   e.due_ms = now_ms;
   if (slot) *slot = e;
+#ifndef STZ_NO_ACK_HORIZON
+  drop_given_up(seq);
+#endif
   if (kind == TxKind::Heartbeat) {
     last_heartbeat_ms_ = now_ms;
     have_heartbeat_ = true;
-    queue_resends(now_ms, seq);
+    queue_resends(now_ms);
   }
   if (sink_) sink_->on_record(kind, seq, e.raw, e.len, now_ms);
   return SubmitResult::Queued;

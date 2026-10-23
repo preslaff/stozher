@@ -116,7 +116,10 @@ class Tx {
   void advance_buckets(uint32_t now_ms);
   void start_next(uint32_t now_ms);
   void finish(bool ok, uint32_t now_ms);
-  void queue_resends(uint32_t now_ms, uint16_t newest);  // also drops entries kAckWindow behind `newest`
+  void queue_resends(uint32_t now_ms);
+#ifndef STZ_NO_ACK_HORIZON
+  void drop_given_up(uint16_t newest);  // entries kAckWindow behind `newest`, on every new record
+#endif
   void observe(uint32_t now_ms);
 
   TxConfig cfg_;

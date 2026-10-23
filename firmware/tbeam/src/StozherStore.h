@@ -37,6 +37,17 @@ class StozherStoreModule : public SinglePortModule, private concurrency::OSThrea
 extern StozherStoreModule *stozherStoreModule;
 #endif
 
+#if defined(STOZHER_STORE) || defined(STOZHER_TAP)
+#include "MeshService.h"
+// A STOZHER bridge is connected: a client on USB or the network. Not a phone over Bluetooth, which would only see a list of
+// hex lines. Used by the store (replay, and records counted as handed live) and by the witness module (its own copies).
+inline bool stozherBridgeConnected()
+{
+    MeshService::APIState s = service->api_state;
+    return s == MeshService::STATE_SERIAL || s == MeshService::STATE_WIFI || s == MeshService::STATE_ETH;
+}
+#endif
+
 #ifdef STOZHER_STORE
 inline void stozherStoreNoteClientPacket(const meshtastic_MeshPacket &p)
 {

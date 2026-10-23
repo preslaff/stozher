@@ -174,10 +174,10 @@ reaches both meshes drives **two stock Meshtastic radios**, one per band, each o
 
 `lib/stozher/stz_store.*` keeps witness records on a gateway until a signed ack shows the backend has them (`docs/mesh.md`,
 "Store and forward on the gateway"). Fixed slots behind a `Backend` interface (a LittleFS file in the fork, RAM in tests),
-each with a marker and a CRC-16 so a slot cut by a power loss reads as empty; an 8-byte RAM index per slot, no dynamic
+each with a marker and a CRC-16 so a slot cut by a power loss reads as empty; a 12-byte RAM index per slot (receive time included, so the hourly expiry reads no flash), no dynamic
 allocation. `STZ_STORE_SLOTS` (1024), `STZ_STORE_SENDERS` (32) and `STZ_STORE_QUOTA` (a quarter) are build-time. Tests:
 `test_store` (the golden records as mesh text, repeats, quota and heartbeat-first eviction, deletion only for sequence numbers
-the ack shows received, given-up gaps kept, invalid acks from the golden vectors ignored, reboot, damaged slot, failed write,
+the ack shows received or a bridge was handed, given-up gaps no bridge has seen kept, same seq with other bytes kept, invalid acks from the golden vectors ignored, reboot, damaged slot, failed write,
 age). The Meshtastic side is `StozherStoreModule` in `firmware/tbeam`.
 
 ## T-Beam fork: STOZHER inside Meshtastic (analysis and step 2)
