@@ -33,7 +33,9 @@ What is here (the Meshtastic checkout itself is not vendored; it is GPL-3.0 and 
   registers the module, passes the client's packets to it (`MeshService::handleToRadio`, where the bridge's acks are still
   plain text) and adds `MeshService::toPhoneFree()` for pacing. On by default with the witness module; alone with
   `-D STOZHER_STORE=1`. `variants/stozher_t3/`: `tlora-v2-1-1_6-stozher-gw`, a LilyGO T3 V1.6.1 as a gateway with the
-  store (Meshtastic's own T3 board files). Built, **not yet run on a board**.
+  store (Meshtastic's own T3 board files). Run on the 868 T3 gateway since 23 Oct 2026 (kept records across restarts
+  and a 6.5 h kit outage, handed them over, deleted them on the kit's ack) and on the a4b0 T-Beam since 24 Oct; that the
+  witness keeps its own records is not yet shown.
 - `src/StozherKeys.h`: the cloud public key the boards trust for acks (both modules).
 - `apply.sh`: links `firmware/node/lib/{stozher,tweetnacl}` into the checkout's `lib/`, copies the tap and the extra
   boards, applies the patches.
