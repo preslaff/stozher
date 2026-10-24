@@ -146,7 +146,11 @@ Setting `STOZHER_RESPONDER_KEY` also relays alerts to the mesh (below).
   `--stale-after` seconds with no text from the radio (default 3 h, 0 = never), and after `--quiet-after` seconds with no
   packet of any kind (default 45 min, 0 = never): a gateway relays node info and sends its own telemetry every ~30 min, so
   total silence means its client link is dead even though the port is open (a 2.8.2 gateway did this on 23 October 2026:
-  connected, nothing delivered; its store kept the records). Health shows `reconnects`, `last_packet_age_s`,
+  connected, nothing delivered; its store kept the records). It also reopens the link 15 s after the gateway restarts:
+  Meshtastic prints its boot banner (`S:B:...`) as plain serial text, which arrives without the device log setting, and a
+  restarted gateway sends nothing to a client until it handshakes again. On 24 October 2026 both T3 gateways on 2.8.2
+  restarted about hourly (a Bluetooth controller assert in ESP-IDF, `bt.c`, on the stock board too); gateways now run with
+  Bluetooth off, which they do not need. Health shows `reconnects`, `last_packet_age_s`,
   `last_reconnect_reason` and `last_text_age_s`. Records the gateway did not keep while the link was dead are lost (a stock
   gateway keeps 8; a store-and-forward gateway keeps them, above).
 - **Alerts to the mesh (optional).** With a responder key the bridge listens to the alert stream and
@@ -165,7 +169,7 @@ Setting `STOZHER_RESPONDER_KEY` also relays alerts to the mesh (below).
 
 - **Device log (diagnosis).** `--device-log FILE` (the kit uses `~/.local/state/stozher/device-main.log` and
   `device-2.log`) appends the gateway's own log lines. They arrive only when the radio has
-  `security.debug_log_api_enabled` set, which is off by default. Lines that could hold a position or key are dropped
+  `security.debug_log_api_enabled` set, which is off by default; boot and crash text arrives without it. Lines that could hold a position or key are dropped
   before writing; the file is moved to `.1` at 50 MB.
 
 ## Health

@@ -21,6 +21,10 @@ log = logging.getLogger("stozher.mesh")
 # Device log lines that could carry a position or key material are never written (docs/mesh.md, device log).
 _PRIVATE = re.compile(r"lat|lon|posit|psk|key|secret|passw", re.I)
 DEVICE_LOG_MAX_BYTES = 50 * 1024 * 1024  # then the file is moved to <name>.1 and started again
+# Meshtastic's boot banner ("S:B:<hw>,<version>,..."), printed as plain serial text at every start, so it reaches the
+# client even with the device log setting off. After a restart the open port carries no packets until the client
+# handshakes again (seen with 2.8.2 gateways, Oct 2026).
+_BOOT_BANNER = re.compile(r"\bS:B:\d+,")
 
 TCP_PREFIX = "tcp:"
 TCP_DEFAULT_PORT = 4403  # Meshtastic's client API over the network
@@ -52,6 +56,8 @@ class MeshtasticRadio:
         # time.monotonic() of the last packet of any kind from the radio (the gateway's own telemetry, node info, ...):
         # the supervisor reopens a link that has gone completely quiet (app.py, quiet_after_s).
         self.last_packet_mono: float | None = None
+        # time.monotonic() when the radio was last seen starting up (its boot banner): the supervisor reopens the link.
+        self.restarted_mono: float | None = None
 
     @property
     def alive(self) -> bool:
@@ -66,8 +72,7 @@ class MeshtasticRadio:
         pub.subscribe(self._on_receive, "meshtastic.receive.text")
         pub.subscribe(self._on_any, "meshtastic.receive")
         pub.subscribe(self._on_lost, "meshtastic.connection.lost")
-        if self.device_log is not None:
-            pub.subscribe(self._on_log, "meshtastic.log.line")
+        pub.subscribe(self._on_log, "meshtastic.log.line")
         if tcp is not None:
             from meshtastic.tcp_interface import TCPInterface  # GPL-3.0, imported on use
 
@@ -98,13 +103,13 @@ class MeshtasticRadio:
             self.last_packet_mono = time.monotonic()
 
     def _on_log(self, line: str = "", interface: Any = None) -> None:
-        """The gateway's own log (needs `security.debug_log_api_enabled` on the radio), for diagnosing the radio."""
-        if (
-            interface is not self._iface
-            or self.device_log is None
-            or not line
-            or _PRIVATE.search(line)
-        ):
+        """The gateway's own log: its boot banner marks a restart; with `device_log` the lines are kept for diagnosis
+        (all of them need `security.debug_log_api_enabled` on the radio, boot text arrives without it)."""
+        if interface is not self._iface or not line:
+            return
+        if _BOOT_BANNER.search(line):
+            self.restarted_mono = time.monotonic()
+        if self.device_log is None or _PRIVATE.search(line):
             return
         try:
             path = self.device_log
@@ -160,7 +165,6 @@ class MeshtasticRadio:
             pub.unsubscribe(self._on_receive, "meshtastic.receive.text")
             pub.unsubscribe(self._on_any, "meshtastic.receive")
             pub.unsubscribe(self._on_lost, "meshtastic.connection.lost")
-            if self.device_log is not None:
-                pub.unsubscribe(self._on_log, "meshtastic.log.line")
+            pub.unsubscribe(self._on_log, "meshtastic.log.line")
         except Exception:
             pass

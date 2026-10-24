@@ -22,9 +22,10 @@ class Clocks:
 
 
 class PacketRadio(FakeRadio):
-    """A radio that reports its last packet of any kind, as MeshtasticRadio does."""
+    """A radio that reports its last packet of any kind and its last restart, as MeshtasticRadio does."""
 
     last_packet_mono: float | None = None
+    restarted_mono: float | None = None
 
 
 def supervisor(clocks: Clocks, quiet_after_s: float, radio: FakeRadio) -> RadioSupervisor:
@@ -56,6 +57,27 @@ def test_no_packet_at_all_for_the_quiet_time_reopens_the_link_once() -> None:
     assert reason is not None and "no packet of any kind" in reason
     sup.reopen(reason)
     assert sup.reconnects == 1 and not sup.alive
+
+
+def test_a_restarted_radio_is_reopened_once_it_has_finished_booting() -> None:
+    clocks = Clocks()
+    radio = PacketRadio()
+    sup = supervisor(clocks, 2700, radio)
+    clocks.run(600)
+    radio.restarted_mono = clocks.mono  # boot banner on the open port
+    clocks.run(5)
+    assert sup.stale_reason() is None  # still booting
+    clocks.run(10)
+    assert sup.stale_reason() == "the radio restarted"
+
+
+def test_a_banner_from_before_the_connect_is_not_a_restart() -> None:
+    clocks = Clocks()
+    radio = PacketRadio()
+    radio.restarted_mono = clocks.mono - 1  # printed while the port was being opened
+    sup = supervisor(clocks, 2700, radio)
+    clocks.run(600)
+    assert sup.stale_reason() is None
 
 
 def test_quiet_detection_is_off_with_zero_or_for_radios_that_do_not_report_packets() -> None:
@@ -102,18 +124,29 @@ def test_every_packet_counts_as_life_and_the_device_log_drops_private_lines(
         "DEBUG | position lat=43.1 lon=27.9",
         "WARN | ToPhone queue full",
         "psk set",
+        "INFO  | ??:??:?? 0 S:B:3,2.8.2.aa40522,tlora-v2-1-1_6,git@github.com:meshtastic/firmware",
     ]:
         pub["meshtastic.log.line"](line=line, interface=r._iface)
     pub["meshtastic.log.line"](line="from another radio", interface=object())
     text = log.read_text()
     assert "Lost phone connection" in text and "ToPhone queue full" in text
     assert "lat=" not in text and "psk" not in text and "another radio" not in text
+    assert r.restarted_mono is not None
     r.close()
     assert "meshtastic.log.line" not in pub
 
 
-def test_without_a_device_log_nothing_is_written(pub, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+def test_without_a_device_log_nothing_is_written_but_restarts_are_seen(
+    pub, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.chdir(tmp_path)
     r = MeshtasticRadio("/dev/serial/by-id/x")
     r.start(lambda m: None)
-    assert "meshtastic.log.line" not in pub
+    pub["meshtastic.log.line"](line="Lost phone connection", interface=r._iface)
+    assert r.restarted_mono is None
+    pub["meshtastic.log.line"](
+        line="S:B:3,2.8.2.aa40522,tlora-v2-1-1_6,git@github.com:x", interface=r._iface
+    )
+    assert r.restarted_mono is not None and list(tmp_path.iterdir()) == []
     r.close()
+    assert "meshtastic.log.line" not in pub

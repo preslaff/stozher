@@ -38,6 +38,8 @@ class RadioSupervisor:
       (`last_packet_mono`). A gateway sends its own telemetry and relays node info every ~30 min, so total silence means
       the client link is dead even though the port is open (seen with a 2.8.2 gateway, Oct 2026). Reopening
       re-handshakes the client API, and a store-and-forward gateway then hands over what it kept.
+    - `restart_settle_s` after the radio was seen restarting (`restarted_mono`, its boot banner), without waiting for
+      the quiet time: a restarted gateway sends nothing to a client that has not handshaken again.
     Reopening a healthy link costs a second.
     """
 
@@ -51,8 +53,10 @@ class RadioSupervisor:
         mono: Callable[[], float] = time.monotonic,
         boot: Callable[[], float] = _boot_clock,
         quiet_after_s: float = 45 * 60.0,
+        restart_settle_s: float = 15.0,
     ) -> None:
         self.factory, self.retry_s = factory, retry_s
+        self.restart_settle_s = restart_settle_s
         self.stale_after_s, self.resume_gap_s = stale_after_s, resume_gap_s
         self.quiet_after_s = quiet_after_s
         self._connected_mono = mono()
@@ -92,6 +96,12 @@ class RadioSupervisor:
             return f"the machine slept for about {round(slept)} s"
         if self.stale_after_s > 0 and boot - self._last_rx > self.stale_after_s:
             return f"no text from the radio for {round(boot - self._last_rx)} s"
+        restarted = getattr(self.radio, "restarted_mono", None)
+        # A banner seen while connecting (restarted < _connected_mono) is that start-up, not a later restart.
+        if restarted is not None and restarted > self._connected_mono:
+            if mono - restarted >= self.restart_settle_s:
+                return "the radio restarted"
+            return None  # let it finish booting first
         quiet = self.last_packet_age_s
         if self.quiet_after_s > 0 and quiet is not None and quiet > self.quiet_after_s:
             return f"no packet of any kind from the radio for {round(quiet)} s"
