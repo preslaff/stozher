@@ -18,15 +18,17 @@ Built for the 12th CASSINI Hackathon (Challenge #1). Civil use only: situation, 
 | Core library | `packages/stozher_core` | packet codec and crypto with golden vectors, trust model, signed acknowledgements |
 | API | `services/api` | FastAPI under `/v1`: ingest, nodes, events, hotspots, trust grid and routes, alerts (SSE), hazards, keys, webhooks |
 | Worker | `services/worker` | job queue, hotspots, source localization, H3 trust grid, alert rules |
-| Mesh bridge | `services/mesh_bridge` | Meshtastic gateway to the API, signed acks back to nodes |
+| Mesh bridge | `services/mesh_bridge` | Meshtastic gateway (USB or Wi-Fi) to the API, signed acks back to nodes; reopens a link that went stale, quiet or whose gateway restarted |
 | Simulator | `services/simulator` | data-only scenarios; everything it makes is labelled SIM |
 | Assistant (optional) | `services/assistant` | text questions answered from read-only API tools; never in the alert path |
 | Dashboard | `web/dashboard` | React, Vite, MapLibre; static build, works offline |
-| Firmware | `firmware/` | witness node (ESP32-S3), host-tested codec and detection rules |
-| Field kit | `infra/kit`, `tools/kit` | one command to run the stack on a laptop; offline bundle and installer |
+| Firmware | `firmware/node` | witness node (ESP32-S3), host-tested codec and detection rules, one or two mesh radios (one per LoRa band); records kept and resent until acked |
+| Meshtastic fork | `firmware/tbeam` | STOZHER inside Meshtastic on a T-Beam (GPS tap, witness records) and a store-and-forward gateway that keeps records in flash for the next bridge |
+| Field kit | `infra/kit`, `tools/kit` | one command to run the stack on a laptop, optionally with a second gateway on another band; holds a sleep lock while it runs; offline bundle and installer |
 
 Contracts live in `docs/`: `packet.md`, `api.md`, `trust.md`, `control.md`, `mesh.md`, `hazards.md`, `access.md`, `assistant.md`,
-`field-kit.md`; `decentralised-mesh.md` is a design proposal (not built). Working rules and architecture are in `CLAUDE.md`; every library, tool, model and dataset is listed in `DECLARATIONS.md`.
+`firmware.md`, `field-kit.md`, `scenario.md`. `decentralised-mesh.md` is a design note: steps 0, 0b and 3 are built (sleep lock and link
+reopen, store-and-forward gateway, nodes resend until acked), the rest are proposals. Working rules and architecture are in `CLAUDE.md`; every library, tool, model and dataset is listed in `DECLARATIONS.md`.
 
 ## Principles
 
@@ -45,10 +47,12 @@ Needs Linux, Python 3.12 with [`uv`](https://docs.astral.sh/uv/), Node with `pnp
 git clone git@github.com:preslaff/stozher.git && cd stozher
 make kit-init          # fills missing secrets in infra/.env (git-ignored, never printed)
 make kit-build         # builds the dashboard
-# optional: put MESH_PORT=/dev/serial/by-id/<gateway> in infra/kit/kit.env (see docs/field-kit.md)
+# optional: put MESH_PORT=/dev/serial/by-id/<gateway> in infra/kit/kit.env (see docs/field-kit.md);
+#           MESH_PORT_2 (and MESH_NAME_2, default 433) adds a gateway on the other LoRa band
 make kit               # API + worker + mesh bridge, dashboard at http://<this machine>:8000/
 ASSISTANT=on make kit  # same, with the optional assistant
 make kit-doctor        # checks the setup and prints what is missing
+make kit-stop          # stops the kit (or Ctrl-C)
 ```
 
 Sign in with an API key for your role. Create one with
@@ -79,6 +83,7 @@ used only if the operator sets it up in `infra/.env`. See `docs/assistant.md`.
 ```
 make test              # ruff, mypy, pytest (including golden vectors and the assistant evaluation set), dashboard lint and tests
 make fw-test           # firmware codec and detection tests on the host, no hardware needed
+make sim-dualband      # a virtual dual-band node through two simulated bridges (needs a running API)
 make assistant-eval    # the evaluation questions against a running local model (not part of make test)
 ```
 
@@ -89,11 +94,19 @@ docs/          contracts and guides
 packages/      stozher_core
 services/      api, worker, mesh_bridge, simulator, assistant, kineis_adapter
 web/dashboard/ the React dashboard
-firmware/      witness node firmware
+firmware/      node (witness firmware), tbeam (Meshtastic fork patches and boards), lotus_fallback
 infra/         .env.example, field-kit scripts
 tools/         bundle, basemap and other helpers
 tests/vectors/ golden packet vectors shared by Python and C++
 ```
+
+## On real hardware
+
+Running on real data (Oct 2026): a LilyGO T-Beam (NEO-6M) with the fork as a witness node, and two LilyGO T3 gateways with the
+store-and-forward build or stock Meshtastic, one on EU_868 and one on EU_433, each with its own bridge in the kit. Records arrive live,
+signed acks reach the node and are verified there, and records held during a kit outage are handed over on reconnect. Gateways run with
+Bluetooth off: Meshtastic 2.8.2 on the T3 restarted about hourly from a Bluetooth controller assert (`docs/mesh.md`). Only u-blox 6
+receivers have been checked on hardware.
 
 ## Not built yet
 
