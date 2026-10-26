@@ -41,14 +41,27 @@ struct Bench {
     base.spoof_state = 1;
     base.sensor_stationary = true;
   }
+  uint32_t expected_utc() const { return base.utc_s + (now - 1000) / 1000; }
+  // The last record that went to the modem, decoded.
+  Record last_sent() {
+    const char* h = modem.last_command() + 17;
+    uint8_t raw[kMaxLen], m[16];
+    size_t n = 0;
+    from_hex(h, strcspn(h, "\r\n"), raw, sizeof raw, n);
+    for (int i = 0; i < 16; i++) m[i] = (uint8_t)i;
+    Record back;
+    TEST_ASSERT_EQUAL(Status::Ok, decode(raw, n, 1, m, back));
+    return back;
+  }
   ~Bench() {
     delete node;
     delete tx;
   }
   // One second: the epoch arrives, the loop ticks in 100 ms steps.
-  Verdict second(const Epoch& e_in, bool receiver_hit_by_own_tx = false) {
+  // `no_time`: the fix is there but the receiver gave no valid date/time this second (utc_s 0).
+  Verdict second(const Epoch& e_in, bool receiver_hit_by_own_tx = false, bool no_time = false) {
     Epoch e = e_in;
-    e.utc_s = base.utc_s + (now - 1000) / 1000;
+    e.utc_s = no_time ? 0 : base.utc_s + (now - 1000) / 1000;
     e.mono_ms = now;  // the epoch builder stamps this in the real loop
     if (receiver_hit_by_own_tx && tx->blanked(now)) {  // physics: our burst really does upset the receiver
       e.cn0_mean = 20;
@@ -228,6 +241,61 @@ void test_the_node_does_not_restart_the_receiver_in_a_noisy_band() {
   TEST_ASSERT_EQUAL(kJamming, b.node->current_class());
 }
 
+// A fix without a valid time before any time since boot: nothing is sent (it would carry timestamp 0, which the cloud
+// rejects). The first second with a time sends the heartbeat with that time.
+void test_nothing_leaves_with_timestamp_zero() {
+  Bench b;
+  for (int i = 0; i < 20; i++) b.second(b.base, false, /*no_time=*/true);
+  TEST_ASSERT_EQUAL(0, b.modem.commands);
+  b.second(b.base);
+  b.second(b.base);
+  TEST_ASSERT_EQUAL(1, b.modem.commands);
+  TEST_ASSERT_TRUE(b.last_sent().timestamp != 0);
+}
+
+// After a good time, a second without one gets the node's own clock: an event in such a gap has the right time.
+void test_a_gap_in_the_receivers_time_is_bridged_by_the_nodes_clock() {
+  Bench b;
+  for (int i = 0; i < 40; i++) b.second(b.base);
+  uint32_t first = b.expected_utc();
+  Epoch hit = b.base;
+  hit.cn0_mean = 25;
+  hit.jam_ind = 40;
+  for (int i = 0; i < 20; i++) b.second(hit, false, /*no_time=*/true);
+  TEST_ASSERT_EQUAL(kJamming, b.node->current_class());
+  Record r = b.last_sent();
+  TEST_ASSERT_EQUAL(kJamming, r.event_class);
+  TEST_ASSERT_TRUE(r.timestamp >= first && r.timestamp < b.expected_utc());
+}
+
+// A heartbeat after a gap in the time repeats the last epoch with a fix, with the bridged time, never 0.
+void test_a_heartbeat_in_a_time_gap_has_a_time() {
+  Bench b;
+  b.second(b.base);
+  for (int i = 0; i < 3700; i++) b.second(b.base, false, /*no_time=*/true);
+  TEST_ASSERT_EQUAL(2, b.modem.commands);  // the boot heartbeat and the hourly one
+  Record r = b.last_sent();
+  TEST_ASSERT_EQUAL(kHeartbeat, r.type);
+  TEST_ASSERT_TRUE(r.timestamp > b.base.utc_s + 3500);
+}
+
+// A class change seen before the first time since boot waits for one, then goes out with it.
+void test_a_change_before_the_first_time_waits_for_it() {
+  Bench b;
+  for (int i = 0; i < 40; i++) b.second(b.base, false, /*no_time=*/true);
+  Epoch hit = b.base;
+  hit.cn0_mean = 25;
+  hit.jam_ind = 40;
+  for (int i = 0; i < 10; i++) b.second(hit, false, /*no_time=*/true);
+  TEST_ASSERT_EQUAL(kJamming, b.node->current_class());
+  TEST_ASSERT_EQUAL(0, b.modem.commands);
+  for (int i = 0; i < 10; i++) b.second(hit);
+  TEST_ASSERT_TRUE(b.modem.commands >= 1);
+  Record r = b.last_sent();
+  TEST_ASSERT_EQUAL(kJamming, r.event_class);
+  TEST_ASSERT_TRUE(r.timestamp != 0);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_a_healthy_node_sends_one_heartbeat_and_no_events);
@@ -240,5 +308,9 @@ int main() {
   RUN_TEST(test_the_heartbeat_waits_for_a_position);
   RUN_TEST(test_a_dead_store_stops_events_but_never_the_detection);
   RUN_TEST(test_test_mode_marks_every_record_as_a_test_record);
+  RUN_TEST(test_nothing_leaves_with_timestamp_zero);
+  RUN_TEST(test_a_gap_in_the_receivers_time_is_bridged_by_the_nodes_clock);
+  RUN_TEST(test_a_heartbeat_in_a_time_gap_has_a_time);
+  RUN_TEST(test_a_change_before_the_first_time_waits_for_it);
   return UNITY_END();
 }

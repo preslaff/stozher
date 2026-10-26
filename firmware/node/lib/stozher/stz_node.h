@@ -65,10 +65,20 @@ class Node {
   mesh::Link* mesh2_;
   mesh::Fanout fanout_;
 #endif
+#ifndef STZ_NO_TIME_HOLD
+  void hold_time(Epoch& e, uint32_t now_ms);
+#endif
+
   Epoch last_epoch_;
   bool have_epoch_ = false;
   bool test_mode_ = false;
-  uint8_t class_ = kNormal;
+  uint8_t class_ = kNormal;       // the detector's current class
+#ifndef STZ_NO_TIME_HOLD
+  uint8_t sent_class_ = kNormal;  // the class of the last event or status change submitted
+  bool change_pending_ = false;   // a class change not yet submitted (no valid time yet)
+  uint32_t clock_utc_ = 0, clock_ms_ = 0;  // the last receiver time with a fix, and when it came
+  bool have_clock_ = false;
+#endif
 #ifndef STZ_NO_PER_SV
   ReceiverWatch watch_{RecoverConfig{}};
   bool restart_pending_ = false;
