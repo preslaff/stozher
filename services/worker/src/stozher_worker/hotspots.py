@@ -55,6 +55,9 @@ class Hotspot:
     event_ids: tuple[uuid.UUID, ...]
     node_count: int
     sim: bool
+    node_ids: tuple[
+        int, ...
+    ] = ()  # the witnesses, for the alert rules (never exposed: hotspots are about places)
 
 
 def _kind(e: EventPoint) -> str | None:
@@ -217,6 +220,7 @@ def build_hotspots(
                 event_ids=tuple(e.id for e in group),
                 node_count=nodes,
                 sim=any(e.sim for e in group),
+                node_ids=tuple(sorted({e.node_id for e in group})),
             )
         )
     return sorted(out, key=lambda h: (h.first_seen, str(h.id)))

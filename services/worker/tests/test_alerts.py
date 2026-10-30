@@ -1,7 +1,8 @@
+import dataclasses
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from stozher_worker.alerts import Previous, derive_alerts
+from stozher_worker.alerts import SINGLE_WITNESS_HOLD, Previous, derive_alerts
 from stozher_worker.hotspots import Hotspot, ellipse_polygon
 
 T = datetime(2026, 11, 28, 10, 0, tzinfo=UTC)
@@ -64,3 +65,50 @@ def test_a_closed_hotspot_that_resumes_alerts() -> None:
     h = hs(severity=0.5)
     (a,) = derive_alerts({h.id: Previous("closed", 0.5)}, [h])
     assert a.kind == "hotspot_resumed" and a.level == "warning"
+
+
+def lone(h: Hotspot) -> Hotspot:
+    """The same hotspot heard by one witness only (node 7)."""
+    return dataclasses.replace(h, node_count=1, node_ids=(7,))
+
+
+MIN = timedelta(minutes=1)
+
+
+def test_two_witnesses_alert_at_once() -> None:
+    assert derive_alerts({}, [hs()], T, {})[0].kind == "hotspot_new"
+
+
+def test_one_witness_waits_for_the_hold() -> None:
+    h = lone(hs())
+    assert derive_alerts({}, [h], T + SINGLE_WITNESS_HOLD - MIN, {}) == []
+    (a,) = derive_alerts({h.id: Previous("active", 0.5, False)}, [h], T + SINGLE_WITNESS_HOLD, {})
+    assert a.kind == "hotspot_new"  # still adverse after five minutes: announced now
+
+
+# a4b0 indoors, 28 Oct 2026: a minute of the receiver's warning, then normal again. No alert, ever.
+def test_one_witness_that_reports_normal_within_the_hold_is_a_blip() -> None:
+    h = lone(hs())
+    ended = {7: [T + 90 * timedelta(seconds=1)]}
+    later = T + timedelta(minutes=20)
+    assert derive_alerts({}, [h], later, ended) == []
+    assert derive_alerts({}, [h], later, {8: [T + MIN]}) != []  # another node's normal says nothing
+
+
+def test_an_unannounced_hotspot_does_not_escalate_clear_or_resume() -> None:
+    h = lone(hs(severity=0.85))
+    quiet = Previous("active", 0.5, False)
+    blip = {7: [T + MIN]}
+    now = T + timedelta(minutes=20)
+    assert derive_alerts({h.id: quiet}, [h], now, blip) == []
+    closed = lone(hs(state="closed", hid=h.id))
+    assert derive_alerts({h.id: quiet}, [closed], now, blip) == []
+    assert derive_alerts({h.id: Previous("closed", 0.5, False)}, [h], now, blip) == []
+
+
+def test_a_second_witness_confirms_a_waiting_hotspot() -> None:
+    h = lone(hs())
+    assert derive_alerts({}, [h], T + MIN, {}) == []
+    both = dataclasses.replace(h, node_count=2, node_ids=(7, 8))
+    (a,) = derive_alerts({h.id: Previous("active", 0.5, False)}, [both], T + 2 * MIN, {})
+    assert a.kind == "hotspot_new"

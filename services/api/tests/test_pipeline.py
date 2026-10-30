@@ -3,6 +3,7 @@
 import httpx
 from sqlalchemy import func, select
 from stozher_api.models import Job
+from stozher_core.record import EventClass, MsgType
 from stozher_worker.main import HANDLERS
 from stozher_worker.queue import run_pending
 
@@ -158,11 +159,14 @@ async def test_alerts_are_raised_once_listed_and_streamed(client):  # type: igno
     async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
         state = StreamState(last_id=0, last_refresh=None)
         assert await poll(s, state) == []  # nothing yet; first look records the baseline
-    first = rec(seq=1, confidence=30, lat_e7=VARNA[0], lon_e7=VARNA[1])
+    # one witness: announced once its report has stood for five minutes without a normal record after it
+    first = rec(seq=1, ts=now_ts() - 600, confidence=30, lat_e7=VARNA[0], lon_e7=VARNA[1])
     await post(client, packet(first, a), ext="a")
     await _run_worker(client)
     await post(
-        client, packet(rec(seq=2, confidence=30, lat_e7=VARNA[0], lon_e7=VARNA[1]), a), ext="a"
+        client,
+        packet(rec(seq=2, ts=now_ts() - 540, confidence=30, lat_e7=VARNA[0], lon_e7=VARNA[1]), a),
+        ext="a",
     )
     await _run_worker(client)  # a second report lifts severity over 0.7: escalation
     async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
@@ -327,3 +331,22 @@ async def test_situation_summarises_hotspots_area_and_trust_without_raw_records(
     assert far["hotspots"]["active"] == 0 and far["affected_area"] is None
     bad = await client.get("/v1/situation?bbox=1,2,3", headers=hdr(client, "responder"))
     assert bad.status_code == 422
+
+
+async def test_one_witness_that_reports_normal_again_within_minutes_raises_no_alert(client):  # type: ignore[no-untyped-def]
+    a = await _node(client, "a")
+    spot = dict(lat_e7=VARNA[0], lon_e7=VARNA[1])
+    await post(client, packet(rec(seq=1, ts=now_ts() - 900, confidence=30, **spot), a), ext="a")
+    end = rec(
+        seq=2,
+        ts=now_ts() - 840,
+        type=MsgType.HEARTBEAT,
+        event_class=EventClass.NORMAL,
+        confidence=0,
+        rx_jamming=False,
+        **spot,
+    )
+    await post(client, packet(end, a), ext="a")
+    await _run_worker(client)
+    assert (await client.get("/v1/hotspots", headers=hdr(client, "responder"))).json()["items"]
+    assert (await client.get("/v1/alerts", headers=hdr(client, "responder"))).json()["items"] == []

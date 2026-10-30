@@ -95,10 +95,24 @@ async def recompute(
     )
     cells = build_cells([p for p in points if now - p.observed_at <= TRUST_LOOKBACK], now)
 
+    announced = set(
+        (
+            await session.execute(
+                select(Alert.hotspot_id).where(
+                    Alert.kind.in_(("hotspot_new", "hotspot_resumed")),
+                    Alert.hotspot_id.is_not(None),
+                )
+            )
+        ).scalars()
+    )
     previous = {
-        r.id: Previous(r.state, r.severity)
+        r.id: Previous(r.state, r.severity, r.id in announced)
         for r in (await session.execute(select(Hotspot.id, Hotspot.state, Hotspot.severity))).all()
     }
+    normal_at: dict[int, list[datetime]] = defaultdict(list)
+    for p in loaded:  # with or without a fix: a status record may come without one
+        if p.event_class == 0:
+            normal_at[p.node_id].append(p.observed_at)
     await session.execute(delete(HotspotEvent))
     await session.execute(delete(Hotspot))
     await session.execute(delete(TrustCell))
@@ -141,7 +155,7 @@ async def recompute(
                 sim=c.sim,
             )
         )
-    new_alerts = derive_alerts(previous, hotspots)
+    new_alerts = derive_alerts(previous, hotspots, now, normal_at)
     for a in new_alerts:  # unique dedupe key: each (kind, hotspot) alerts once
         await session.execute(
             pg_insert(Alert)

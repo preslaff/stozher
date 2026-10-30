@@ -236,8 +236,12 @@ Two ways, both deterministic and independent of the assistant:
   id), `alert` (the alert JSON; `id` is the cursor, resume with `Last-Event-ID` or `?after=`) and
   `refresh` (analytics finished a run: reload hotspots, trust and events). Browsers' `EventSource`
   cannot send `X-API-Key`; use `fetch` streaming. Alerts are raised by deterministic rules in
-  `services/worker/alerts.py`: `hotspot_new`, `hotspot_escalated` (severity crosses 0.7) and
-  `hotspot_cleared`, each once per hotspot.
+  `services/worker/alerts.py`: `hotspot_new`, `hotspot_escalated` (severity crosses 0.7),
+  `hotspot_cleared` and `hotspot_resumed`, each once per hotspot. A hotspot is announced
+  (`hotspot_new`) only once confirmed: two or more independent witnesses at once, or one witness
+  whose report stands for 5 minutes without a normal record from it (a minute-long blip from one
+  node stays a hotspot in `/v1/hotspots` but raises no alert). The other three follow only
+  announced hotspots.
 - **Webhooks**: `POST /v1/webhooks` with `url` (https), `events` (list of `alert`,
   `hotspot`, `trust_change`, `route`), optional `bbox`, and `min_level`. The response returns a
   `secret` once. Deliveries are JSON `POST`s with headers `X-Stozher-Event`,
