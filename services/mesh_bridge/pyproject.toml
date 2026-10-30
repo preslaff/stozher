@@ -4,7 +4,7 @@ version = "0.0.0"
 description = "Bridge between a Meshtastic gateway radio and the STOZHER API"
 requires-python = ">=3.12"
 # The Meshtastic library is GPL-3.0, so this package is GPL-3.0-or-later and talks to the rest of
-# the platform only over HTTP (the public /v1 API). Nothing else imports it.
+# the platform only over HTTP (the public /v1 API). Nothing else imports it at run time (only the API tests do).
 license = "GPL-3.0-or-later"
 dependencies = ["httpx"]
 

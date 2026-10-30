@@ -357,8 +357,8 @@ change do not repeat alerts. Alert payload:
 ```
 
 The stream accepts `GET /v1/stream/alerts?route_id=<id>` and the list `GET /v1/alerts?route_id=<id>`
-to receive only that route's alerts; alerts carry `route_id`. Mesh text alerts use the compact `STZ1:` convention and carry route name, state and
-segment index only.
+to receive only that route's alerts; alerts carry `route_id`. The mesh bridge relays warning and critical alerts as plain text,
+`STOZHER <LEVEL>: <message>` (at most 200 bytes, `docs/mesh.md`); a route alert's message names the route, the worst segment (index and km) and its state.
 
 ### Other operations
 
