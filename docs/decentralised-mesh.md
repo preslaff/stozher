@@ -179,3 +179,4 @@ deployment). Peer kits authenticate each other with system keys labelled by orga
 5. Kit credential lifetime while disconnected (`docs/access.md` D7).
 
 **Out of scope:** new radio hardware, the Kinéis adapter, the Android witness app, peer discovery, synchronising over LoRa.
+A second mesh technology (MeshCore) is evaluated separately in `docs/meshcore.md` (not built).
