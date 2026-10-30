@@ -185,14 +185,71 @@ void test_a_slow_decline_is_not_absorbed_into_the_baseline() {
   TEST_ASSERT_TRUE(detected < 150);  // 6 dB down at 60 s, then the 60 s a loss must last  // the baseline did not follow the signal down
 }
 
-void test_the_receiver_jamming_flag_alone_is_enough() {
+void test_the_receiver_jamming_flag_alone_is_jamming_once_it_lasts() {
   Recorder r(fixed_cfg());
   r.run(30);
   r.tmpl.jam_state = 2;
-  int first = r.run(10);
-  TEST_ASSERT_EQUAL(2, first);
+  TEST_ASSERT_EQUAL(-1, r.run(100));  // healthy signals, flat noise: not yet
+  int first = r.run(40);
+  TEST_ASSERT_EQUAL(19, first);       // 120 epochs of the flag alone
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
   TEST_ASSERT_TRUE(r.last.confidence >= 18);  // the receiver agrees: higher confidence
+}
+
+// a4b0 indoors, 28 Oct 2026: the NEO-6M said warning and critical for under a minute while the satellites were weak but
+// steady (drop 1-3 dB, jamming indicator 3, noise flat). Twice it raised a jamming event and a hotspot.
+void test_a_short_receiver_flag_with_steady_weak_signals_is_not_jamming() {
+  Recorder r(fixed_cfg());
+  r.tmpl.cn0_mean = 20;
+  r.tmpl.jam_ind = 3;
+  r.run(120, 0);
+  r.tmpl.cn0_mean = 18;
+  r.tmpl.jam_state = 3;
+  r.run(20, 0);
+  r.tmpl.jam_state = 2;
+  r.run(30, 0);
+  r.tmpl.jam_state = 1;
+  r.run(30, 0);
+  TEST_ASSERT_EQUAL(0, r.changes);
+}
+
+void test_a_critical_receiver_flag_with_a_real_drop_is_jamming_at_once() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 33;
+  r.tmpl.jam_state = 3;
+  TEST_ASSERT_EQUAL(0, r.run(5, 0));
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+}
+
+// a4b0 indoors, 27-28 Oct 2026: with no satellites at all the loss of reception was raised, then cleared after 30 s,
+// then raised again a minute later, all day. One epoch of the receiver's warning restarted the loss count.
+void test_a_flickering_receiver_warning_does_not_end_a_loss_of_reception() {
+  Recorder r(fixed_cfg());
+  r.run(120, 0);
+  r.tmpl.sats_tracked = 0;
+  r.tmpl.cn0_mean = 0;
+  r.tmpl.fix_ok = false;
+  for (int i = 0; i < 20; i++) {
+    r.run(89, 0);
+    r.tmpl.jam_state = 2;
+    r.run(1, 0);
+    r.tmpl.jam_state = 1;
+  }
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
+  TEST_ASSERT_EQUAL(1, r.changes);  // raised once, never flipped back
+}
+
+// Noise that lasts during a loss is still jamming.
+void test_noise_that_lasts_during_a_loss_of_reception_is_jamming() {
+  Recorder r(fixed_cfg());
+  r.run(120, 0);
+  r.tmpl.cn0_mean = 24;
+  r.run(120, 0);
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
+  r.tmpl.jam_ind = 40;
+  r.run(5, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
 }
 
 void test_no_cn0_rule_fires_before_a_baseline_exists() {
@@ -585,10 +642,10 @@ void test_a_cold_receiver_may_warn_and_step_its_clock_without_raising_anything()
 
 void test_a_flag_that_persists_past_the_holdoff_is_still_reported() {
   Recorder r(fixed_cfg());
-  r.tmpl.jam_state = 2;  // booted into real jamming
-  int first = r.run(60);
-  TEST_ASSERT_TRUE(first >= 30);   // not during acquisition
-  TEST_ASSERT_TRUE(first <= 34);   // but soon after it
+  r.tmpl.jam_state = 2;  // booted into real jamming: no baseline to compare with, so the flag must last
+  int first = r.run(200);
+  TEST_ASSERT_TRUE(first >= 30 + 118);  // not during acquisition, then two minutes of the flag alone
+  TEST_ASSERT_TRUE(first <= 30 + 122);
   TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
 }
 
@@ -613,7 +670,11 @@ int main() {
   RUN_TEST(test_a_drop_does_not_move_the_baseline);
   RUN_TEST(test_total_loss_of_signals_with_the_noise_up_is_jamming);
   RUN_TEST(test_a_slow_decline_is_not_absorbed_into_the_baseline);
-  RUN_TEST(test_the_receiver_jamming_flag_alone_is_enough);
+  RUN_TEST(test_the_receiver_jamming_flag_alone_is_jamming_once_it_lasts);
+  RUN_TEST(test_a_short_receiver_flag_with_steady_weak_signals_is_not_jamming);
+  RUN_TEST(test_a_critical_receiver_flag_with_a_real_drop_is_jamming_at_once);
+  RUN_TEST(test_a_flickering_receiver_warning_does_not_end_a_loss_of_reception);
+  RUN_TEST(test_noise_that_lasts_during_a_loss_of_reception_is_jamming);
   RUN_TEST(test_no_cn0_rule_fires_before_a_baseline_exists);
   RUN_TEST(test_the_receiver_spoofing_flag_is_spoofing_after_two_epochs);
   RUN_TEST(test_position_drift_of_a_stationary_fixed_node_is_spoofing);

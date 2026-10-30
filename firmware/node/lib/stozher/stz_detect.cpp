@@ -60,8 +60,9 @@ float Detector::drop_of(const Epoch& e) const {
 #ifndef STZ_NO_PER_SV
 // Is the receiver's noise floor up? Jamming raises it; a cover or a building lowers the signals and leaves it
 // alone. The receiver's own warning, the jamming indicator above its baseline, or the noise level above its baseline.
-bool Detector::noise_evidence(const Epoch& e) const {
-  if (e.jam_state >= 2) return true;
+bool Detector::noise_evidence(const Epoch& e) const { return e.jam_state >= 2 || measured_noise(e); }
+
+bool Detector::measured_noise(const Epoch& e) const {
   if (!aux_ready_) return false;
   return (float)e.jam_ind - jam_ind_base_ >= cfg_.jam_ind_rise || (float)e.noise - noise_base_ >= cfg_.noise_rise;
 }
@@ -117,15 +118,32 @@ void Detector::count_rules(const Epoch& e, uint8_t& now, float& drop_out) {
   // raised is held by the lower clear level whatever the noise says.
   bool l1_active = (mask_ & kRuleL1) != 0;
   bool noise = noise_evidence(e);
-  bool loss_cond = !j1_active && !noise && drop >= (l1_active ? cfg_.cn0_clear_db : cfg_.cn0_drop_db);
+  // Once raised, a loss is held by its clear level: one epoch of noise evidence (the receiver's warning flickers when
+  // it has no signal) must not restart its 60-epoch count, or a node indoors flips benign/normal every minute.
+  // Noise that lasts still raises J1 below, which ends the loss.
+  bool loss_cond = !j1_active && (l1_active || !noise) && drop >= (l1_active ? cfg_.cn0_clear_db : cfg_.cn0_drop_db);
   if (cn0_hit && !j1_active && !noise) cn0_hit = false;
   suspect_ = loss_cond && !l1_active;
   loss_n_ = loss_cond ? (uint16_t)(loss_n_ < 65535 ? loss_n_ + 1 : 65535) : 0;
   if (loss_n_ >= cfg_.loss_epochs) now |= kRuleL1;
 #endif
-  bool j1_hit = cn0_hit || (settled && e.jam_state >= 2);
+  // The receiver's own jamming flag counts at once only when the signals back it: a drop past the trigger, or the
+  // measured noise up. Alone it must last flag_alone_epochs (seen on a NEO-6M indoors: a minute of warning and
+  // critical with healthy noise and a 1-3 dB drop). A node that boots into jamming has no baseline and still reports it.
+  bool flag = settled && e.jam_state >= 2;
+#ifndef STZ_NO_PER_SV
+  bool backed = drop >= cfg_.cn0_drop_db || measured_noise(e);
+  flag_alone_n_ = (flag && !backed) ? (uint8_t)(flag_alone_n_ < 255 ? flag_alone_n_ + 1 : 255) : 0;
+  bool j1_hit = cn0_hit || (flag && backed);
   jam_n_ = j1_hit ? (uint8_t)(jam_n_ < 255 ? jam_n_ + 1 : 255) : 0;
-  if (jam_n_ >= cfg_.cn0_drop_epochs || (settled && e.jam_state >= 3)) now |= kRuleJ1;
+  if (jam_n_ >= cfg_.cn0_drop_epochs || (flag && backed && e.jam_state >= 3) || flag_alone_n_ >= cfg_.flag_alone_epochs)
+    now |= kRuleJ1;
+#else
+  // No room on the Leonardo (320 bytes short): the flag counts alone, as before rev 6. Its M10 is not the NEO-6M above.
+  bool j1_hit = cn0_hit || flag;
+  jam_n_ = j1_hit ? (uint8_t)(jam_n_ < 255 ? jam_n_ + 1 : 255) : 0;
+  if (jam_n_ >= cfg_.cn0_drop_epochs || (flag && e.jam_state >= 3)) now |= kRuleJ1;
+#endif
 
   // S3: receiver spoofing indicator.
   flag_n_ = (settled && e.spoof_state >= 2) ? (uint8_t)(flag_n_ < 255 ? flag_n_ + 1 : 255) : 0;

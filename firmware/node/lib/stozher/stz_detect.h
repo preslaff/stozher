@@ -13,8 +13,9 @@ namespace stz {
 // a recording always says which rule produced it. 1 mean-based J1; 2 + hysteresis; 3 + per-satellite drop and
 // a second sign for modest drops; 4 jamming needs noise evidence, a drop without it is
 // loss of reception (class 3, benign degradation); 5 the same rules, plus the node restarts a receiver that has no
-// fix for minutes in a clean band (stz_recover.h).
-constexpr uint8_t kDetectorRev = 5;
+// fix for minutes in a clean band (stz_recover.h); 6 the receiver's jamming flag needs a drop or measured noise to
+// count at once (alone it must last 2 minutes), and a raised loss of reception is not reset by one noisy epoch.
+constexpr uint8_t kDetectorRev = 6;
 
 enum Rule : uint8_t {
   kRuleJ1 = 1 << 0,  // C/N0 drop against the rolling baseline, or receiver jamming indicator
@@ -36,6 +37,7 @@ struct DetectConfig {
   uint8_t cn0_drop_epochs = 3;       // J1
   float cn0_clear_db = 3.0f;         // J1: once raised, held until the drop is below this (hysteresis); keep it above 0 and below cn0_drop_db
 #ifndef STZ_NO_PER_SV
+  uint8_t flag_alone_epochs = 120;   // J1: the receiver's jamming flag with neither a drop nor measured noise
   float jam_ind_rise = 10.0f;        // noise evidence: the receiver's jamming indicator above its baseline
   float noise_rise = 40.0f;          // noise evidence: noisePerMS above its baseline (not calibrated yet: see the epoch log)
   uint16_t loss_epochs = 60;         // L1: a drop without noise evidence must last this long before it is an event
@@ -93,6 +95,7 @@ class Detector {
 #ifndef STZ_NO_PER_SV
   void update_sv_baseline(const Epoch& e);
   bool noise_evidence(const Epoch& e) const;
+  bool measured_noise(const Epoch& e) const;  // the jamming indicator or noise level above its baseline
 #endif
 
   DetectConfig cfg_;
@@ -111,6 +114,7 @@ class Detector {
 #endif
 #ifndef STZ_NO_PER_SV
   uint16_t loss_n_ = 0;
+  uint8_t flag_alone_n_ = 0;
 #endif
   // baseline
   bool baseline_ready_ = false;
