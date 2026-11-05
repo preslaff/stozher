@@ -240,6 +240,118 @@ void test_a_flickering_receiver_warning_does_not_end_a_loss_of_reception() {
   TEST_ASSERT_EQUAL(1, r.changes);  // raised once, never flipped back
 }
 
+// a4b0 indoors, 31 Oct 2026, rev 6: five losses in ten minutes, each "back to normal" 30-140 s later, some normal
+// records with C/N0 0. One epoch with a satellite back near the baseline zeroed the loss count, the loss left the rules
+// for the 59 epochs it needs to rebuild, and 10 clean epochs ended it while the signals were gone again.
+void test_one_good_epoch_does_not_end_a_loss_of_reception() {
+  Recorder r(DetectConfig{});
+  r.tmpl.sensor_stationary = false;  // a T-Beam: no motion sensor
+  r.run(120, 0);
+  r.tmpl.sats_tracked = 0;
+  r.tmpl.cn0_mean = 0;
+  r.tmpl.fix_ok = false;
+  r.run(90, 0);
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
+  for (int i = 0; i < 10; i++) {
+    r.run(59, 0);
+    r.tmpl.sats_tracked = 1;
+    r.tmpl.cn0_mean = 41;
+    r.run(1, 0);
+    r.tmpl.sats_tracked = 0;
+    r.tmpl.cn0_mean = 0;
+  }
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
+  TEST_ASSERT_EQUAL(1, r.changes);  // raised once, never flipped back
+}
+
+// The same for jamming: one epoch near the baseline in a lasting drop with noise does not end the event.
+void test_one_good_epoch_does_not_end_jamming() {
+  Recorder r(fixed_cfg());
+  r.run(60, 0);
+  r.tmpl.cn0_mean = 30;
+  r.tmpl.jam_ind = 40;
+  r.run(10, 0);
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  for (int i = 0; i < 10; i++) {
+    r.run(5, 0);
+    r.tmpl.cn0_mean = 42;
+    r.run(1, 0);
+    r.tmpl.cn0_mean = 30;
+  }
+  TEST_ASSERT_EQUAL(kJamming, r.last.event_class);
+  TEST_ASSERT_EQUAL(1, r.changes);
+}
+
+// A loss still ends when the signals are back for good.
+void test_a_held_loss_of_reception_ends_when_the_signals_return() {
+  Recorder r(DetectConfig{});
+  r.tmpl.sensor_stationary = false;
+  r.run(120, 0);
+  r.tmpl.sats_tracked = 0;
+  r.tmpl.cn0_mean = 0;
+  r.tmpl.fix_ok = false;
+  r.run(120, 0);
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
+  r.tmpl.sats_tracked = 12;
+  r.tmpl.cn0_mean = 42;
+  r.tmpl.fix_ok = true;
+  r.run(15, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+  TEST_ASSERT_EQUAL(2, r.changes);
+}
+
+// a4b0, 5 Nov 2026: a fix 214 km away held 30 s (a spoofing event and its "back to normal" both placed there, 61
+// SPOOFED cells where no node is), then after 18 min back home (a second event). Now: one event, and every verdict
+// carries the node's own place.
+void test_a_jump_away_and_back_is_one_event_and_keeps_the_node_place() {
+  Recorder r(DetectConfig{});
+  r.tmpl.sensor_stationary = false;
+  r.run(120, 0);
+  TEST_ASSERT_TRUE(r.last.has_pos);
+  r.tmpl.lat_e7 = kLat + 20000000;  // 2 degrees north, about 222 km
+  r.run(30, 0);
+  TEST_ASSERT_EQUAL(kSpoofing, r.last.event_class);
+  TEST_ASSERT_EQUAL_INT32(kLat, r.last.lat_e7);
+  r.run(20, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+  TEST_ASSERT_EQUAL_INT32(kLat, r.last.lat_e7);  // the "back to normal" record too
+  r.tmpl.fix_ok = false;
+  r.run(18 * 60, 0);
+  TEST_ASSERT_FALSE(r.last.has_pos);  // no fix: the epoch's own (none)
+  r.tmpl.fix_ok = true;
+  r.tmpl.lat_e7 = kLat;
+  r.run(60, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+  TEST_ASSERT_EQUAL(2, r.changes);  // spoofing raised and cleared once; the return raised nothing
+  TEST_ASSERT_EQUAL_INT32(kLat, r.last.lat_e7);
+}
+
+// A node carried somewhere (or a wrong fix that lasts): the jump is the event, and the new position is the node's
+// place once it has held 10 minutes.
+void test_a_position_reached_by_a_jump_becomes_the_place_after_ten_minutes() {
+  Recorder r(DetectConfig{});
+  r.tmpl.sensor_stationary = false;
+  r.run(120, 0);
+  r.tmpl.lat_e7 = kLat + 20000000;
+  r.run(9 * 60, 0);
+  TEST_ASSERT_EQUAL_INT32(kLat, r.last.lat_e7);
+  r.run(2 * 60, 0);
+  TEST_ASSERT_EQUAL_INT32(kLat + 20000000, r.last.lat_e7);
+}
+
+// Driving moves the place with the fix: plausible motion is never held back.
+void test_driving_moves_the_place_with_the_fix() {
+  Recorder r(DetectConfig{});
+  r.tmpl.sensor_stationary = false;
+  r.run(120, 0);
+  for (int i = 0; i < 300; i++) {
+    r.tmpl.lat_e7 += 2250;  // about 25 m/s north
+    r.run(1, 0);
+  }
+  TEST_ASSERT_EQUAL(0, r.changes);
+  TEST_ASSERT_EQUAL_INT32(r.tmpl.lat_e7, r.last.lat_e7);
+}
+
 // Noise that lasts during a loss is still jamming.
 void test_noise_that_lasts_during_a_loss_of_reception_is_jamming() {
   Recorder r(fixed_cfg());
@@ -675,6 +787,12 @@ int main() {
   RUN_TEST(test_a_critical_receiver_flag_with_a_real_drop_is_jamming_at_once);
   RUN_TEST(test_a_flickering_receiver_warning_does_not_end_a_loss_of_reception);
   RUN_TEST(test_noise_that_lasts_during_a_loss_of_reception_is_jamming);
+  RUN_TEST(test_one_good_epoch_does_not_end_a_loss_of_reception);
+  RUN_TEST(test_one_good_epoch_does_not_end_jamming);
+  RUN_TEST(test_a_held_loss_of_reception_ends_when_the_signals_return);
+  RUN_TEST(test_a_jump_away_and_back_is_one_event_and_keeps_the_node_place);
+  RUN_TEST(test_a_position_reached_by_a_jump_becomes_the_place_after_ten_minutes);
+  RUN_TEST(test_driving_moves_the_place_with_the_fix);
   RUN_TEST(test_no_cn0_rule_fires_before_a_baseline_exists);
   RUN_TEST(test_the_receiver_spoofing_flag_is_spoofing_after_two_epochs);
   RUN_TEST(test_position_drift_of_a_stationary_fixed_node_is_spoofing);

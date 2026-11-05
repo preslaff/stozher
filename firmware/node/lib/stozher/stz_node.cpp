@@ -29,6 +29,10 @@ Verdict Node::on_epoch(Epoch e, uint32_t now_ms) {
   e.blanked = tx_.blanked(now_ms);
   Verdict v = detector_.update(e);
 #ifndef STZ_NO_PER_SV
+  if (v.has_pos) {  // records and heartbeats carry the node's place, never a jumped fix
+    e.lat_e7 = v.lat_e7;
+    e.lon_e7 = v.lon_e7;
+  }
   if (!v.blanked && watch_.update(e, detector_.band_clean(e)) == RecoverAction::Restart) {
     detector_.receiver_restarted();
     restart_pending_ = true;

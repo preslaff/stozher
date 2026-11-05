@@ -41,6 +41,7 @@ struct DetectConfig {
   float jam_ind_rise = 10.0f;        // noise evidence: the receiver's jamming indicator above its baseline
   float noise_rise = 40.0f;          // noise evidence: noisePerMS above its baseline (not calibrated yet: see the epoch log)
   uint16_t loss_epochs = 60;         // L1: a drop without noise evidence must last this long before it is an event
+  uint32_t new_place_ms = 600000;    // S5: a position reached by a jump is the node's own only after it has held this long
 #endif
   uint8_t min_sv_match = 3;          // satellites seen now and in the baseline needed to judge each one against its own history
   uint32_t min_event_ms = 30000;     // an event is held at least this long: a signal hovering at the threshold must not flap
@@ -69,6 +70,12 @@ struct Verdict {
   bool changed = false;    // event_class differs from the previous verdict
   uint8_t cn0_drop_db = 0;
   uint16_t duration_s = 0;
+#ifndef STZ_NO_PER_SV
+  // The position a record of this epoch carries: the last one reached without a jump (a jumped fix is the evidence,
+  // not the node's place). Set only on epochs with a fix once one exists; otherwise the epoch's own position is used.
+  bool has_pos = false;
+  int32_t lat_e7 = 0, lon_e7 = 0;
+#endif
 };
 
 class Detector {
@@ -130,6 +137,18 @@ class Detector {
   bool have_last_pos_ = false;
   int32_t last_lat_ = 0, last_lon_ = 0;
   uint32_t last_pos_mono_ = 0;
+#ifndef STZ_NO_PER_SV
+  // The node's own place (reached by plausible motion), and a place reached by a jump that may become it.
+  void follow_place(const Epoch& e, bool jumped);
+  void set_place(const Epoch& e, Verdict& v) const {
+    v.has_pos = e.fix_ok && have_place_;
+    v.lat_e7 = place_lat_;
+    v.lon_e7 = place_lon_;
+  }
+  bool have_place_ = false, have_new_ = false;
+  int32_t place_lat_ = 0, place_lon_ = 0, new_lat_ = 0, new_lon_ = 0;
+  uint32_t place_mono_ = 0, new_since_ = 0;
+#endif
   // event
   uint8_t clean_n_ = 0;
   uint8_t mask_ = 0;

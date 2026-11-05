@@ -125,7 +125,9 @@ void Detector::count_rules(const Epoch& e, uint8_t& now, float& drop_out) {
   if (cn0_hit && !j1_active && !noise) cn0_hit = false;
   suspect_ = loss_cond && !l1_active;
   loss_n_ = loss_cond ? (uint16_t)(loss_n_ < 65535 ? loss_n_ + 1 : 65535) : 0;
-  if (loss_n_ >= cfg_.loss_epochs) now |= kRuleL1;
+  // A raised loss stays while its condition does: one good epoch (a satellite back near the baseline for a second) is one
+  // of the clean epochs that end it, not a reset of the 60-epoch count (a4b0, 31 Oct 2026: five losses in ten minutes).
+  if (loss_n_ >= cfg_.loss_epochs || (l1_active && loss_cond)) now |= kRuleL1;
 #endif
   // The receiver's own jamming flag counts at once only when the signals back it: a drop past the trigger, or the
   // measured noise up. Alone it must last flag_alone_epochs (seen on a NEO-6M indoors: a minute of warning and
@@ -177,12 +179,19 @@ void Detector::count_rules(const Epoch& e, uint8_t& now, float& drop_out) {
 
   // S5: a position jump no vehicle could make, or GNSS motion while the accelerometer is still.
   if (e.fix_ok) {
+    bool jumped = false;
     if (have_last_pos_) {
       float dt_s = (float)(uint32_t)(e.mono_ms - last_pos_mono_) / 1000.0f;
       float d = distance_m(last_lat_, last_lon_, e.lat_e7, e.lon_e7);
-      if (!cfg_.fixed_node && dt_s > 0 && d >= cfg_.min_jump_m && d / dt_s > cfg_.max_speed_mps)
-        jump_hold_ = cfg_.clock_hold_epochs;
+      jumped = !cfg_.fixed_node && dt_s > 0 && d >= cfg_.min_jump_m && d / dt_s > cfg_.max_speed_mps;
     }
+#ifndef STZ_NO_PER_SV
+    // Back to the node's own place after a wrong fix (a4b0, 5 Nov 2026: 214 km away, back 18 min later): the wrong fix
+    // was the event; the return is not a second one.
+    if (jumped && have_place_ && distance_m(place_lat_, place_lon_, e.lat_e7, e.lon_e7) < cfg_.min_jump_m) jumped = false;
+    follow_place(e, jumped);
+#endif
+    if (jumped) jump_hold_ = cfg_.clock_hold_epochs;
     last_lat_ = e.lat_e7;
     last_lon_ = e.lon_e7;
     last_pos_mono_ = e.mono_ms;
@@ -225,6 +234,36 @@ void Detector::update_baseline(const Epoch& e, float drop, bool any_rule) {
   baseline_ += (mean - baseline_) * (1.0f / 32.0f);
 }
 
+#ifndef STZ_NO_PER_SV
+// The node's place moves with plausible motion (walking, driving, or any distance after a long gap without a fix). A
+// position reached by a jump, or still too far from the place for the time since, is a candidate: it becomes the place
+// only once it has held new_place_ms (the node was carried somewhere while off, or a lasting wrong fix: the S5 event
+// at the jump is the evidence either way).
+void Detector::follow_place(const Epoch& e, bool jumped) {
+  bool away = jumped;
+  if (have_place_ && !away) {
+    float d = distance_m(place_lat_, place_lon_, e.lat_e7, e.lon_e7);
+    float dt_s = (float)(uint32_t)(e.mono_ms - place_mono_) / 1000.0f;
+    away = d >= cfg_.min_jump_m && (dt_s <= 0 || d / dt_s > cfg_.max_speed_mps);
+  }
+  if (have_place_ && away) {
+    if (!have_new_ || distance_m(new_lat_, new_lon_, e.lat_e7, e.lon_e7) >= cfg_.min_jump_m) {
+      new_lat_ = e.lat_e7;
+      new_lon_ = e.lon_e7;
+      new_since_ = e.mono_ms;
+      have_new_ = true;
+      return;
+    }
+    if ((uint32_t)(e.mono_ms - new_since_) < cfg_.new_place_ms) return;
+  }
+  place_lat_ = e.lat_e7;
+  place_lon_ = e.lon_e7;
+  place_mono_ = e.mono_ms;
+  have_place_ = true;
+  have_new_ = false;
+}
+#endif
+
 void Detector::receiver_restarted() {
   epochs_seen_ = 0;
   have_last_ = false;
@@ -243,6 +282,9 @@ Verdict Detector::update(const Epoch& e) {
     v.confidence = last_confidence_;
     v.cn0_drop_db = last_drop_;
     v.duration_s = cls_ == kNormal ? 0 : (uint16_t)((uint32_t)(e.mono_ms - onset_mono_) / 1000);
+#ifndef STZ_NO_PER_SV
+    set_place(e, v);
+#endif
     return v;
   }
   if (epochs_seen_ < 0xFFFF) epochs_seen_++;
@@ -266,6 +308,9 @@ Verdict Detector::update(const Epoch& e) {
   v.event_class = cls_;
   v.rules = mask_;
   v.changed = cls_ != prev_cls;
+#ifndef STZ_NO_PER_SV
+  set_place(e, v);
+#endif
   uint32_t dur = cls_ == kNormal ? 0 : (uint32_t)(e.mono_ms - onset_mono_) / 1000;
   v.duration_s = dur > 65535 ? 65535 : (uint16_t)dur;
   float d = drop + 0.5f;
