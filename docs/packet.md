@@ -39,7 +39,7 @@ Any other length is rejected.
 | 5 | 3 | receiver spoofing flag |
 | 5 | 2 | tamper |
 | 5 | 1 | mesh present |
-| 5 | 0 | reserved, must be 0 |
+| 5 | 0 | no fix: the receiver had no GNSS fix at `timestamp`. Latitude and longitude are then the node's last place since it started (or 0/0 if it has had none), not a measured position (since Nov 2026; was reserved, must be 0) |
 | 6–9 | | latitude, int32, units of 1e-7 degrees, range ±900000000. Latitude and longitude both 0 mean no position (no GNSS fix): the record is stored, but never localised (no hotspot, no trust cell) |
 | 10–13 | | longitude, int32, units of 1e-7 degrees, range ±1800000000 |
 | 14–17 | | timestamp, uint32 Unix seconds, node clock |
@@ -103,7 +103,7 @@ must never repeat under one key ID; the node persists it before use.
 2. Version = 1; type valid; reserved bits 0; extended flag matches the length.
 3. Tag valid (constant-time) → otherwise `rejected: bad tag`. A wrong node ID, wrong key
    or tampered byte all appear as a bad tag.
-4. Decrypt; check event class ≠ 6, lat/lon in range, reserved flag bit 0.
+4. Decrypt; check event class ≠ 6, lat/lon in range.
 5. Replay (outside the codec): the sequence number is new for `(node_id, key_id)`; the
    timestamp lies within the acceptance window.
 

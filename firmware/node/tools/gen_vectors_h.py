@@ -24,7 +24,7 @@ def render() -> str:
     ]
     out += [
         "struct ValidVector { const char* name; uint8_t type; uint16_t seq; uint8_t key_id; uint32_t node_id; const char* master;",
-        "  uint8_t event_class, confidence, osnma, stationary, rx_jamming, rx_spoofing, tamper, mesh;",
+        "  uint8_t event_class, confidence, osnma, stationary, rx_jamming, rx_spoofing, tamper, mesh, no_fix;",
         "  int32_t lat_e7, lon_e7; uint32_t timestamp; uint16_t duration_s; uint8_t cn0_mean, cn0_drop, cn0_spread, agc;",
         "  int extended; uint8_t satellites, pos_jump_code, clock_jump_code, battery; const char* hex; };",
         "struct InvalidVector { const char* name; const char* reason; uint32_t node_id; const char* master; const char* hex; };",
@@ -48,6 +48,7 @@ def render() -> str:
             v["rx_spoofing"],
             v["tamper"],
             v["mesh"],
+            v.get("no_fix", 0),
             v["lat_e7"],
             v["lon_e7"],
             f"{v['timestamp']}u",

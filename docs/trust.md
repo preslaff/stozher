@@ -26,7 +26,13 @@ event and summary (test records are ignored) and rebuilds the derived tables
 
 ## Trust score (per H3 res-8 cell)
 
-Each event adds its weight to every cell within 4 rings of its own cell (about 4 km).
+Each event adds its weight to every cell within 4 rings of its own cell (61 cells; the outer cell centres are
+3.3-3.9 km away). Two kinds of record are left out. A normal record sent without a GNSS fix (`no fix` flag,
+docs/packet.md) says nothing about GNSS where the node is, so it is not support; an adverse record without a fix is
+placed at the node's last place, which it carries. And a node's own normal record from a real fix ends its earlier
+adverse records in the live grid: the node reports the condition over where it is, so a 30-second event no longer
+holds 61 cells for an hour after it (a4b0, 5 Nov 2026). Those records stay in the events and in
+`/v1/trust/history`; reports from other nodes are not affected.
 For one cell, with `adv` the adverse weight, `sup` the supporting weight and `ratio = adv/(adv+sup)`:
 
 - no evidence: `UNKNOWN`, score `null`, confidence 0 (no honest number exists);
@@ -47,7 +53,7 @@ Adverse events (jamming, spoofing) are grouped per kind. Strong reports (confide
 calibration parameter tuned on the coastal scenario) define hotspots: spatial DBSCAN on
 great-circle distance (eps 5 km, min 1 event), then a split where consecutive events are more
 than 1 h apart. Weak reports come from witnesses far from a source: each attaches to the nearest
-strong group within 7.5 km and a 1 h window but never links two groups, and weak reports with no
+strong group within 7.5 km and 10 minutes of its time span but never links two groups, and weak reports with no
 strong group nearby form their own hotspots. Without this rule a node that hears two sources
 faintly chains them into one hotspot (the simulator caught exactly that). (The specification
 names HDBSCAN; DBSCAN is the deterministic first version and can be swapped without changing the

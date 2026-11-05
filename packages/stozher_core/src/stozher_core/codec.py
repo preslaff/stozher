@@ -28,6 +28,7 @@ def _body(r: WitnessRecord) -> bytes:
         | (r.rx_spoofing << 3)
         | (r.tamper << 2)
         | (r.mesh << 1)
+        | r.no_fix
     )
     body = bytes([(r.event_class << 5) | r.confidence, flags])
     body += struct.pack(">iiIH", r.lat_e7, r.lon_e7, r.timestamp, r.duration_s)
@@ -70,8 +71,6 @@ def decode(raw: bytes, node_id: int, keys: KeySet) -> WitnessRecord:
     class_conf, flags = body[0], body[1]
     if (class_conf >> 5) not in _VALID_CLASSES:
         raise PacketError(Reason.BAD_CLASS)
-    if flags & 0x01:
-        raise PacketError(Reason.BAD_RESERVED)
     lat, lon, ts, dur = struct.unpack(">iiIH", body[2:16])
     if abs(lat) > 900_000_000 or abs(lon) > 1_800_000_000:
         raise PacketError(Reason.BAD_COORDINATES)
@@ -95,6 +94,7 @@ def decode(raw: bytes, node_id: int, keys: KeySet) -> WitnessRecord:
             rx_spoofing=bool(flags & 0x08),
             tamper=bool(flags & 0x04),
             mesh=bool(flags & 0x02),
+            no_fix=bool(flags & 0x01),
             lat_e7=lat,
             lon_e7=lon,
             timestamp=ts,

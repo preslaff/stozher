@@ -27,6 +27,7 @@ struct Record {
   uint8_t confidence = 0;  // 0..31
   uint8_t osnma = 0;       // 0..3
   bool stationary = false, rx_jamming = false, rx_spoofing = false, tamper = false, mesh = false;
+  bool no_fix = false;  // no GNSS fix at `timestamp`: lat/lon are the node's last place, or 0/0
   int32_t lat_e7 = 0, lon_e7 = 0;
   uint32_t timestamp = 0;
   uint16_t duration_s = 0;

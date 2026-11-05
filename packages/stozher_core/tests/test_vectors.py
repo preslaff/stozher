@@ -21,6 +21,7 @@ FIELDS = [
     "rx_spoofing",
     "tamper",
     "mesh",
+    "no_fix",
     "lat_e7",
     "lon_e7",
     "timestamp",
@@ -34,7 +35,7 @@ FIELDS = [
 
 def record_from(v: dict) -> WitnessRecord:
     kw = {k: v[k] for k in FIELDS}
-    for b in ("stationary", "rx_jamming", "rx_spoofing", "tamper", "mesh"):
+    for b in ("stationary", "rx_jamming", "rx_spoofing", "tamper", "mesh", "no_fix"):
         kw[b] = bool(kw[b])
     if v.get("extended"):
         kw["extended"] = Extended(

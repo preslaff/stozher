@@ -18,10 +18,14 @@ class EventPoint:
     cn0_drop: int
     sim: bool
     seq: int = 0  # tie-break for events in the same second: (node, seq) is stable, uuids are not
+    no_fix: bool = (
+        False  # no GNSS fix at observed_at: the position is the node's last place (docs/packet.md)
+    )
 
 
 def has_fix(lat: float, lon: float) -> bool:
-    """False for a record with no position. A node without a GNSS fix sends latitude and longitude 0 (docs/packet.md).
+    """False for a record with no position. A node without a GNSS fix and no place yet sends latitude and longitude 0
+    (docs/packet.md); with a place it sends that place and the `no fix` flag (EventPoint.no_fix).
 
     Such a record is stored and shown as an event, but it says nothing about where, so it is never localised: no hotspot,
     no trust cell, no alert text with coordinates. (0, 0) is open sea in the Gulf of Guinea, far outside any area we cover.

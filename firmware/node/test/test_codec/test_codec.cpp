@@ -18,7 +18,7 @@ static Record record_of(const ValidVector& v) {
   r.type = v.type; r.seq = v.seq; r.key_id = v.key_id; r.extended = v.extended;
   r.event_class = v.event_class; r.confidence = v.confidence; r.osnma = v.osnma;
   r.stationary = v.stationary; r.rx_jamming = v.rx_jamming; r.rx_spoofing = v.rx_spoofing;
-  r.tamper = v.tamper; r.mesh = v.mesh; r.lat_e7 = v.lat_e7; r.lon_e7 = v.lon_e7;
+  r.tamper = v.tamper; r.mesh = v.mesh; r.no_fix = v.no_fix; r.lat_e7 = v.lat_e7; r.lon_e7 = v.lon_e7;
   r.timestamp = v.timestamp; r.duration_s = v.duration_s;
   r.cn0_mean = v.cn0_mean; r.cn0_drop = v.cn0_drop; r.cn0_spread = v.cn0_spread; r.agc = v.agc;
   if (v.extended) { r.satellites = v.satellites; r.pos_jump_code = v.pos_jump_code; r.clock_jump_code = v.clock_jump_code; r.battery = v.battery; }
@@ -92,6 +92,7 @@ void test_valid_vectors_encode_and_decode_bit_for_bit() {
     TEST_ASSERT_EQUAL_MESSAGE(r.rx_spoofing, d.rx_spoofing, v.name);
     TEST_ASSERT_EQUAL_MESSAGE(r.tamper, d.tamper, v.name);
     TEST_ASSERT_EQUAL_MESSAGE(r.mesh, d.mesh, v.name);
+    TEST_ASSERT_EQUAL_MESSAGE(r.no_fix, d.no_fix, v.name);
     TEST_ASSERT_EQUAL_INT32_MESSAGE(r.lat_e7, d.lat_e7, v.name);
     TEST_ASSERT_EQUAL_INT32_MESSAGE(r.lon_e7, d.lon_e7, v.name);
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(r.timestamp, d.timestamp, v.name);

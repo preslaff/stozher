@@ -54,6 +54,7 @@ async def load_points(session: AsyncSession, since: datetime) -> list[EventPoint
             Event.features["cn0_drop"].astext,
             Event.sim,
             Event.seq,
+            Event.flags["no_fix"].astext,
         )
         .join(Node, Node.id == Event.node_id)
         .where(Event.observed_at >= since, Event.msg_type.in_(ANALYSED_TYPES))
@@ -72,6 +73,7 @@ async def load_points(session: AsyncSession, since: datetime) -> list[EventPoint
             cn0_drop=int(r[8] or 0),
             sim=r[9],
             seq=r[10],
+            no_fix=r[11] == "true",
         )
         for r in rows
     ]

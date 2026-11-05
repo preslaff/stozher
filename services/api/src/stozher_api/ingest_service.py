@@ -36,6 +36,7 @@ def _flags(r: WitnessRecord) -> dict[str, Any]:
         "rx_spoofing": r.rx_spoofing,
         "tamper": r.tamper,
         "mesh": r.mesh,
+        "no_fix": r.no_fix,
     }
 
 

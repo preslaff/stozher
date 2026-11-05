@@ -350,3 +350,31 @@ async def test_one_witness_that_reports_normal_again_within_minutes_raises_no_al
     await _run_worker(client)
     assert (await client.get("/v1/hotspots", headers=hdr(client, "responder"))).json()["items"]
     assert (await client.get("/v1/alerts", headers=hdr(client, "responder"))).json()["items"] == []
+
+
+async def test_a_normal_record_without_a_fix_does_not_make_the_place_trusted(client):  # type: ignore[no-untyped-def]
+    a = await _node(client, "a")
+    r = rec(
+        seq=1,
+        ts=now_ts() - 60,
+        type=MsgType.HEARTBEAT,
+        event_class=EventClass.NORMAL,
+        confidence=0,
+        rx_jamming=False,
+        no_fix=True,
+        lat_e7=VARNA[0],
+        lon_e7=VARNA[1],
+    )
+    assert (await post(client, packet(r, a), ext="a")).json()["status"] == "accepted"
+    async with client.app.state.sessionmaker() as s:  # type: ignore[attr-defined]
+        from stozher_api.models import Event
+
+        flags = (await s.execute(select(Event.flags))).scalar_one()
+    assert flags["no_fix"] is True
+    await _run_worker(client)
+    t = (
+        await client.get(
+            "/v1/trust", params={"lat": 43.1989, "lon": 27.9166}, headers=hdr(client, "public")
+        )
+    ).json()
+    assert t["state"] == "UNKNOWN"  # the node did not see GNSS there, so it is no evidence of trust

@@ -70,7 +70,7 @@ size_t encode(const Record& r, uint32_t node_id, const Keys& keys, uint8_t out[k
                        (uint8_t)((r.key_id << 4) | (r.extended ? 0x08 : 0))};
   uint8_t body[24];
   body[0] = (uint8_t)((r.event_class << 5) | (r.confidence & 0x1F));
-  body[1] = (uint8_t)((r.osnma << 6) | (r.stationary << 5) | (r.rx_jamming << 4) | (r.rx_spoofing << 3) | (r.tamper << 2) | (r.mesh << 1));
+  body[1] = (uint8_t)((r.osnma << 6) | (r.stationary << 5) | (r.rx_jamming << 4) | (r.rx_spoofing << 3) | (r.tamper << 2) | (r.mesh << 1) | r.no_fix);
   put_u32(body + 2, (uint32_t)r.lat_e7);
   put_u32(body + 6, (uint32_t)r.lon_e7);
   put_u32(body + 10, r.timestamp);
@@ -110,7 +110,6 @@ Status decode(const uint8_t* raw, size_t len, uint32_t node_id, const uint8_t ma
   crypt(keys.enc, node_id, seq, ct, body_len, body);
   uint8_t cls = body[0] >> 5;
   if (cls == 6) return Status::BadClass;
-  if (body[1] & 0x01) return Status::BadReserved;
   int32_t lat = (int32_t)get_u32(body + 2), lon = (int32_t)get_u32(body + 6);
   if (lat > 900000000 || lat < -900000000 || lon > 1800000000 || lon < -1800000000) return Status::BadCoordinates;
 
@@ -123,7 +122,7 @@ Status decode(const uint8_t* raw, size_t len, uint32_t node_id, const uint8_t ma
   r.confidence = body[0] & 0x1F;
   r.osnma = body[1] >> 6;
   r.stationary = body[1] & 0x20; r.rx_jamming = body[1] & 0x10; r.rx_spoofing = body[1] & 0x08;
-  r.tamper = body[1] & 0x04; r.mesh = body[1] & 0x02;
+  r.tamper = body[1] & 0x04; r.mesh = body[1] & 0x02; r.no_fix = body[1] & 0x01;
   r.lat_e7 = lat; r.lon_e7 = lon;
   r.timestamp = get_u32(body + 10);
   r.duration_s = (uint16_t)(body[14] << 8 | body[15]);

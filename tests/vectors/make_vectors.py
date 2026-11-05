@@ -63,7 +63,8 @@ def build(v: dict) -> bytes:
             | (v["rx_jamming"] << 4)
             | (v["rx_spoofing"] << 3)
             | (v["tamper"] << 2)
-            | (v["mesh"] << 1),
+            | (v["mesh"] << 1)
+            | v["no_fix"],
         ]
     )
     body += struct.pack(">iiIH", v["lat_e7"], v["lon_e7"], v["timestamp"], v["duration_s"])
@@ -93,6 +94,7 @@ BASE = dict(
     rx_spoofing=0,
     tamper=0,
     mesh=0,
+    no_fix=0,
     lat_e7=431989000,
     lon_e7=279166000,
     timestamp=1795860000,
@@ -150,6 +152,13 @@ valid = {
         cn0_spread=0,
         agc=0,
         seq=0,
+    ),
+    # No fix at the record's time: the position is the node's last place, or 0/0 when it has none.
+    "core_event_no_fix_last_place": dict(
+        type=1, seq=42, event_class=3, confidence=6, rx_jamming=0, no_fix=1
+    ),
+    "core_heartbeat_no_fix_no_position": dict(
+        type=0, seq=43, event_class=3, confidence=6, rx_jamming=0, no_fix=1, lat_e7=0, lon_e7=0
     ),
     "extended_event_spoofing": dict(
         extended=True,
@@ -231,11 +240,6 @@ bad("bad_type_4", "bad_type", resign(bytes([0x14, 0, 1, 0]), bv))
 bad("bad_reserved_header_bits", "bad_reserved", resign(bytes([0x11, 0, 1, 0x01]), bv))
 bad("length_mismatch_ext_flag_on_core", "length_mismatch", resign(bytes([0x11, 0, 1, 0x08]), bv))
 bad("bad_class_6", "bad_class", resign(bytes([0x11, 0, 1, 0]), bv, bytes([6 << 5]) + bytes(19)))
-bad(
-    "bad_reserved_flag_bit0",
-    "bad_reserved",
-    resign(bytes([0x11, 0, 1, 0]), bv, bytes([0, 1]) + bytes(18)),
-)
 bad(
     "bad_coordinates_lat_over_90",
     "bad_coordinates",

@@ -24,6 +24,7 @@ def pt(
     drop: int = 14,
     sim: bool = False,
     kind: str = "expert",
+    no_fix: bool = False,
 ) -> EventPoint:
     return EventPoint(
         id=uuid.uuid4(),
@@ -36,6 +37,7 @@ def pt(
         confidence=conf,
         cn0_drop=drop,
         sim=sim,
+        no_fix=no_fix,
     )
 
 
@@ -125,6 +127,41 @@ def test_contested_cell_is_degraded_and_old_evidence_fades() -> None:
     fresh = build_cells([pt(1, cls=NORMAL, age_s=60)], NOW)[0]
     stale = build_cells([pt(1, cls=NORMAL, age_s=3 * 3600)], NOW)[0]
     assert stale.score < fresh.score  # type: ignore[operator]
+
+
+# a4b0, 5 Nov 2026: a 30 s spoofing event, its own "back to normal" 30 s later, the cells SPOOFED for an hour.
+def test_a_node_own_later_normal_ends_its_event_in_the_grid() -> None:
+    cells = build_cells(
+        [pt(1, cls=SPOOF, conf=12, age_s=600), pt(1, cls=NORMAL, conf=0, age_s=570)], NOW
+    )
+    assert {c.state for c in cells} == {TrustState.TRUSTED}
+
+
+def test_another_node_normal_does_not_end_an_event() -> None:
+    cells = build_cells(
+        [pt(1, cls=SPOOF, conf=12, age_s=600), pt(2, cls=NORMAL, conf=0, age_s=570)], NOW
+    )
+    assert TrustState.SPOOFED in {c.state for c in cells}
+
+
+def test_an_event_after_the_node_normal_still_counts() -> None:
+    cells = build_cells(
+        [pt(1, cls=NORMAL, conf=0, age_s=600), pt(1, cls=JAM, conf=28, age_s=60)], NOW
+    )
+    assert TrustState.JAMMED in {c.state for c in cells}
+
+
+def test_records_without_a_fix() -> None:
+    # normal without a fix is not support; a loss without a fix, at the node's last place, is evidence
+    assert build_cells([pt(1, cls=NORMAL, no_fix=True)], NOW) == []
+    assert {c.state for c in build_cells([pt(1, cls=BENIGN, conf=6, no_fix=True)], NOW)} == {
+        TrustState.DEGRADED
+    }
+    # a normal without a fix does not end the node's event either
+    cells = build_cells(
+        [pt(1, cls=BENIGN, conf=6, age_s=600), pt(1, cls=NORMAL, age_s=60, no_fix=True)], NOW
+    )
+    assert {c.state for c in cells} == {TrustState.DEGRADED}
 
 
 def test_tamper_and_sim_handling() -> None:

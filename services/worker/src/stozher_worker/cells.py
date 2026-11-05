@@ -17,7 +17,9 @@ from stozher_core.trust import (
 from .points import EventPoint
 
 H3_RES = 8
-DISK_K = 4  # a witness's report covers its own cell plus 4 rings (about 3 km)
+DISK_K = (
+    4  # a witness's report covers its own cell plus 4 rings (outer cell centres 3.3-3.9 km away)
+)
 
 
 @dataclass(frozen=True)
@@ -35,12 +37,23 @@ class Cell:
 
 
 def build_cells(events: list[EventPoint], now: datetime, k: int = DISK_K) -> list[Cell]:
+    # A node's own later normal record, from a real fix, ends its earlier adverse reports in the live grid: the node
+    # says the condition is over where it is (a4b0, 5 Nov 2026: a 30 s event kept 61 cells SPOOFED for an hour after
+    # its own "back to normal"). They stay in the events and in /v1/trust/history. Other nodes' reports are untouched.
+    recovered: dict[int, datetime] = {}
+    for e in events:
+        if is_support(e.event_class) and not e.no_fix:
+            recovered[e.node_id] = max(recovered.get(e.node_id, e.observed_at), e.observed_at)
     evidence: dict[str, list[Evidence]] = defaultdict(list)
     meta: dict[str, list[EventPoint]] = defaultdict(list)
     for e in events:
         state = adverse_state(e.event_class)
         if state is None and not is_support(e.event_class):
             continue  # tamper / unknown say nothing about GNSS trust
+        if state is None and e.no_fix:
+            continue  # "normal" without a fix says nothing about GNSS here
+        if state is not None and e.observed_at < recovered.get(e.node_id, e.observed_at):
+            continue
         w = event_weight(e.confidence, (now - e.observed_at).total_seconds())
         centre = h3.latlng_to_cell(e.lat, e.lon, H3_RES)
         for cell in h3.grid_disk(centre, k):

@@ -54,6 +54,7 @@ class WitnessRecord(BaseModel):
     rx_spoofing: bool
     tamper: bool
     mesh: bool
+    no_fix: bool = False  # no GNSS fix at `timestamp`: lat/lon are the node's last place, or 0/0
     lat_e7: int = Field(ge=-900_000_000, le=900_000_000)
     lon_e7: int = Field(ge=-1_800_000_000, le=1_800_000_000)
     timestamp: int = Field(ge=0, le=0xFFFFFFFF)
