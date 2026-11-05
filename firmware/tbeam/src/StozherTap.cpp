@@ -27,6 +27,13 @@ stz::Epoch makeEpoch(TinyGPSPlus &gps)
     e.sats_used = s.used;
     e.cn0_mean = s.cno_mean;
     e.cn0_spread_x10 = s.cno_spread_x10;
+    // Each satellite's C/N0, so the detector judges the drop per satellite (a median) instead of the mean, which one
+    // strong satellite moves (before rev 7 these were not copied and the T-Beam used the mean).
+    e.sv_n = s.sv_n;
+    for (uint8_t i = 0; i < s.sv_n && i < stz::ubx::kMaxSv; i++) {
+        e.sv_key[i] = s.sv_key[i];
+        e.sv_cno[i] = s.sv_cno[i];
+    }
     if (haveRf) {
         e.jam_state = lastRf.jam_state;
         e.jam_ind = lastRf.jam_ind;
