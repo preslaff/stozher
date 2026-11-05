@@ -128,6 +128,10 @@ void Detector::count_rules(const Epoch& e, uint8_t& now, float& drop_out) {
   // A raised loss stays while its condition does: one good epoch (a satellite back near the baseline for a second) is one
   // of the clean epochs that end it, not a reset of the 60-epoch count (a4b0, 31 Oct 2026: five losses in ten minutes).
   if (loss_n_ >= cfg_.loss_epochs || (l1_active && loss_cond)) now |= kRuleL1;
+  // No fix for minutes is loss of reception too, with or without a baseline (a4b0 next to a PC, Nov 2026: no satellite
+  // at all from boot, so no baseline, no loss and no record for days).
+  nofix_n_ = e.fix_ok ? 0 : (uint16_t)(nofix_n_ < 65535 ? nofix_n_ + 1 : 65535);
+  if (nofix_n_ >= cfg_.no_fix_epochs) now |= kRuleL1;
 #endif
   // The receiver's own jamming flag counts at once only when the signals back it: a drop past the trigger, or the
   // measured noise up. Alone it must last flag_alone_epochs (seen on a NEO-6M indoors: a minute of warning and
@@ -352,6 +356,7 @@ void fill_record(const Verdict& v, const Epoch& e, Record& r) {
   r.rx_jamming = e.jam_state >= 2;
   r.rx_spoofing = e.spoof_state >= 2;
   r.stationary = e.sensor_stationary;
+  r.no_fix = !e.fix_ok;
   r.tamper = (v.rules & kRuleT1) != 0;
   r.extended = false;
 }

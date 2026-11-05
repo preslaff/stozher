@@ -15,7 +15,8 @@ namespace stz {
 // loss of reception (class 3, benign degradation); 5 the same rules, plus the node restarts a receiver that has no
 // fix for minutes in a clean band (stz_recover.h); 6 the receiver's jamming flag needs a drop or measured noise to
 // count at once (alone it must last 2 minutes), and a raised loss of reception is not reset by one noisy epoch; 7 a
-// raised loss is held through one good epoch, and records carry the node's place, never a jumped fix.
+// raised loss is held through one good epoch, records carry the node's place, never a jumped fix, and 5 minutes
+// without a fix (also from the start) is loss of reception.
 constexpr uint8_t kDetectorRev = 7;
 
 enum Rule : uint8_t {
@@ -43,6 +44,7 @@ struct DetectConfig {
   float noise_rise = 40.0f;          // noise evidence: noisePerMS above its baseline (not calibrated yet: see the epoch log)
   uint16_t loss_epochs = 60;         // L1: a drop without noise evidence must last this long before it is an event
   uint32_t new_place_ms = 600000;    // S5: a position reached by a jump is the node's own only after it has held this long
+  uint16_t no_fix_epochs = 300;      // L1: no fix for this long (also from the start, with no baseline) is loss of reception
 #endif
   uint8_t min_sv_match = 3;          // satellites seen now and in the baseline needed to judge each one against its own history
   uint32_t min_event_ms = 30000;     // an event is held at least this long: a signal hovering at the threshold must not flap
@@ -94,6 +96,14 @@ class Detector {
   // start-up holdoff and the continuity checks start again. Baselines and any event in progress are kept.
   void receiver_restarted();
   float baseline() const { return baseline_; }
+#ifndef STZ_NO_PER_SV
+  // The node's place (see follow_place): what a record sent without a fix carries.
+  bool place(int32_t& lat_e7, int32_t& lon_e7) const {
+    lat_e7 = place_lat_;
+    lon_e7 = place_lon_;
+    return have_place_;
+  }
+#endif
 
  private:
   void count_rules(const Epoch& e, uint8_t& now, float& drop);
@@ -121,7 +131,7 @@ class Detector {
   float jam_ind_base_ = 0.0f, noise_base_ = 0.0f;
 #endif
 #ifndef STZ_NO_PER_SV
-  uint16_t loss_n_ = 0;
+  uint16_t loss_n_ = 0, nofix_n_ = 0;
   uint8_t flag_alone_n_ = 0;
 #endif
   // baseline

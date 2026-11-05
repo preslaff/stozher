@@ -296,6 +296,65 @@ void test_a_change_before_the_first_time_waits_for_it() {
   TEST_ASSERT_TRUE(r.timestamp != 0);
 }
 
+// a4b0 next to a PC, Nov 2026: no satellite from boot, so nothing was ever sent. Now: a loss of reception after five
+// minutes, flagged `no fix`, with no position (it has had none) and the receiver's own time; then hourly heartbeats.
+void test_a_node_that_never_gets_a_fix_reports_it() {
+  Bench b;
+  Epoch none = b.base;
+  none.fix_ok = false;
+  none.sats_tracked = 0;
+  none.cn0_mean = 0;
+  none.lat_e7 = 0;  // the T-Beam tap sets a position only with a fix
+  none.lon_e7 = 0;
+  for (int i = 0; i < 310; i++) b.second(none);
+  TEST_ASSERT_TRUE(b.modem.commands >= 1);
+  Record r = b.last_sent();
+  TEST_ASSERT_EQUAL(kBenign, r.event_class);
+  TEST_ASSERT_TRUE(r.no_fix);
+  TEST_ASSERT_EQUAL_INT32(0, r.lat_e7);
+  TEST_ASSERT_EQUAL_INT32(0, r.lon_e7);
+  TEST_ASSERT_TRUE(r.timestamp != 0);
+  for (int i = 0; i < 3700; i++) b.second(none);
+  r = b.last_sent();
+  TEST_ASSERT_EQUAL(kHeartbeat, r.type);
+  TEST_ASSERT_EQUAL(kBenign, r.event_class);
+  TEST_ASSERT_TRUE(r.no_fix);
+  TEST_ASSERT_TRUE(r.timestamp > b.base.utc_s + 3500 && r.timestamp <= b.expected_utc());  // an hour on, when sent
+}
+
+// A node that had a fix and lost it reports from its place, flagged, and its heartbeat's time is the time it is sent.
+void test_a_lost_fix_is_reported_at_the_node_place_with_the_time_it_is_sent() {
+  Bench b;
+  for (int i = 0; i < 60; i++) b.second(b.base);
+  Epoch none = b.base;
+  none.fix_ok = false;
+  none.lat_e7 = 0;
+  none.lon_e7 = 0;
+  for (int i = 0; i < 310; i++) b.second(none);
+  Record r = b.last_sent();
+  TEST_ASSERT_EQUAL(kBenign, r.event_class);
+  TEST_ASSERT_TRUE(r.no_fix);
+  TEST_ASSERT_EQUAL_INT32(b.base.lat_e7, r.lat_e7);
+  TEST_ASSERT_EQUAL_INT32(b.base.lon_e7, r.lon_e7);
+  for (int i = 0; i < 3700; i++) b.second(none);
+  r = b.last_sent();
+  TEST_ASSERT_EQUAL(kHeartbeat, r.type);
+  TEST_ASSERT_TRUE(r.no_fix);
+  TEST_ASSERT_EQUAL_INT32(b.base.lat_e7, r.lat_e7);
+  // rev 6 sent the last fix's time (60 s after start), so this heartbeat claimed to be an hour old
+  TEST_ASSERT_TRUE(r.timestamp > b.base.utc_s + 3500 && r.timestamp <= b.expected_utc());
+}
+
+// With a fix the heartbeat is unflagged and carries the fix.
+void test_a_heartbeat_with_a_fix_is_not_flagged() {
+  Bench b;
+  for (int i = 0; i < 3700; i++) b.second(b.base);
+  Record r = b.last_sent();
+  TEST_ASSERT_EQUAL(kHeartbeat, r.type);
+  TEST_ASSERT_FALSE(r.no_fix);
+  TEST_ASSERT_TRUE(r.timestamp > b.base.utc_s + 3500 && r.timestamp <= b.expected_utc());
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_a_healthy_node_sends_one_heartbeat_and_no_events);
@@ -312,5 +371,8 @@ int main() {
   RUN_TEST(test_a_gap_in_the_receivers_time_is_bridged_by_the_nodes_clock);
   RUN_TEST(test_a_heartbeat_in_a_time_gap_has_a_time);
   RUN_TEST(test_a_change_before_the_first_time_waits_for_it);
+  RUN_TEST(test_a_node_that_never_gets_a_fix_reports_it);
+  RUN_TEST(test_a_lost_fix_is_reported_at_the_node_place_with_the_time_it_is_sent);
+  RUN_TEST(test_a_heartbeat_with_a_fix_is_not_flagged);
   return UNITY_END();
 }

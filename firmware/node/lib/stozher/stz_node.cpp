@@ -32,6 +32,8 @@ Verdict Node::on_epoch(Epoch e, uint32_t now_ms) {
   if (v.has_pos) {  // records and heartbeats carry the node's place, never a jumped fix
     e.lat_e7 = v.lat_e7;
     e.lon_e7 = v.lon_e7;
+  } else if (!e.fix_ok) {  // no fix: the node's last place, flagged `no fix` in the record (0/0 if none yet)
+    detector_.place(e.lat_e7, e.lon_e7);
   }
   if (!v.blanked && watch_.update(e, detector_.band_clean(e)) == RecoverAction::Restart) {
     detector_.receiver_restarted();
@@ -49,6 +51,16 @@ Verdict Node::on_epoch(Epoch e, uint32_t now_ms) {
     last_epoch_ = e;
     have_epoch_ = true;
   }
+#ifndef STZ_NO_TIME_HOLD
+  if (!e.blanked) {
+    fix_now_ = e.fix_ok;
+    if (!e.fix_ok) no_fix_epoch_ = e;  // what a heartbeat without a fix carries: the place (or none), never a fix
+  }
+  if (!e.blanked && e.utc_s != 0) {  // the receiver keeps UTC without a fix (its own clock): a heartbeat's time
+    time_utc_ = e.utc_s;
+    time_ms_ = now_ms;
+  }
+#endif
 #ifndef STZ_NO_TIME_HOLD
   if (v.changed && !v.blanked) {
     class_ = v.event_class;
@@ -97,7 +109,14 @@ void Node::hold_time(Epoch& e, uint32_t now_ms) {
 #endif
 
 void Node::tick(uint32_t now_ms) {
-  if (have_epoch_ && tx_.heartbeat_due(now_ms)) {
+#ifndef STZ_NO_TIME_HOLD
+  // Without a fix since boot there is still something to report once the node calls it a loss of reception (and the
+  // receiver has given a time): a witness that cannot see GNSS is evidence, not silence.
+  bool can_report = have_epoch_ || (class_ != kNormal && time_utc_ != 0);
+#else
+  bool can_report = have_epoch_;
+#endif
+  if (can_report && tx_.heartbeat_due(now_ms)) {
     Verdict v;  // during an event the heartbeat repeats the event's confidence and drop
     v.event_class = class_;
     if (class_ != kNormal) {
@@ -105,7 +124,13 @@ void Node::tick(uint32_t now_ms) {
       v.cn0_drop_db = last_drop_;
     }
     Record r;
+#ifndef STZ_NO_TIME_HOLD
+    // Its time is now, not the last fix's; without a fix now it carries the place and the `no fix` flag.
+    fill_record(v, fix_now_ && have_epoch_ ? last_epoch_ : no_fix_epoch_, r);
+    if (time_utc_ != 0) r.timestamp = time_utc_ + (uint32_t)(now_ms - time_ms_) / 1000u;
+#else
     fill_record(v, last_epoch_, r);
+#endif
     r.type = kHeartbeat;
     r.mesh = mesh_present();
     if (test_mode_) r.type = kTest;

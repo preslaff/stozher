@@ -318,11 +318,14 @@ void test_a_jump_away_and_back_is_one_event_and_keeps_the_node_place() {
   r.tmpl.fix_ok = false;
   r.run(18 * 60, 0);
   TEST_ASSERT_FALSE(r.last.has_pos);  // no fix: the epoch's own (none)
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);  // 18 min without a fix is loss of reception (rev 7)
   r.tmpl.fix_ok = true;
   r.tmpl.lat_e7 = kLat;
+  int before = r.changes;
   r.run(60, 0);
   TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
-  TEST_ASSERT_EQUAL(2, r.changes);  // spoofing raised and cleared once; the return raised nothing
+  TEST_ASSERT_EQUAL(before + 1, r.changes);  // back to normal; the return raised no second spoofing event
+  TEST_ASSERT_EQUAL(4, r.changes);  // spoofing up and down, the loss up and down
   TEST_ASSERT_EQUAL_INT32(kLat, r.last.lat_e7);
 }
 
@@ -350,6 +353,33 @@ void test_driving_moves_the_place_with_the_fix() {
   }
   TEST_ASSERT_EQUAL(0, r.changes);
   TEST_ASSERT_EQUAL_INT32(r.tmpl.lat_e7, r.last.lat_e7);
+}
+
+// a4b0 next to a PC, Nov 2026: no satellite at all from boot, so no baseline and no loss rule; the node said nothing.
+void test_no_fix_from_the_start_is_loss_of_reception_after_five_minutes() {
+  Recorder r(DetectConfig{});
+  r.tmpl.sensor_stationary = false;
+  r.tmpl.fix_ok = false;
+  r.tmpl.sats_tracked = 0;
+  r.tmpl.cn0_mean = 0;
+  TEST_ASSERT_EQUAL(299, r.run(600, 0));  // the 300th epoch without a fix
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
+  TEST_ASSERT_FALSE(r.det.has_baseline());
+  r.tmpl.fix_ok = true;
+  r.tmpl.sats_tracked = 8;
+  r.tmpl.cn0_mean = 30;
+  r.run(15, 0);
+  TEST_ASSERT_EQUAL(kNormal, r.last.event_class);
+}
+
+// A fix lost while the signals look fine (a receiver that cannot solve) is loss of reception too, after five minutes.
+void test_a_lost_fix_with_strong_signals_is_loss_of_reception_after_five_minutes() {
+  Recorder r(DetectConfig{});
+  r.tmpl.sensor_stationary = false;
+  r.run(120, 0);
+  r.tmpl.fix_ok = false;
+  TEST_ASSERT_EQUAL(299, r.run(400, 0));
+  TEST_ASSERT_EQUAL(kBenign, r.last.event_class);
 }
 
 // Noise that lasts during a loss is still jamming.
@@ -793,6 +823,8 @@ int main() {
   RUN_TEST(test_a_jump_away_and_back_is_one_event_and_keeps_the_node_place);
   RUN_TEST(test_a_position_reached_by_a_jump_becomes_the_place_after_ten_minutes);
   RUN_TEST(test_driving_moves_the_place_with_the_fix);
+  RUN_TEST(test_no_fix_from_the_start_is_loss_of_reception_after_five_minutes);
+  RUN_TEST(test_a_lost_fix_with_strong_signals_is_loss_of_reception_after_five_minutes);
   RUN_TEST(test_no_cn0_rule_fires_before_a_baseline_exists);
   RUN_TEST(test_the_receiver_spoofing_flag_is_spoofing_after_two_epochs);
   RUN_TEST(test_position_drift_of_a_stationary_fixed_node_is_spoofing);
