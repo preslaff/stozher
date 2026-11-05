@@ -8,6 +8,7 @@
 #include "mesh/generated/meshtastic/module_config.pb.h"
 #include "mesh/RadioTxHook.h"
 #include "gps/GPS.h"
+#include "gps/StozherTap.h"
 
 #include <Preferences.h>
 
@@ -326,8 +327,9 @@ void StozherModule::onEpoch(const stz::Epoch &in)
     }
 #endif
     if (v.changed && !v.blanked)
-        LOG_INFO("STOZHER: class -> %u (rules 0x%02x, confidence %u): record %s", v.event_class, v.rules, v.confidence,
-                 impl->node->last_submit() == stz::SubmitResult::Queued ? "queued" : "NOT queued");
+        LOG_INFO("STOZHER: class -> %u (rules 0x%02x, confidence %u, fix=%d nmea_sats=%u hdop=%u.%02u): record %s", v.event_class,
+                 v.rules, v.confidence, in.fix_ok ? 1 : 0, (unsigned)in.num_sv, (unsigned)(stozherLastHdopX100() / 100),
+                 (unsigned)(stozherLastHdopX100() % 100), impl->node->last_submit() == stz::SubmitResult::Queued ? "queued" : "NOT queued");
 }
 
 int32_t StozherModule::runOnce()

@@ -16,6 +16,7 @@ bool haveRf = false;
 bool loggedFirstRf = false;
 uint32_t counts[7] = {0, 0, 0, 0, 0, 0, 0}; // indexed by stz::ubx::Kind
 uint32_t lastCountsLogMs = 0;
+uint16_t lastHdopX100 = 0;
 
 // One second of features: the receiver's own view (NAV-SVINFO, MON-HW) and what TinyGPS++ parsed from NMEA.
 stz::Epoch makeEpoch(TinyGPSPlus &gps)
@@ -43,6 +44,8 @@ stz::Epoch makeEpoch(TinyGPSPlus &gps)
     bool fix = gps.location.isValid() && gps.location.age() < 3000;
     e.fix_ok = fix;
     e.num_sv = (uint8_t)gps.satellites.value();
+    if (gps.hdop.isValid())
+        lastHdopX100 = (uint16_t)gps.hdop.value();
     if (fix) {
         e.lat_e7 = (int32_t)(gps.location.lat() * 1e7);
         e.lon_e7 = (int32_t)(gps.location.lng() * 1e7);
@@ -62,6 +65,11 @@ stz::Epoch makeEpoch(TinyGPSPlus &gps)
     return e;
 }
 } // namespace
+
+uint16_t stozherLastHdopX100()
+{
+    return lastHdopX100;
+}
 
 void stozherGpsByte(uint8_t b, TinyGPSPlus &gps)
 {

@@ -8,3 +8,6 @@ class TinyGPSPlus;
 // NAV-SVINFO and MON-HW frames out of the stream (TinyGPS++ ignores them) and, once per NAV-SVINFO, assembles one
 // STOZHER epoch from them plus the position, time and fix that TinyGPS++ has parsed from NMEA.
 void stozherGpsByte(uint8_t b, TinyGPSPlus &gps);
+
+// HDOP x100 from the last NMEA GGA (0 if none yet), logged with every class change so a position jump can be judged.
+uint16_t stozherLastHdopX100();
