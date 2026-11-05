@@ -14,8 +14,9 @@ namespace stz {
 // a second sign for modest drops; 4 jamming needs noise evidence, a drop without it is
 // loss of reception (class 3, benign degradation); 5 the same rules, plus the node restarts a receiver that has no
 // fix for minutes in a clean band (stz_recover.h); 6 the receiver's jamming flag needs a drop or measured noise to
-// count at once (alone it must last 2 minutes), and a raised loss of reception is not reset by one noisy epoch.
-constexpr uint8_t kDetectorRev = 6;
+// count at once (alone it must last 2 minutes), and a raised loss of reception is not reset by one noisy epoch; 7 a
+// raised loss is held through one good epoch, and records carry the node's place, never a jumped fix.
+constexpr uint8_t kDetectorRev = 7;
 
 enum Rule : uint8_t {
   kRuleJ1 = 1 << 0,  // C/N0 drop against the rolling baseline, or receiver jamming indicator

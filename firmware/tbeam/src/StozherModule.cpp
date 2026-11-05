@@ -223,6 +223,15 @@ StozherModule::StozherModule() : SinglePortModule("stozher", meshtastic_PortNum_
     LOG_WARN("STOZHER: node id %u with the PUBLIC TEST KEY, uplink: mesh%s. Not a real node.", (unsigned)tc.node_id,
              tc.satellite_enabled ? " + KIM1 (untested on hardware)" : " only (no KIM1)");
     LOG_INFO("STOZHER build %s detector rev %u", STOZHER_STR(STOZHER_BUILD), (unsigned)stz::kDetectorRev);
+    // A witness watches all the time. With Meshtastic's default 120 s update interval the receiver sleeps between
+    // fixes, and after a failed search until the next position broadcast (a4b0, Nov 2026: 5 min an hour indoors, so no
+    // records for days). 5 s (at or under GPS_UPDATE_ALWAYS_ON_THRESHOLD_MS) keeps it powered; patch 0005 lets the tap
+    // read it while Meshtastic is not searching. Set in memory only: the saved settings are not changed.
+    if (config.position.gps_update_interval == 0 || config.position.gps_update_interval > 10) {
+        LOG_INFO("STOZHER: GPS update interval %u s -> 5 s for this boot (the receiver must stay on)",
+                 (unsigned)config.position.gps_update_interval);
+        config.position.gps_update_interval = 5;
+    }
     STOZHER_LOG_TRUSTED_KEY("witness");
     stozherModule = this;
 }

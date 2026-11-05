@@ -1,0 +1,28 @@
+--- a/src/gps/GPS.cpp
++++ b/src/gps/GPS.cpp
+@@ -1747,7 +1747,12 @@
+ 
+     // 9600bps is approx 1 byte per msec, so considering our buffer size we never need to wake more often than 200ms
+     // if not awake we can run super infrequently (once every 5 secs?) to see if we need to wake.
++#if STOZHER_TAP
++    // STOZHER: read an idle (powered) receiver as often as a searching one, so no second is lost to a full buffer.
++    return (powerState == GPS_ACTIVE || powerState == GPS_IDLE) ? GPS_THREAD_INTERVAL : 5000;
++#else
+     return (powerState == GPS_ACTIVE) ? GPS_THREAD_INTERVAL : 5000;
++#endif
+ }
+ 
+ // clear the GPS rx/tx buffer as quickly as possible
+@@ -2407,7 +2412,12 @@
+ #if GPS_DEBUG
+     std::string debugmsg = "";
+ #endif
++#if STOZHER_TAP
++    // STOZHER: a receiver kept powered between searches (GPS_IDLE) is still read, so the tap sees every second.
++    if (powerState != GPS_ACTIVE && powerState != GPS_IDLE) {
++#else
+     if (powerState != GPS_ACTIVE) {
++#endif
+         clearBuffer();
+         return false;
+     }
