@@ -111,10 +111,11 @@ The live grid holds the last 90 minutes of evidence and nothing else: older evid
 hears satellites, from its records of the last 6 hours. It describes the node, not the place, and it never feeds the grid, hotspots or alerts;
 jamming, spoofing and time events are ignored by it and stay the detector's business.
 - `no_reception`: the newest record has no fix (the `no fix` flag, or a loss-of-reception event the node has not yet ended).
-- `limited_sky`: a lost fix in the last 3 hours, or the median mean C/N0 of the newest 3 normal records with a fix under 28 dB-Hz, or (extended
+- `limited_sky`: a lost fix in the last 3 hours, or the median mean C/N0 of the newest 3 normal records with a fix under 23 dB-Hz, or (extended
   records only) under 6 satellites. Indoors, by a window, under cover and local noise all look like this: one node cannot tell which.
 - `good`: none of these, with at least 3 normal records with a fix.
 - `unknown`: nothing for 3 hours, or too few records. Never "good" by absence.
 
-The 28 dB-Hz level is provisional: a4b0 (NEO-6M) gave medians of 16-21 dB-Hz both indoors next to a PC and by a window, and the open-sky
-reference run sets the final value.
+The 23 dB-Hz level comes from a4b0 (NEO-6M): four heartbeats under open sky on 7 Nov 2026 gave 23-28 dB-Hz (median 24), against 16-21 on
+most days indoors next to a PC and by a window. One day (4 Nov, where it stood is not recorded) gave a median of 27, so the signal level alone does not always tell
+indoors from outdoors; the lost-fix rule is the other half. Other receivers may need their own level.

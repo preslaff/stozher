@@ -18,6 +18,7 @@ struct Bench {
   uint32_t now = 1000;
   Epoch base;
   int seen_commands = 0;
+  int32_t utc_shift = 0;  // what the receiver's time is off by this second
 
   Bench() {
     uint8_t m[16];
@@ -61,7 +62,7 @@ struct Bench {
   // `no_time`: the fix is there but the receiver gave no valid date/time this second (utc_s 0).
   Verdict second(const Epoch& e_in, bool receiver_hit_by_own_tx = false, bool no_time = false) {
     Epoch e = e_in;
-    e.utc_s = no_time ? 0 : base.utc_s + (now - 1000) / 1000;
+    e.utc_s = no_time ? 0 : base.utc_s + (now - 1000) / 1000 + (uint32_t)utc_shift;
     e.mono_ms = now;  // the epoch builder stamps this in the real loop
     if (receiver_hit_by_own_tx && tx->blanked(now)) {  // physics: our burst really does upset the receiver
       e.cn0_mean = 20;
@@ -355,6 +356,34 @@ void test_a_heartbeat_with_a_fix_is_not_flagged() {
   TEST_ASSERT_TRUE(r.timestamp > b.base.utc_s + 3500 && r.timestamp <= b.expected_utc());
 }
 
+// a4b0, 6-7 Nov 2026: one epoch whose time read 00:00:00 of the day. The clock rule still sees it, but the event goes out
+// with the node's own time, so it is not filed hours in the past.
+void test_a_receiver_time_jump_is_an_event_stamped_with_the_nodes_clock() {
+  Bench b;
+  for (int i = 0; i < 120; i++) b.second(b.base);
+  int before = b.modem.commands;
+  b.utc_shift = -(int32_t)(b.base.utc_s % 86400u + (b.now - 1000) / 1000);  // midnight of the day
+  b.second(b.base);
+  b.utc_shift = 0;
+  for (int i = 0; i < 5 && b.modem.commands == before; i++) b.second(b.base);
+  TEST_ASSERT_TRUE(b.modem.commands > before);
+  Record r = b.last_sent();
+  TEST_ASSERT_EQUAL(kTimeAnomaly, r.event_class);
+  TEST_ASSERT_UINT32_WITHIN(8, b.expected_utc(), r.timestamp);
+}
+
+// A receiver time that stays moved is taken after a minute (a real correction), and heartbeats then carry it.
+void test_a_lasting_time_change_is_taken_after_a_minute() {
+  Bench b;
+  for (int i = 0; i < 120; i++) b.second(b.base);
+  b.utc_shift = 3600;
+  for (int i = 0; i < 3700; i++) b.second(b.base);
+  Record r = b.last_sent();
+  TEST_ASSERT_EQUAL(kHeartbeat, r.type);
+  // sent about an hour after boot, so about two hours on the moved clock (one hour on the node's own)
+  TEST_ASSERT_TRUE(r.timestamp > b.base.utc_s + 3600u + 3500u && r.timestamp <= b.expected_utc() + 3600u);
+}
+
 int main() {
   UNITY_BEGIN();
   RUN_TEST(test_a_healthy_node_sends_one_heartbeat_and_no_events);
@@ -374,5 +403,7 @@ int main() {
   RUN_TEST(test_a_node_that_never_gets_a_fix_reports_it);
   RUN_TEST(test_a_lost_fix_is_reported_at_the_node_place_with_the_time_it_is_sent);
   RUN_TEST(test_a_heartbeat_with_a_fix_is_not_flagged);
+  RUN_TEST(test_a_receiver_time_jump_is_an_event_stamped_with_the_nodes_clock);
+  RUN_TEST(test_a_lasting_time_change_is_taken_after_a_minute);
   return UNITY_END();
 }

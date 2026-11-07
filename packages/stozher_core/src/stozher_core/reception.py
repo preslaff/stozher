@@ -17,8 +17,8 @@ QUIET_S = (
 )  # nothing newer than this: unknown (heartbeats are hourly), never "good" by absence
 LOSS_MEMORY_S = 3 * 3600  # a lost fix in this time keeps the node at "limited sky view"
 RECENT_GOOD = 3  # the signal level is the median of the newest this many normal records with a fix
-# Provisional until the open-sky reference run: a4b0 (NEO-6M) indoors and by a window gave medians of 16-21 dB-Hz.
-GOOD_CN0_DBHZ = 28
+# From a4b0 (NEO-6M, 7 Nov 2026): open sky gave 23-28 dB-Hz (median 24) over 2 h; indoors and by a window usually 16-21.
+GOOD_CN0_DBHZ = 23
 GOOD_SATS = 6  # extended records only (satellites in view)
 
 _ANALYSED_TYPES = (0, 1, 2)  # heartbeat, event, summary; test records say nothing

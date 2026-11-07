@@ -98,7 +98,27 @@ Verdict Node::on_epoch(Epoch e, uint32_t now_ms) {
 void Node::hold_time(Epoch& e, uint32_t now_ms) {
   // Seen on a T-Beam (Oct 2026): an epoch with a valid fix but no valid NMEA date/time, so utc_s 0. The node's
   // own clock carries the last good time over such gaps (drift is seconds a day).
+  // Seen on a4b0 (6-7 Nov 2026, also under open sky): single epochs with a fix whose time read exactly 00:00:00 of the
+  // day, so the event that S4 raised said it was hours old and the cloud filed it outside the live grid. A receiver time
+  // that jumps against the node's clock is evidence (S4 has seen it), not the time: records keep the node's clock until
+  // the new time has held for kClockAcceptEpochs epochs (a real correction, e.g. a wrong time at boot).
   if (e.utc_s != 0 && e.fix_ok) {
+    if (have_clock_) {
+      uint32_t mine = clock_utc_ + (uint32_t)(now_ms - clock_ms_) / 1000u;
+      int32_t off = (int32_t)(e.utc_s - mine);
+      if (off > 2 || off < -2) {
+        int32_t d = off - jump_off_;
+        if (jump_n_ == 0 || d > 2 || d < -2) {
+          jump_off_ = off;
+          jump_n_ = 0;
+        }
+        if (++jump_n_ < kClockAcceptEpochs) {
+          e.utc_s = mine;
+          return;
+        }
+      }
+    }
+    jump_n_ = 0;
     clock_utc_ = e.utc_s;
     clock_ms_ = now_ms;
     have_clock_ = true;

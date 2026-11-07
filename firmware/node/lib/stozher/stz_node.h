@@ -78,6 +78,9 @@ class Node {
   bool change_pending_ = false;   // a class change not yet submitted (no valid time yet)
   uint32_t clock_utc_ = 0, clock_ms_ = 0;  // the last receiver time with a fix, and when it came
   bool have_clock_ = false;
+  static const uint8_t kClockAcceptEpochs = 60;  // a jumped receiver time is taken once it has held this long
+  int32_t jump_off_ = 0;                         // receiver time minus the node's clock, while it disagrees
+  uint8_t jump_n_ = 0;                           // epochs it has disagreed by that much
   bool fix_now_ = false;                  // the latest examined epoch had a fix
   Epoch no_fix_epoch_;                    // the latest examined epoch without a fix (position = the place, or 0/0)
   uint32_t time_utc_ = 0, time_ms_ = 0;   // the latest time from the receiver, with or without a fix
