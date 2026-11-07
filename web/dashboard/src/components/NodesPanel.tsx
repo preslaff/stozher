@@ -1,7 +1,7 @@
-import { deliveryText, FRESH_COLOR, freshness, sinceText } from '../style'
+import { deliveryText, FRESH_COLOR, freshness, receptionText, sinceText } from '../style'
 import type { NodeInfo } from '../types'
 
-/** Operators only: when each witness was last heard and whether it has been told what arrived. */
+/** Operators only: when each witness was last heard, how well it receives, and whether it has been told what arrived. */
 export function NodesPanel({ nodes, now }: { nodes: NodeInfo[]; now: number }) {
   if (nodes.length === 0) return null
   return (
@@ -25,6 +25,7 @@ export function NodesPanel({ nodes, now }: { nodes: NodeInfo[]; now: number }) {
                     {n.status !== 'active' ? `${n.status} · ` : ''}
                     {n.last_seen ? `heard ${sinceText(n.last_seen, now)}` : 'never heard'}
                   </span>
+                  <span className="meta">{receptionText(n.reception)}</span>
                   <span className="meta">{deliveryText(n.delivery, now)}</span>
                 </span>
               </div>

@@ -73,6 +73,34 @@ export const FRESH_COLOR: Record<Freshness, string> = {
   never: '#6b7280',
 }
 
+/** Ring colour of a node marker by its own reception; none when unknown. It describes the witness, not GNSS trust here. */
+export const RECEPTION_COLOR: Record<
+  'good' | 'limited_sky' | 'no_reception' | 'unknown',
+  string | null
+> = {
+  good: '#2f9e6e',
+  limited_sky: '#e0a526',
+  no_reception: '#b4483c',
+  unknown: null,
+}
+
+const RECEPTION_LABEL = {
+  good: 'Good reception',
+  limited_sky: 'Limited sky view',
+  no_reception: 'No reception',
+  unknown: 'Reception unknown',
+} as const
+
+/** One line on how well the node's own receiver hears satellites, with the reasons. Not a statement about the place. */
+export function receptionText(
+  r: { state: keyof typeof RECEPTION_LABEL; reasons: string[] } | null | undefined,
+): string {
+  if (!r) return RECEPTION_LABEL.unknown
+  return r.reasons.length
+    ? `${RECEPTION_LABEL[r.state]}: ${r.reasons.join(', ')}`
+    : RECEPTION_LABEL[r.state]
+}
+
 /** Text for an expired history cell. Always says it is not current. */
 export function historyText(p: {
   last_state: string

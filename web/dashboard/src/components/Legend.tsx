@@ -1,5 +1,5 @@
 import { TIER_COLOR } from '../hazards'
-import { TRUST_COLOR } from '../style'
+import { RECEPTION_COLOR, TRUST_COLOR } from '../style'
 import type { HistoryWindow, TrustState } from '../types'
 
 const LABEL: Record<TrustState, string> = {
@@ -18,7 +18,15 @@ interface HistoryControl {
   onWindow: (w: HistoryWindow) => void
 }
 
-export function Legend({ note, history }: { note: string | null; history: HistoryControl }) {
+export function Legend({
+  note,
+  history,
+  nodeRings = false,
+}: {
+  note: string | null
+  history: HistoryControl
+  nodeRings?: boolean // operators see nodes
+}) {
   return (
     <div className="legend" aria-label="Legend">
       <strong>GNSS trust</strong>
@@ -31,6 +39,23 @@ export function Legend({ note, history }: { note: string | null; history: Histor
           </span>
         ))}
       <span className="muted small">Uncoloured: {LABEL.UNKNOWN.toLowerCase()}</span>
+      {nodeRings && (
+        <>
+          <strong>Node reception (the device, not the place)</strong>
+          <span>
+            <i style={{ background: RECEPTION_COLOR.good! }} />
+            Good
+          </span>
+          <span>
+            <i style={{ background: RECEPTION_COLOR.limited_sky! }} />
+            Limited sky view
+          </span>
+          <span>
+            <i style={{ background: RECEPTION_COLOR.no_reception! }} />
+            No reception
+          </span>
+        </>
+      )}
       {history.available && (
         <>
           <label className="histtoggle">

@@ -7,6 +7,8 @@ import {
   historyText,
   moduleChip,
   quietNote,
+  RECEPTION_COLOR,
+  receptionText,
   TRUST_COLOR,
 } from './style'
 
@@ -137,5 +139,21 @@ describe('moduleChip', () => {
     expect(moduleChip('worker', 'absent', { '433': 'absent', main: 'present' }).label).toBe(
       'worker',
     )
+  })
+})
+
+describe('receptionText', () => {
+  it('names the condition and why, and never calls silence good', () => {
+    expect(receptionText(null)).toBe('Reception unknown')
+    expect(
+      receptionText({
+        state: 'limited_sky',
+        reasons: ['lost fix 2 times in 3 h', 'median signal 18 dB-Hz'],
+      }),
+    ).toBe('Limited sky view: lost fix 2 times in 3 h, median signal 18 dB-Hz')
+    expect(receptionText({ state: 'no_reception', reasons: ['no fix since 07:52 UTC'] })).toBe(
+      'No reception: no fix since 07:52 UTC',
+    )
+    expect(RECEPTION_COLOR.unknown).toBeNull()
   })
 })

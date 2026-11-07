@@ -1,7 +1,7 @@
 """Node registration and listing (operator)."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Request
@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from stozher_core.control import ack_covers, ack_reach, contiguous_run, summarize
+from stozher_core.reception import WINDOW_S, ReceptionRecord, ReceptionState, reception
 
 from ..audit import audit
 from ..auth import Principal, require_role
@@ -127,6 +128,68 @@ async def _delivery(session, node_id: int) -> Delivery | None:  # type: ignore[n
     )
 
 
+class Reception(BaseModel):
+    """The node's own reception condition from its recent records (docs/trust.md "Reception is not trust").
+
+    It describes the witness, not the place, and never feeds the trust grid, hotspots or alerts."""
+
+    state: ReceptionState = Field(
+        description="good, limited_sky (weak signals or a lost fix: indoors, by a window, under cover or local noise; "
+        "one node cannot tell which), no_reception (no fix now) or unknown (nothing heard for 3 h, or too few records)"
+    )
+    reasons: list[str] = Field(description="short fixed texts saying why")
+    since: datetime | None = Field(
+        description="start of the current loss of fix (no_reception only)"
+    )
+    median_cn0: float | None = Field(
+        description="median mean C/N0 (dB-Hz) of the newest normal records with a fix"
+    )
+    losses: int = Field(description="separate losses of fix in the last 3 hours")
+    window_s: int = Field(description="how far back records were looked at")
+
+
+async def _reception(session, node_id: int) -> Reception:  # type: ignore[no-untyped-def]
+    now = datetime.now(UTC)
+    rows = (
+        await session.execute(
+            select(
+                Event.msg_type,
+                Event.event_class,
+                Event.flags["no_fix"].astext,
+                Event.features["cn0_mean"].astext,
+                Event.features["satellites"].astext,
+                Event.observed_at,
+                Event.seq,
+            ).where(
+                Event.node_id == node_id, Event.observed_at >= now - timedelta(seconds=WINDOW_S)
+            )
+        )
+    ).all()
+    v = reception(
+        [
+            ReceptionRecord(
+                msg_type=t,
+                event_class=c,
+                no_fix=nf == "true",
+                cn0_mean=int(cn0 or 0),
+                observed_at=at,
+                seq=seq,
+                satellites=int(sats) if sats is not None else None,
+            )
+            for t, c, nf, cn0, sats, at, seq in rows
+        ],
+        now,
+    )
+    return Reception(
+        state=v.state,
+        reasons=list(v.reasons),
+        since=v.since,
+        median_cn0=v.median_cn0,
+        losses=v.losses,
+        window_s=WINDOW_S,
+    )
+
+
 class NodeOut(BaseModel):
     id: int
     name: str
@@ -138,6 +201,7 @@ class NodeOut(BaseModel):
     position: dict[str, Any] | None
     transport_ids: list[TransportIn]
     delivery: Delivery | None = None
+    reception: Reception | None = None
 
 
 async def _out(session, node: Node) -> NodeOut:  # type: ignore[no-untyped-def]
@@ -162,6 +226,7 @@ async def _out(session, node: Node) -> NodeOut:  # type: ignore[no-untyped-def]
         position=json.loads(pos) if pos else None,
         transport_ids=[TransportIn(transport=t.transport, external_id=t.external_id) for t in tids],
         delivery=await _delivery(session, node.id),
+        reception=await _reception(session, node.id),
     )  # type: ignore[arg-type]
 
 

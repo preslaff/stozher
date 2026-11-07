@@ -51,6 +51,16 @@ export interface Delivery {
   unacked?: number
 }
 
+/** The node's own reception condition from its recent records (GET /v1/nodes; docs/trust.md "Reception is not trust"). */
+export interface Reception {
+  state: 'good' | 'limited_sky' | 'no_reception' | 'unknown'
+  reasons: string[]
+  since: string | null
+  median_cn0: number | null
+  losses: number
+  window_s: number
+}
+
 export interface NodeInfo {
   id: number
   name: string
@@ -60,6 +70,7 @@ export interface NodeInfo {
   sim: boolean
   position: Point | null
   delivery?: Delivery | null
+  reception?: Reception | null
 }
 
 /** A radio ID that sent something we could not place, for example after a reflash (docs/mesh.md). */

@@ -220,6 +220,7 @@ export default function App() {
           </div>
         )}
         <Legend
+          nodeRings={d.nodes.length > 0}
           note={d.gridNote}
           history={{
             available: d.canHistory,

@@ -7,7 +7,15 @@ import type { Bbox } from '../api'
 import type { View } from '../useDashboard'
 import { baseStyle } from '../basemap'
 import { TIER_COLOR } from '../hazards'
-import { FRESH_COLOR, freshness, historyText, TRUST_COLOR } from '../style'
+import {
+  FRESH_COLOR,
+  freshness,
+  historyText,
+  RECEPTION_COLOR,
+  receptionText,
+  sinceText,
+  TRUST_COLOR,
+} from '../style'
 import { bboxOf, unionBbox } from '../geo'
 import type { HistoryProps, Hotspot, NodeInfo, TrustProps } from '../types'
 import type { Waypoint } from '../route'
@@ -309,6 +317,27 @@ export function MapView({
           'circle-stroke-color': '#5b8def',
         },
       })
+      // The node's own reception (good / limited sky view / no reception): a ring around the marker, not a trust colour.
+      map.addLayer({
+        id: 'node-reception',
+        type: 'circle',
+        source: 'nodes',
+        filter: ['!=', ['get', 'reception'], 'unknown'],
+        paint: {
+          'circle-radius': 10,
+          'circle-opacity': 0,
+          'circle-stroke-width': 2.5,
+          'circle-stroke-color': [
+            'match',
+            ['get', 'reception'],
+            'good',
+            RECEPTION_COLOR.good!,
+            'limited_sky',
+            RECEPTION_COLOR.limited_sky!,
+            RECEPTION_COLOR.no_reception!,
+          ],
+        },
+      })
       map.addLayer({
         id: 'nodes',
         type: 'circle',
@@ -339,6 +368,17 @@ export function MapView({
       })
       map.on('mouseenter', 'hazard-markers', () => (map.getCanvas().style.cursor = 'pointer'))
       map.on('mouseleave', 'hazard-markers', () => (map.getCanvas().style.cursor = ''))
+      map.on('click', 'nodes', (e) => {
+        if (drawingRef.current || placingRef.current) return
+        const p = e.features?.[0]?.properties as { text?: string } | undefined
+        if (!p?.text) return
+        new maplibregl.Popup({ closeButton: true, maxWidth: '260px' })
+          .setLngLat(e.lngLat)
+          .setText(p.text)
+          .addTo(map)
+      })
+      map.on('mouseenter', 'nodes', () => (map.getCanvas().style.cursor = 'pointer'))
+      map.on('mouseleave', 'nodes', () => (map.getCanvas().style.cursor = ''))
       map.on('click', 'history-fill', (e) => {
         if (drawingRef.current || placingRef.current) return
         const p = e.features?.[0]?.properties as HistoryProps | undefined
@@ -416,7 +456,16 @@ export function MapView({
         .map((n) => ({
           type: 'Feature',
           geometry: n.position!,
-          properties: { id: n.id, name: n.name, sim: n.sim, fresh: freshness(n.last_seen) },
+          properties: {
+            id: n.id,
+            name: n.name,
+            sim: n.sim,
+            fresh: freshness(n.last_seen),
+            reception: n.reception?.state ?? 'unknown',
+            text: `${n.name}${n.sim ? ' (SIM)' : ''}. ${receptionText(n.reception)}. ${
+              n.last_seen ? `Heard ${sinceText(n.last_seen)}.` : 'Never heard.'
+            }`,
+          },
         })),
     }
     ;(map.getSource('nodes') as GeoJSONSource).setData(fc)
