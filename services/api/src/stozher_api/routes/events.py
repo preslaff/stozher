@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 
 from ..auth import Principal, require_role
+from ..bench import on_bench
 from ..models import Event
 from ..problems import ApiError
 from .geo import BBOX, age_s, geojson, parse_bbox
@@ -26,7 +27,7 @@ CLASSES = {
 TYPES = {0: "heartbeat", 1: "event", 2: "summary", 3: "test"}
 
 
-def _item(e: Event, pos: str | None) -> dict[str, Any]:
+def _item(e: Event, pos: str | None, bench: bool = False) -> dict[str, Any]:
     return {
         "id": str(e.id),
         "node_id": e.node_id,
@@ -43,6 +44,7 @@ def _item(e: Event, pos: str | None) -> dict[str, Any]:
         "features": e.features,
         "received_via": e.received_via,
         "sim": e.sim,
+        "bench": bench,  # made while its node was on the bench: shown, never evidence
     }
 
 
@@ -57,7 +59,7 @@ async def list_events(
     limit: int = Query(default=100, ge=1, le=1000),
     _: Principal = Depends(responder),
 ) -> dict[str, Any]:
-    q = select(Event, func.ST_AsGeoJSON(Event.position)).where(Event.confidence >= min_confidence)
+    q = select(Event, func.ST_AsGeoJSON(Event.position), on_bench()).where(Event.confidence >= min_confidence)
     if (box := parse_bbox(bbox)) is not None:
         q = q.where(Event.position.intersects(func.ST_MakeEnvelope(*box, 4326)))
     if from_:
@@ -71,8 +73,8 @@ async def list_events(
         q = q.where(Event.event_class == names[class_])
     async with request.app.state.sessionmaker() as session:
         rows = (await session.execute(q.order_by(Event.observed_at.desc()).limit(limit))).all()
-    items = [_item(e, pos) for e, pos in rows]
-    newest = max((e.observed_at for e, _ in rows), default=None)
+    items = [_item(e, pos, bench) for e, pos, bench in rows]
+    newest = max((r[0].observed_at for r in rows), default=None)
     return {
         "items": items,
         "count": len(items),
@@ -88,7 +90,9 @@ async def get_event(
     async with request.app.state.sessionmaker() as session:
         row = (
             await session.execute(
-                select(Event, func.ST_AsGeoJSON(Event.position)).where(Event.id == event_id)
+                select(Event, func.ST_AsGeoJSON(Event.position), on_bench()).where(
+                    Event.id == event_id
+                )
             )
         ).first()
     if row is None:

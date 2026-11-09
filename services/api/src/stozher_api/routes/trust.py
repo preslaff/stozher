@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 
 from ..auth import Principal, require_role
+from ..bench import on_bench
 from ..history_service import WINDOWS, HistoryPoint, history_cells
 from ..models import Event, TrustCell
 from ..problems import ApiError
@@ -105,7 +106,7 @@ async def trust_grid(
                 select(
                     func.max(Event.observed_at).filter(~no_fix),
                     func.max(Event.observed_at).filter(no_fix),
-                ).where(Event.msg_type.in_(ANALYSED_TYPES))
+                ).where(Event.msg_type.in_(ANALYSED_TYPES), ~on_bench())
             )
         ).one()
     now = datetime.now(UTC)
@@ -146,6 +147,7 @@ async def trust_history(
         )
         .where(
             Event.msg_type.in_(ANALYSED_TYPES),
+            ~on_bench(),
             Event.observed_at >= now - WINDOWS[window],
             Event.position.intersects(
                 func.ST_MakeEnvelope(

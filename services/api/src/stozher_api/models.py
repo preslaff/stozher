@@ -47,6 +47,19 @@ class Node(Base):
     created_at: Mapped[datetime] = mapped_column(TS, server_default=func.now())
 
 
+class NodeBenchPeriod(Base):
+    """A time a node was on the bench (docs/trust.md "The bench is not the field"): records it made then are kept and
+    shown, never evidence. Judged by a record's observed time, so late store-and-forward records are judged too."""
+
+    __tablename__ = "node_bench_periods"
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    node_id: Mapped[int] = mapped_column(ForeignKey("nodes.id"), index=True)
+    started_at: Mapped[datetime] = mapped_column(TS)
+    ends_at: Mapped[datetime] = mapped_column(TS)  # set to the end time, or to now when put back in the field
+    set_by: Mapped[str] = mapped_column(String(16))  # key prefix of the operator
+
+
 class NodeKey(Base):
     __tablename__ = "node_keys"
 

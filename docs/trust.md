@@ -119,3 +119,20 @@ jamming, spoofing and time events are ignored by it and stay the detector's busi
 The 23 dB-Hz level comes from a4b0 (NEO-6M): four heartbeats under open sky on 7 Nov 2026 gave 23-28 dB-Hz (median 24), against 16-21 on
 most days indoors next to a PC and by a window. One day (4 Nov, where it stood is not recorded) gave a median of 27, so the signal level alone does not always tell
 indoors from outdoors; the lost-fix rule is the other half. Other receivers may need their own level.
+
+## The bench is not the field
+
+A witness next to a laptop or indoors reports true things about the desk: weak signals, lost fixes and the receiver's own
+interference warnings from the laptop's and USB's noise (a4b0, 8-9 Nov 2026: jamming events, hourly no-fix jamming
+heartbeats, 61 cells JAMMED and a hotspot reopening every hour). That is not evidence about the area. An operator puts such
+a node on the bench (`PATCH /v1/nodes/{id}` `{"status": "bench"}`, docs/api.md); it is a human decision, like the SIM label,
+never guessed by the platform.
+- A record is bench when its observed time falls in one of the node's bench periods (`node_bench_periods`), so records made
+  on the desk stay out after the node is back in the field, and store-and-forward records arriving late are judged by when
+  they were made.
+- Bench records are stored and shown (`bench: true` on events) and still count for the node's reception status and
+  delivery, but are left out of the trust grid, hotspots, alerts and `/v1/trust/history`, normal records too: the desk vouches
+  for nothing either way. One SQL test (`stozher_api.bench.on_bench`) serves every reader.
+- A bench period ends when the node is set `active` (or `retired`) or at `bench_until` (default 24 h, at most 7 days), so a
+  forgotten switch never silences a witness for long.
+- The field kit does not yet sync bench periods (operator-change sync is not built): set the bench where the records are analysed.

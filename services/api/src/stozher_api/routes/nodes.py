@@ -13,7 +13,8 @@ from stozher_core.reception import WINDOW_S, ReceptionRecord, ReceptionState, re
 
 from ..audit import audit
 from ..auth import Principal, require_role
-from ..models import AckRecord, Event, Node, NodeKey, TransportId
+from ..bench import BENCH_DEFAULT, BENCH_MAX
+from ..models import AckRecord, Event, Node, NodeBenchPeriod, NodeKey, TransportId
 from ..problems import ApiError
 from ..rebind_service import rebind, unrecognised_senders
 from ..secrets_box import KekMissingError, seal
@@ -190,18 +191,41 @@ async def _reception(session, node_id: int) -> Reception:  # type: ignore[no-unt
     )
 
 
+class Bench(BaseModel):
+    """The node is on the bench: its records are kept and shown, never evidence (docs/trust.md)."""
+
+    since: datetime
+    until: datetime = Field(description="back in the field by itself at this time")
+
+
 class NodeOut(BaseModel):
     id: int
     name: str
     kind: str
     mode: str
-    status: str
+    status: str = Field(description="active, bench (see `bench`) or retired")
     last_seen: datetime | None
     sim: bool
     position: dict[str, Any] | None
     transport_ids: list[TransportIn]
     delivery: Delivery | None = None
     reception: Reception | None = None
+    bench: Bench | None = None
+
+
+async def _open_bench(session, node_id: int, now: datetime) -> NodeBenchPeriod | None:  # type: ignore[no-untyped-def]
+    return (
+        await session.execute(
+            select(NodeBenchPeriod)
+            .where(
+                NodeBenchPeriod.node_id == node_id,
+                NodeBenchPeriod.started_at <= now,
+                NodeBenchPeriod.ends_at > now,
+            )
+            .order_by(NodeBenchPeriod.started_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
 
 
 async def _out(session, node: Node) -> NodeOut:  # type: ignore[no-untyped-def]
@@ -215,18 +239,20 @@ async def _out(session, node: Node) -> NodeOut:  # type: ignore[no-untyped-def]
             select(func.ST_AsGeoJSON(Node.surveyed_position)).where(Node.id == node.id)
         )
     ).scalar_one()
+    bench = await _open_bench(session, node.id, datetime.now(UTC))
     return NodeOut(
         id=node.id,
         name=node.name,
         kind=node.kind,
         mode=node.mode,
-        status=node.status,
+        status="bench" if bench and node.status == "active" else node.status,
         last_seen=node.last_seen,
         sim=node.kind == "sim",
         position=json.loads(pos) if pos else None,
         transport_ids=[TransportIn(transport=t.transport, external_id=t.external_id) for t in tids],
         delivery=await _delivery(session, node.id),
         reception=await _reception(session, node.id),
+        bench=Bench(since=bench.started_at, until=bench.ends_at) if bench else None,
     )  # type: ignore[arg-type]
 
 
@@ -346,7 +372,11 @@ class NodePatch(BaseModel):
         extra="forbid"
     )  # kind, keys and transport IDs have their own, stricter routes
     name: str | None = Field(default=None, min_length=1, max_length=120)
-    status: Literal["active", "retired"] | None = None
+    status: Literal["active", "bench", "retired"] | None = None
+    bench_until: datetime | None = Field(
+        default=None,
+        description="with status bench: back in the field at this time (default 24 h, at most 7 days from now)",
+    )
     mode: Literal["fixed", "mobile"] | None = None
     surveyed_lat: float | None = Field(default=None, ge=-90, le=90)
     surveyed_lon: float | None = Field(default=None, ge=-180, le=180)
@@ -365,6 +395,11 @@ class NodePatch(BaseModel):
         for field in ("name", "status", "mode"):
             if field in sent and getattr(self, field) is None:
                 raise ValueError(f"{field} cannot be null")
+        if self.bench_until is not None:
+            if self.status != "bench":
+                raise ValueError("bench_until goes with status bench")
+            if self.bench_until.tzinfo is None:
+                raise ValueError("bench_until needs a time zone")
         return self
 
 
@@ -372,7 +407,10 @@ class NodePatch(BaseModel):
 async def patch_node(
     node_id: int, body: NodePatch, request: Request, p: Principal = Depends(operator)
 ) -> NodeOut:
-    """A retired node is rejected at ingest (`node_inactive`); its events stay. Explicit nulls clear the surveyed position."""
+    """A retired node is rejected at ingest (`node_inactive`); its events stay. Explicit nulls clear the surveyed position.
+
+    `bench`: the node keeps sending and its records are stored and shown, but records it makes until it is set active
+    again (or `bench_until`) are never evidence for the trust grid, hotspots or alerts."""
     sent = body.model_fields_set
     if not sent:
         raise ApiError(422, "empty-patch", "Nothing to change")
@@ -381,10 +419,35 @@ async def patch_node(
         if node is None:
             raise ApiError(404, "not-found", "Node not found")
         changed: list[str] = []
-        for field in ("name", "status", "mode"):
+        for field in ("name", "mode"):
             if field in sent and getattr(body, field) != getattr(node, field):
                 setattr(node, field, getattr(body, field))
                 changed.append(field)
+        if "status" in sent:
+            now = datetime.now(UTC)
+            bench = await _open_bench(session, node_id, now)
+            if body.status == "bench":
+                until = body.bench_until or now + BENCH_DEFAULT
+                if not now < until <= now + BENCH_MAX + timedelta(minutes=1):
+                    raise ApiError(
+                        422, "validation-error", "Bad bench_until", "in the future, at most 7 days"
+                    )
+                if bench is None:
+                    session.add(
+                        NodeBenchPeriod(
+                            node_id=node_id, started_at=now, ends_at=until, set_by=p.prefix
+                        )
+                    )
+                else:
+                    bench.ends_at = until
+                status = "active"  # in service; the bench is the period, so it ends by itself
+            else:
+                if bench is not None:
+                    bench.ends_at = now
+                status = body.status  # type: ignore[assignment]
+            if status != node.status:
+                node.status = status
+            changed.append(f"status={body.status}")
         if "surveyed_lat" in sent:
             node.surveyed_position = (
                 None

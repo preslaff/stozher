@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from stozher_api.bench import on_bench
 from stozher_api.models import (
     Alert,
     Event,
@@ -57,7 +58,8 @@ async def load_points(session: AsyncSession, since: datetime) -> list[EventPoint
             Event.flags["no_fix"].astext,
         )
         .join(Node, Node.id == Event.node_id)
-        .where(Event.observed_at >= since, Event.msg_type.in_(ANALYSED_TYPES))
+        # a node on the bench is not evidence: not for the grid, hotspots or alerts (normal records neither)
+        .where(Event.observed_at >= since, Event.msg_type.in_(ANALYSED_TYPES), ~on_bench())
         .order_by(Event.observed_at, Event.id)
     )
     return [
