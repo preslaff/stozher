@@ -105,6 +105,11 @@ button {
   color: var(--bad);
   border-color: var(--bad);
 }
+.chip.bench {
+  color: #fff;
+  background: #8a8f98;
+  border-color: #8a8f98;
+}
 .chip.sim {
   color: #fff;
   background: var(--accent);

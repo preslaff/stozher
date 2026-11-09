@@ -1,5 +1,5 @@
 import { TIER_COLOR } from '../hazards'
-import { RECEPTION_COLOR, TRUST_COLOR } from '../style'
+import { BENCH_COLOR, RECEPTION_COLOR, TRUST_COLOR } from '../style'
 import type { HistoryWindow, TrustState } from '../types'
 
 const LABEL: Record<TrustState, string> = {
@@ -53,6 +53,10 @@ export function Legend({
           <span>
             <i style={{ background: RECEPTION_COLOR.no_reception! }} />
             No reception
+          </span>
+          <span>
+            <i style={{ background: BENCH_COLOR }} />
+            On the bench (not evidence)
           </span>
         </>
       )}

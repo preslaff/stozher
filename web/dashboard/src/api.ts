@@ -67,6 +67,9 @@ export function makeApi(key: string, base: string = API_URL) {
     hotspot: (id: string) => get<HotspotDetail>(`/v1/hotspots/${id}`),
     alerts: () => get<ListResponse<Alert>>('/v1/alerts?limit=50'),
     nodes: () => get<NodeInfo[]>('/v1/nodes'),
+    /** Bench a node (its records stop being evidence) or put it back in the field. */
+    setBench: (nodeId: number, on: boolean) =>
+      send<NodeInfo>('PATCH', `/v1/nodes/${nodeId}`, { status: on ? 'bench' : 'active' }),
     unknownSenders: () => get<UnknownSender[]>('/v1/nodes/unrecognised-senders?transport=mesh'),
     rebind: (nodeId: number, transport: string, externalId: string) =>
       send<RebindResult>('POST', `/v1/nodes/${nodeId}/transport-ids/rebind`, {

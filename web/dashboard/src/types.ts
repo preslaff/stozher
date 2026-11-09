@@ -71,6 +71,8 @@ export interface NodeInfo {
   position: Point | null
   delivery?: Delivery | null
   reception?: Reception | null
+  /** On the bench (status `bench`): its records are kept and shown, never evidence (docs/trust.md). */
+  bench?: { since: string; until: string } | null
 }
 
 /** A radio ID that sent something we could not place, for example after a reflash (docs/mesh.md). */

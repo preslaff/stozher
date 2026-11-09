@@ -29,6 +29,7 @@ interface Props {
   senders: UnknownSender[]
   canBind: boolean
   onBind: (s: UnknownSender) => Promise<RebindResult | null>
+  onBench: (nodeId: number, on: boolean) => Promise<void>
 }
 
 export function Sidebar({
@@ -48,12 +49,13 @@ export function Sidebar({
   senders,
   canBind,
   onBind,
+  onBench,
 }: Props) {
   const active = hotspots.filter((h) => h.state === 'active')
   const closed = hotspots.filter((h) => h.state === 'closed')
   return (
     <aside className="side">
-      <NodesPanel nodes={nodes} now={now} />
+      <NodesPanel nodes={nodes} now={now} canBench={canBind} onBench={onBench} />
       <SendersPanel senders={senders} canBind={canBind} now={now} onBind={onBind} />
       <section>
         <h2>

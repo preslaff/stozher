@@ -204,6 +204,15 @@ export function useDashboard(key: string | null) {
     },
     [api, loadState],
   )
+  const setBench = useCallback(
+    async (nodeId: number, on: boolean) => {
+      if (!api) return
+      await api.setBench(nodeId, on)
+      await loadState()
+      setGridVersion((v) => v + 1) // the grid is recomputed without (or with) the node's records
+    },
+    [api, loadState],
+  )
   const submitReport = useCallback(
     async (r: Parameters<NonNullable<typeof api>['report']>[0]) => {
       if (!api) return
@@ -223,6 +232,7 @@ export function useDashboard(key: string | null) {
     decide,
     senders,
     bindSender,
+    setBench,
     submitReport,
     gridVersion,
     watched,

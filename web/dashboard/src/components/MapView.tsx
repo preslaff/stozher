@@ -13,6 +13,8 @@ import {
   historyText,
   RECEPTION_COLOR,
   receptionText,
+  BENCH_COLOR,
+  benchText,
   sinceText,
   TRUST_COLOR,
 } from '../style'
@@ -345,13 +347,18 @@ export function MapView({
         paint: {
           'circle-radius': 5,
           'circle-color': [
-            'match',
-            ['get', 'fresh'],
-            'fresh',
-            FRESH_COLOR.fresh,
-            'stale',
-            FRESH_COLOR.stale,
-            FRESH_COLOR.silent,
+            'case',
+            ['get', 'bench'],
+            BENCH_COLOR, // on the bench: not a field witness
+            [
+              'match',
+              ['get', 'fresh'],
+              'fresh',
+              FRESH_COLOR.fresh,
+              'stale',
+              FRESH_COLOR.stale,
+              FRESH_COLOR.silent,
+            ],
           ],
           'circle-stroke-width': 2,
           'circle-stroke-color': ['case', ['get', 'sim'], '#5b8def', '#0f151b'],
@@ -462,7 +469,8 @@ export function MapView({
             sim: n.sim,
             fresh: freshness(n.last_seen),
             reception: n.reception?.state ?? 'unknown',
-            text: `${n.name}${n.sim ? ' (SIM)' : ''}. ${receptionText(n.reception)}. ${
+            bench: !!n.bench,
+            text: `${n.name}${n.sim ? ' (SIM)' : ''}. ${n.bench ? `${benchText(n.bench)}. ` : ''}${receptionText(n.reception)}. ${
               n.last_seen ? `Heard ${sinceText(n.last_seen)}.` : 'Never heard.'
             }`,
           },

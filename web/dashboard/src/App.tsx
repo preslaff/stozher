@@ -141,6 +141,7 @@ export default function App() {
         senders={d.senders}
         canBind={canDecide}
         onBind={d.bindSender}
+        onBench={d.setBench}
       />
       <div className="mapwrap">
         <MapView

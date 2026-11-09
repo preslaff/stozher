@@ -101,6 +101,16 @@ export function receptionText(
     : RECEPTION_LABEL[r.state]
 }
 
+/** A node on the bench: drawn grey, not a field witness. */
+export const BENCH_COLOR = '#8a8f98'
+
+/** One line for a node on the bench: until when, and that its records are not evidence. */
+export function benchText(b: { until: string }): string {
+  const t = new Date(b.until)
+  const hhmm = `${String(t.getUTCHours()).padStart(2, '0')}:${String(t.getUTCMinutes()).padStart(2, '0')}`
+  return `On the bench until ${hhmm} UTC: its records are shown, not evidence`
+}
+
 /** Text for an expired history cell. Always says it is not current. */
 export function historyText(p: {
   last_state: string

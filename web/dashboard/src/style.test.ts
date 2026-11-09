@@ -9,6 +9,7 @@ import {
   quietNote,
   RECEPTION_COLOR,
   receptionText,
+  benchText,
   TRUST_COLOR,
 } from './style'
 
@@ -155,5 +156,13 @@ describe('receptionText', () => {
       'No reception: no fix since 07:52 UTC',
     )
     expect(RECEPTION_COLOR.unknown).toBeNull()
+  })
+})
+
+describe('benchText', () => {
+  it('says until when and that the records are not evidence', () => {
+    expect(benchText({ until: '2026-11-10T13:05:00+00:00' })).toBe(
+      'On the bench until 13:05 UTC: its records are shown, not evidence',
+    )
   })
 })
