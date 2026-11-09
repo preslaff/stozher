@@ -5,7 +5,8 @@ Rules (no assistant, no randomness):
   hotspot_escalated  severity crosses 0.7 upwards                critical
   hotspot_cleared    a previously active hotspot is now closed   info
   hotspot_resumed    a closed hotspot becomes active again        by severity
-Each (kind, hotspot id) fires once; the database enforces it with a unique dedupe key.
+hotspot_new and hotspot_escalated fire once per hotspot; cleared and resumed once per episode (the hotspot's
+newest report), so a hotspot that resumes can clear again. The database enforces it with a unique dedupe key.
 
 A hotspot is announced (hotspot_new) only once it is confirmed: two or more independent witnesses,
 or one witness that did not report normal again within SINGLE_WITNESS_HOLD of its latest report.
@@ -87,7 +88,12 @@ def derive_alerts(
         def make(
             kind: str, level: str, verb: str, h: Hotspot = h, area: dict[str, object] = area
         ) -> None:
-            out.append(NewAlert(level, kind, _text(verb, h), h.id, area, h.sim, f"{kind}:{h.id}"))
+            # A hotspot can close and resume many times (a node that keeps reporting, hourly): each episode, keyed by
+            # its newest report, gets its own cleared and resumed, so the last alert never says "resumed" for a
+            # hotspot that has ended (seen on a4b0, 8-9 Nov 2026).
+            episode = kind in ("hotspot_cleared", "hotspot_resumed")
+            key = f"{kind}:{h.id}" + (f":{int(h.last_seen.timestamp())}" if episode else "")
+            out.append(NewAlert(level, kind, _text(verb, h), h.id, area, h.sim, key))
 
         if before is None or not before.announced:
             if h.state == "active" and (now is None or confirmed(h, now, normal_at or {})):

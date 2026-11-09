@@ -67,6 +67,21 @@ def test_a_closed_hotspot_that_resumes_alerts() -> None:
     assert a.kind == "hotspot_resumed" and a.level == "warning"
 
 
+def test_a_hotspot_that_resumes_and_ends_again_is_cleared_again() -> None:
+    first = hs(state="closed")
+    (c1,) = derive_alerts({first.id: Previous("active", 0.5)}, [first])
+    later = dataclasses.replace(first, state="active", last_seen=T + timedelta(hours=1))
+    (r,) = derive_alerts({first.id: Previous("closed", 0.5)}, [later])
+    (c2,) = derive_alerts(
+        {first.id: Previous("active", 0.5)}, [dataclasses.replace(later, state="closed")]
+    )
+    assert (c1.kind, r.kind, c2.kind) == ("hotspot_cleared", "hotspot_resumed", "hotspot_cleared")
+    assert (
+        len({c1.dedupe_key, r.dedupe_key, c2.dedupe_key}) == 3
+    )  # none is swallowed by the unique key
+    assert max(len(a.dedupe_key) for a in (c1, r, c2)) <= 80  # alerts.dedupe_key is String(80)
+
+
 def lone(h: Hotspot) -> Hotspot:
     """The same hotspot heard by one witness only (node 7)."""
     return dataclasses.replace(h, node_count=1, node_ids=(7,))

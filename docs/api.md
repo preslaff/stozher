@@ -237,7 +237,8 @@ Two ways, both deterministic and independent of the assistant:
   `refresh` (analytics finished a run: reload hotspots, trust and events). Browsers' `EventSource`
   cannot send `X-API-Key`; use `fetch` streaming. Alerts are raised by deterministic rules in
   `services/worker/alerts.py`: `hotspot_new`, `hotspot_escalated` (severity crosses 0.7),
-  `hotspot_cleared` and `hotspot_resumed`, each once per hotspot. A hotspot is announced
+  `hotspot_cleared` and `hotspot_resumed`. New and escalated fire once per hotspot; cleared and resumed once per
+  episode (keyed by the hotspot's newest report), so a hotspot that resumes and ends again is cleared again. A hotspot is announced
   (`hotspot_new`) only once confirmed: two or more independent witnesses at once, or one witness
   whose report stands for 5 minutes without a normal record from it (a minute-long blip from one
   node stays a hotspot in `/v1/hotspots` but raises no alert). The other three follow only

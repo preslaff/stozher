@@ -158,7 +158,7 @@ async def recompute(
             )
         )
     new_alerts = derive_alerts(previous, hotspots, now, normal_at)
-    for a in new_alerts:  # unique dedupe key: each (kind, hotspot) alerts once
+    for a in new_alerts:  # unique dedupe key: each (kind, hotspot[, episode]) alerts once
         await session.execute(
             pg_insert(Alert)
             .values(
