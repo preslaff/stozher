@@ -730,3 +730,39 @@ li.withdel .item {
   white-space: pre-wrap;
   font-size: 13px;
 }
+
+/* Map popups (node, expired cell): the dark panel colours, so the light text stays readable. */
+.maplibregl-popup-content {
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 10px 26px 10px 12px;
+}
+.maplibregl-popup-close-button {
+  color: var(--muted);
+  font-size: 18px;
+  padding: 0 6px;
+}
+.maplibregl-popup-close-button:hover {
+  background: transparent;
+  color: var(--text);
+}
+.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--panel2);
+}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--panel2);
+}
+.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--panel2);
+}
+.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--panel2);
+}
