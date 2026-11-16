@@ -4,6 +4,8 @@ import {
   ageText,
   deliveryText,
   freshness,
+  historyLabel,
+  historyNote,
   historyText,
   moduleChip,
   quietNote,
@@ -58,6 +60,7 @@ describe('style helpers', () => {
 })
 
 describe('empty map explanations', () => {
+  const now = Date.parse('2026-10-18T12:00:00Z')
   it('says nothing while cells are shown or the grid is not loaded', () => {
     expect(quietNote(null, 100)).toBeNull()
     expect(quietNote(3, 100)).toBeNull()
@@ -74,7 +77,6 @@ describe('empty map explanations', () => {
     expect(quietNote(0, 7200, 20000)).not.toContain('arriving')
   })
   it('grades node freshness from last_seen', () => {
-    const now = Date.parse('2026-10-18T12:00:00Z')
     expect(freshness(null, now)).toBe('never')
     expect(freshness('2026-10-18T11:30:00Z', now)).toBe('fresh')
     expect(freshness('2026-10-18T06:00:00Z', now)).toBe('stale')
@@ -86,6 +88,23 @@ describe('empty map explanations', () => {
     expect(t).toContain('3.0 h ago')
     expect(t).toContain('(1 report)')
     expect(t).toContain('Not the current state')
+  })
+  it('labels an expired cell with its last state and an age that moves on', () => {
+    const p = { last_state: 'TRUSTED', newest_observed_at: '2026-10-18T11:13:00Z' }
+    expect(historyLabel(p, now)).toBe('was TRUSTED · 47 min ago')
+    expect(historyLabel(p, now + 3600_000)).toBe('was TRUSTED · 1.8 h ago')
+  })
+  it('explains expired cells on the map, newest first, never as current', () => {
+    const cells = [
+      { newest_observed_at: '2026-10-18T09:00:00Z' },
+      { newest_observed_at: '2026-10-18T11:13:00Z' },
+    ]
+    expect(historyNote(0, [], now)).toBeNull()
+    const none = historyNote(0, cells, now)!
+    expect(none).toContain('No live evidence in view (last 90 min)')
+    expect(none).toContain('newest 47 min ago')
+    expect(none).toContain('Not the current state')
+    expect(historyNote(5, cells, now)).toContain('Some places have no live evidence')
   })
 })
 

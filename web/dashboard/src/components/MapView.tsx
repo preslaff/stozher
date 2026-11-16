@@ -62,6 +62,18 @@ const kindColor: maplibregl.ExpressionSpecification = [
   TRUST_COLOR.JAMMED,
 ]
 
+/** Diagonal grey stripes for expired cells: hatched reads as "not current" even without colour. */
+function hatch(size = 8): { width: number; height: number; data: Uint8Array } {
+  const data = new Uint8Array(size * size * 4)
+  for (let y = 0; y < size; y++)
+    for (let x = 0; x < size; x++) {
+      const on = (x + y) % size < 2
+      const i = (y * size + x) * 4
+      data.set(on ? [0x9a, 0xa4, 0xb2, 255] : [0, 0, 0, 0], i)
+    }
+  return { width: size, height: size, data }
+}
+
 interface Props {
   hotspots: Hotspot[]
   nodes: NodeInfo[]
@@ -154,14 +166,16 @@ export function MapView({
       map.addSource('hazard-shapes', { type: 'geojson', data: EMPTY })
       map.addSource('hazard-markers', { type: 'geojson', data: EMPTY })
       map.addSource('report-point', { type: 'geojson', data: EMPTY })
-      // Expired last-known evidence: grey and dashed on purpose, never in the trust colours, and below the live grid.
+      // Expired last-known evidence: grey, hatched and dashed on purpose, never in the trust colours, and below the
+      // live grid (the live cells also replace it, useDashboard).
+      map.addImage('history-hatch', hatch())
       map.addLayer({
         id: 'history-fill',
         type: 'fill',
         source: 'history',
         paint: {
-          'fill-color': '#9aa4b2',
-          'fill-opacity': ['interpolate', ['linear'], ['get', 'data_age_s'], 0, 0.28, 604800, 0.08],
+          'fill-pattern': 'history-hatch',
+          'fill-opacity': ['interpolate', ['linear'], ['get', 'data_age_s'], 0, 0.55, 604800, 0.2],
         },
       })
       map.addLayer({
@@ -175,6 +189,22 @@ export function MapView({
           'line-dasharray': [2, 2],
         },
       })
+      // Its last state and age on each cell, once the cells are big enough to hold the text. Needs glyphs: the
+      // raster fallback basemap has none, and then the banner and the click popup still give the age.
+      if (map.getStyle().glyphs)
+        map.addLayer({
+          id: 'history-label',
+          type: 'symbol',
+          source: 'history',
+          minzoom: 12,
+          layout: {
+            'text-field': ['get', 'label'],
+            'text-font': ['Noto Sans Regular'],
+            'text-size': 11,
+            'text-max-width': 7,
+          },
+          paint: { 'text-color': '#c3cad4', 'text-halo-color': '#0f151b', 'text-halo-width': 1.5 },
+        })
       map.addLayer({
         id: 'trust-fill',
         type: 'fill',

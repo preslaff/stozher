@@ -120,6 +120,30 @@ export function historyText(p: {
   return `Expired: last evidence ${p.last_state.toLowerCase()}, ${ageText(p.data_age_s)} (${p.event_count} report${p.event_count === 1 ? '' : 's'}). Not the current state.`
 }
 
+/** Label drawn on an expired cell: its last state and how old it is now. "was" keeps it from reading as current. */
+export function historyLabel(
+  p: { last_state: string; newest_observed_at: string },
+  now: number = Date.now(),
+): string {
+  return `was ${p.last_state} · ${sinceText(p.newest_observed_at, now)}`
+}
+
+/** Banner while expired cells are on the map; null when there are none. It always says they are not the current state. */
+export function historyNote(
+  liveCells: number,
+  expired: { newest_observed_at: string }[],
+  now: number = Date.now(),
+): string | null {
+  if (expired.length === 0) return null
+  const newest = Math.max(...expired.map((p) => new Date(p.newest_observed_at).getTime()))
+  const age = ageText(Math.max(0, Math.round((now - newest) / 1000)))
+  const lead =
+    liveCells === 0
+      ? `No live evidence in view (last ${GRID_WINDOW_MIN} min).`
+      : 'Some places have no live evidence.'
+  return `${lead} Grey hatched cells show the last readings, newest ${age}. Not the current state; do not treat as safe.`
+}
+
 /** One line on what the cloud holds of a node's records and whether the node was told (it can then stop retransmitting). */
 export function deliveryText(
   d:

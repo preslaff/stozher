@@ -215,9 +215,9 @@ export default function App() {
             onSubmit={d.submitReport}
           />
         )}
-        {d.quiet && !d.history && (
+        {(d.historyNote ?? d.quiet) && (
           <div className="banner quiet" role="status">
-            {d.quiet}
+            {d.historyNote ?? d.quiet}
           </div>
         )}
         <Legend

@@ -105,6 +105,12 @@ The live grid holds the last 90 minutes of evidence and nothing else: older evid
 - clients must draw it as expired (grey, hatched, with the age), never with the trust colours, and must say it is not current;
 - the public role does not get it, because a map of where witnesses reported is location history. The public sees only `newest_evidence_age_s` on the grid.
 
+The dashboard shows it by default for responders and above (a legend checkbox turns it off), so a quiet hour or a lost heartbeat
+does not blank the map: under the live grid, grey hatched with a dashed outline, each cell labelled with its last state and its
+age now ("was TRUSTED · 47 min ago", from zoom 12), and a banner saying the grey cells are not the current state. A live cell
+replaces the expired one at the same place, and ages move on every minute and with every new reading. Route trust is unchanged:
+an expired cell is still UNKNOWN there.
+
 ## Reception is not trust
 
 `GET /v1/nodes` gives each node a `reception` condition (`stozher_core.reception`), for operators: how well **that witness's own receiver**

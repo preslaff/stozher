@@ -2,7 +2,7 @@ import type { FeatureCollection, Polygon } from 'geojson'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { API_URL, ApiError, makeApi, type Bbox } from './api'
 import { connectStream, type SseEvent, type StreamState } from './sse'
-import { MIN_GRID_ZOOM, quietNote } from './style'
+import { historyLabel, historyNote, MIN_GRID_ZOOM, quietNote } from './style'
 import type {
   Alert,
   Hazard,
@@ -23,6 +23,8 @@ type Grid = FeatureCollection<Polygon, TrustProps> & {
   newest_unplaced_age_s?: number | null
 }
 type History = FeatureCollection<Polygon, HistoryProps> & { sim: boolean }
+/** An expired cell as drawn: with its label (last state and age now). */
+export type ShownHistoryProps = HistoryProps & { label: string }
 export interface View {
   bbox: Bbox
   zoom: number
@@ -43,7 +45,9 @@ export function useDashboard(key: string | null) {
   const [grid, setGrid] = useState<Grid | null>(null)
   const [gridError, setGridError] = useState<string | null>(null)
   const [history, setHistory] = useState<History | null>(null)
-  const [historyOn, setHistoryOn] = useState(false)
+  // On by default: where the live grid has nothing, the last readings show, grey and labelled with their age.
+  const [historyOn, setHistoryOn] = useState(true)
+  const [now, setNow] = useState(() => Date.now())
   const [historyWindow, setHistoryWindow] = useState<HistoryWindow>('24h')
   const [stream, setStream] = useState<StreamState>('connecting')
   const [error, setError] = useState<string | null>(null)
@@ -155,7 +159,33 @@ export function useDashboard(key: string | null) {
     }, 300)
     return () => clearTimeout(t)
   }, [api, view, gridTooFar, historyOn, canHistory, historyWindow, gridVersion])
-  const shownHistory = historyOn && canHistory && !gridTooFar ? history : null
+  // Ages move on by themselves; a new reading also refetches the history (gridVersion).
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000)
+    return () => clearInterval(t)
+  }, [])
+  // Live evidence always wins: an expired cell is dropped where the live grid has a cell.
+  const shownHistory = useMemo((): FeatureCollection<Polygon, ShownHistoryProps> | null => {
+    if (!historyOn || !canHistory || gridTooFar || !history) return null
+    const live = new Set((grid?.features ?? []).map((f) => f.properties.h3))
+    return {
+      type: 'FeatureCollection',
+      features: history.features
+        .filter((f) => !live.has(f.properties.h3))
+        .map((f) => ({
+          ...f,
+          properties: { ...f.properties, label: historyLabel(f.properties, now) },
+        })),
+    }
+  }, [historyOn, canHistory, gridTooFar, history, grid, now])
+  const historyBanner =
+    shownHistory && !gridError
+      ? historyNote(
+          grid?.features.length ?? 0,
+          shownHistory.features.map((f) => f.properties),
+          now,
+        )
+      : null
 
   useEffect(() => {
     if (!api || !selectedId) return
@@ -247,6 +277,7 @@ export function useDashboard(key: string | null) {
     gridNote,
     quiet,
     history: shownHistory,
+    historyNote: historyBanner,
     historyOn,
     setHistoryOn,
     historyWindow,

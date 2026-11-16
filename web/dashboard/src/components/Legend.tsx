@@ -68,7 +68,7 @@ export function Legend({
               checked={history.on}
               onChange={(e) => history.onToggle(e.target.checked)}
             />
-            Last readings (expired)
+            Last readings (expired, grey hatched)
           </label>
           {history.on && (
             <>
@@ -83,7 +83,7 @@ export function Legend({
               </select>
               <span>
                 <i className="histkey" />
-                Grey, dashed: not current. Do not treat as safe.
+                Grey hatched, with last state and age: not current. Do not treat as safe.
               </span>
             </>
           )}

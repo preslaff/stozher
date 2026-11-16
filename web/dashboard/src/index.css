@@ -670,7 +670,7 @@ li.withdel .item {
   border-radius: 4px;
 }
 .legend i.histkey {
-  background: #9aa4b255;
+  background: repeating-linear-gradient(45deg, #9aa4b2 0 2px, transparent 2px 6px);
   border: 1px dashed #9aa4b2;
 }
 
