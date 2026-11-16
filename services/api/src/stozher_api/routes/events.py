@@ -59,7 +59,9 @@ async def list_events(
     limit: int = Query(default=100, ge=1, le=1000),
     _: Principal = Depends(responder),
 ) -> dict[str, Any]:
-    q = select(Event, func.ST_AsGeoJSON(Event.position), on_bench()).where(Event.confidence >= min_confidence)
+    q = select(Event, func.ST_AsGeoJSON(Event.position), on_bench()).where(
+        Event.confidence >= min_confidence
+    )
     if (box := parse_bbox(bbox)) is not None:
         q = q.where(Event.position.intersects(func.ST_MakeEnvelope(*box, 4326)))
     if from_:

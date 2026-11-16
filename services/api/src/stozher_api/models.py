@@ -56,7 +56,8 @@ class NodeBenchPeriod(Base):
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
     node_id: Mapped[int] = mapped_column(ForeignKey("nodes.id"), index=True)
     started_at: Mapped[datetime] = mapped_column(TS)
-    ends_at: Mapped[datetime] = mapped_column(TS)  # set to the end time, or to now when put back in the field
+    # set to the end time, or to now when put back in the field
+    ends_at: Mapped[datetime] = mapped_column(TS)
     set_by: Mapped[str] = mapped_column(String(16))  # key prefix of the operator
 
 
